@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Multimodal &amp; vision-language · LLM Handbook</title>
+<meta name="description" content="Models that see, what that costs in tokens, and where a purpose-built vision model still wins outright.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html" class="active">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="multimodal-vision-language"><a class="anchor" href="#multimodal-vision-language">#</a>Multimodal & vision-language</h1><blockquote>
+<p><strong>The one sentence:</strong> a vision-language model turns an image into tokens and
+puts them in the context window — which explains both its remarkable
+generality and its terrible economics for anything high-volume.</p>
+</blockquote>
+<p>If you already work in computer vision, the useful framing is this: a VLM is not
+a replacement for a detector. It is a zero-shot generalist that costs a thousand
+times more per image and cannot tell you where anything is to the pixel.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   HOW AN IMAGE ENTERS A LANGUAGE MODEL
+
+   image ──► VISION ENCODER (usually a ViT) ──► patch embeddings
+                                                     │
+                                                     ▼
+                                          PROJECTION into the LM&#39;s
+                                          token embedding space
+                                                     │
+                                                     ▼
+             [img][img][img]...[img] [text][text][text]
+             └────── ~1000+ tokens ──┘ └── your prompt ──┘
+                          │
+                          ▼
+                    ordinary decoder LLM
+
+
+   THE CONSEQUENCE, and it is the whole economic story
+
+   one 1024x1024 image  ≈  1,000-1,600 tokens
+                        ≈  the same cost as ~4 pages of text
+                        ≈  ~$0.005 per image at frontier input pricing
+
+   at 1,000 images/second that is $5/second. It is not a serving design.</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — the architecture that won.</strong> Almost every current VLM follows
+the same shape:</p>
+<ol>
+<li>A pretrained <strong>vision encoder</strong> (a ViT, often CLIP-initialised) turns the
+image into patch embeddings.</li>
+<li>A <strong>projection layer</strong> — sometimes just a linear map, sometimes a small
+resampler — maps those into the language model&#39;s embedding space.</li>
+<li>The language model treats them as <strong>tokens it can attend to</strong>, indistinguishable
+in mechanism from text tokens.</li>
+</ol>
+<p>The elegance is that step 3 requires no architectural change. That is why
+multimodal capability arrived so quickly: it is mostly a projection layer and
+training data, not a new model family.</p>
+<div class="table-scroll"><table><thead><tr><th>Approach</th><th>Mechanism</th><th>Trade-off</th></tr></thead><tbody><tr><td><strong>Linear projection</strong> (LLaVA-style)</td><td>Patch embeddings mapped directly</td><td>Simple, many tokens per image</td></tr><tr><td><strong>Resampler / Q-Former</strong></td><td>Cross-attention compresses to fixed tokens</td><td>Fewer tokens, some detail lost</td></tr><tr><td><strong>Native multimodal</strong></td><td>Trained multimodal from the start</td><td>Best quality, not something you build</td></tr></tbody></table></div><p><strong>Advanced — tiling is where the token cost explodes.</strong> High-resolution images
+are usually split into tiles, each encoded separately, plus a downscaled
+overview. A large document scan can become several thousand tokens. This is why:</p>
+<ul>
+<li>image cost is <strong>non-linear in resolution</strong>,</li>
+<li>sending a full-page screenshot when a crop would do is a real and common
+waste,</li>
+<li>and <em>&quot;resize before sending&quot;</em> is the single most effective cost control in any
+vision pipeline.</li>
+</ul>
+<hr>
+<h2 id="3-flow-choosing-the-right-tool"><a class="anchor" href="#3-flow-choosing-the-right-tool">#</a>3 · Flow — choosing the right tool</h2><pre class="mermaid">graph TD
+  A[Vision task] --&gt; B{Fixed set of classes&lt;br/&gt;known in advance?}
+  B --&gt;|yes, and high volume| C[Train a classifier or detector.&lt;br/&gt;Cheaper by 100-1000x, and better]
+  B --&gt;|no, open-ended| D{Need pixel-accurate&lt;br/&gt;localisation?}
+  D --&gt;|yes| E[Detector or segmentation model.&lt;br/&gt;VLM coordinates are unreliable]
+  D --&gt;|no| F{Volume?}
+  F --&gt;|high| G[VLM to LABEL data,&lt;br/&gt;then distil into a small model]
+  F --&gt;|low or exploratory| H[VLM directly]
+  H --&gt; I{Structured output needed?}
+  I --&gt;|yes| J[Schema-constrained output&lt;br/&gt;+ validation]
+  I --&gt;|no| K[Free text]</pre><p><strong>Branch <code>G</code> is the pattern worth knowing.</strong> A VLM is an excellent <em>annotator</em>
+and a poor <em>production classifier</em>. Use it to label ten thousand images, train a
+small supervised model on the labels, and serve that. You get the VLM&#39;s
+generality at the small model&#39;s cost — and this is exactly the distillation
+argument applied to vision.</p>
+<hr>
+<h2 id="4-uml-a-document-understanding-pipeline"><a class="anchor" href="#4-uml-a-document-understanding-pipeline">#</a>4 · UML — a document-understanding pipeline</h2><pre class="mermaid">sequenceDiagram
+    participant U as Upload
+    participant P as Preprocessor
+    participant V as VLM
+    participant S as Schema validator
+    participant D as Database
+
+    U-&gt;&gt;P: scanned invoice
+    P-&gt;&gt;P: deskew, crop, downscale to needed resolution
+    Note over P: Resolution is the cost dial.&lt;br/&gt;Send the smallest image that&lt;br/&gt;still supports the task.
+    P-&gt;&gt;V: image + extraction schema
+    V--&gt;&gt;S: structured JSON
+    alt invalid or low confidence
+        S-&gt;&gt;V: re-ask with the specific errors
+        V--&gt;&gt;S: corrected
+    end
+    S-&gt;&gt;D: store with provenance:&lt;br/&gt;model version, image hash</pre><hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">def estimate_image_tokens(width: int, height: int, tile: int = 512) -&gt; int:
+    &quot;&quot;&quot;Approximate token cost of an image. Providers differ; the SHAPE is the point.
+
+    Cost is roughly linear in the number of tiles, and tiles grow with the
+    square of the dimension -- so doubling resolution roughly quadruples cost.
+    That non-linearity is why resizing before sending is the biggest single
+    lever in any vision pipeline.
+    &quot;&quot;&quot;
+    tiles = ((width + tile - 1) // tile) * ((height + tile - 1) // tile)
+    per_tile = 170          # order-of-magnitude figure
+    overview = 85           # the downscaled whole-image pass
+    return tiles * per_tile + overview
+
+
+for w, h in [(512, 512), (1024, 1024), (2048, 2048), (3000, 4000)]:
+    print(f&quot;{w}x{h:&lt;5} -&gt; ~{estimate_image_tokens(w, h):,} tokens&quot;)</code></pre><pre class="code"><code>512x512   -&gt; ~  255 tokens
+1024x1024 -&gt; ~  765 tokens
+2048x2048 -&gt; ~2,805 tokens
+3000x4000 -&gt; ~8,245 tokens      &lt;- one page scan, at full resolution</code></pre><pre class="code"><code class="language-python">def right_size(image, task: str):
+    &quot;&quot;&quot;Downscale to the smallest resolution the task actually needs.
+
+    Reading a title needs far less resolution than reading a table of
+    part numbers. Sending everything at full scan resolution is the vision
+    equivalent of a 3,000-token system prompt nobody has tested trimming.
+    &quot;&quot;&quot;
+    needed = {
+        &quot;classify&quot;: 512,        # is this an invoice or a receipt
+        &quot;read_headings&quot;: 1024,  # large text only
+        &quot;extract_fields&quot;: 1536, # form fields, moderate density
+        &quot;read_dense_table&quot;: 2048,
+    }[task]
+    if max(image.size) &lt;= needed:
+        return image
+    return image.resize(_scaled_to(image.size, needed))</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Where VLMs are genuinely weak</strong>, stated plainly because the marketing does not:</p>
+<div class="table-scroll"><table><thead><tr><th>Weakness</th><th>What it looks like</th></tr></thead><tbody><tr><td><strong>Precise localisation</strong></td><td>Bounding boxes are approximate; &quot;third row&quot; is often wrong</td></tr><tr><td><strong>Counting</strong></td><td>Reliable to about five objects, then degrades</td></tr><tr><td><strong>Dense text</strong></td><td>Small print in tables is misread with confidence</td></tr><tr><td><strong>Spatial relations</strong></td><td>Left/right, above/below are inconsistent</td></tr><tr><td><strong>Fine-grained discrimination</strong></td><td>Similar part numbers, near-identical components</td></tr><tr><td><strong>Consistency</strong></td><td>The same image can be described differently across calls</td></tr></tbody></table></div><p><strong>For anything where a bounding box matters, use a detector.</strong> A YOLO-class model
+gives pixel-accurate boxes, runs in milliseconds on a CPU, costs nothing per
+inference, and is deterministic. A VLM gives you a plausible description of
+roughly where something is. These are not competing tools.</p>
+<p><strong>The hybrid pattern that works in practice</strong>, and the one worth describing in
+an interview: <strong>detector for <em>where</em>, VLM for <em>what it means</em>.</strong> Detect the
+regions with a purpose-built model, crop them, and send only the crops to the
+VLM for interpretation. You get accuracy and grounding from the detector,
+generality from the VLM, and you cut the token cost by an order of magnitude
+because you are no longer sending whole frames.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Full-resolution everything</strong></td><td>Cost 10× what it needed to be</td><td>Right-size per task</td></tr><tr><td><strong>VLM for high-volume classification</strong></td><td>Unaffordable at scale</td><td>Label with the VLM, train a small model</td></tr><tr><td><strong>Trusting coordinates</strong></td><td>Boxes subtly wrong</td><td>Detector for localisation</td></tr><tr><td><strong>No structured output</strong></td><td>Unparseable free text</td><td>Schema-constrained extraction</td></tr><tr><td><strong>Image prompt injection</strong></td><td>Instructions embedded in the image</td><td>Treat image content as untrusted input</td></tr><tr><td><strong>No provenance</strong></td><td>Cannot audit an extraction</td><td>Store model version and image hash</td></tr></tbody></table></div><p><strong>Prompt injection through images is real</strong> and under-discussed. Text embedded
+in an image — visible or faint — is read by the encoder and enters the context
+as instruction-shaped tokens. Every control from the security page applies, and
+the input filtering that is already weak for text is weaker still here, because
+you cannot regex an image.</p>
+<p><strong>Video is images plus a sampling problem.</strong> There is no video-native handling in
+most systems: frames are sampled, encoded, and stacked into context. So the real
+design question is <em>which frames</em> — uniform sampling, scene-change detection, or
+detector-triggered. Sampling too densely is unaffordable; too sparsely and you
+miss the event. That choice, not the model, determines whether it works.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What multimodal looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>It can look at a photo and answer, which feels magical — right up to the confident misreading of a number in a table.</td></tr><tr><td><strong>Coder</strong></td><td>Resize before sending. Use schema-constrained extraction. Store the image hash and model version. Never trust returned coordinates.</td></tr><tr><td><strong>Tester</strong></td><td>Test with low-quality inputs: blurred, rotated, poorly lit, dense tables. Test counting and localisation explicitly, because those degrade first and silently.</td></tr><tr><td><strong>System designer</strong></td><td>Images are large payloads and slow requests. Preprocess before the model, cache on image hash, and expect much higher per-request cost than text.</td></tr><tr><td><strong>Architect</strong></td><td>Decide early where the boundary sits between purpose-built vision models and VLMs. The hybrid — detector for location, VLM for meaning — is usually right and is hard to retrofit.</td></tr><tr><td><strong>CEO</strong></td><td>Roughly a thousand times the per-item cost of a trained classifier. Justified for open-ended or low-volume work, rarely for high-volume classification. Ask what the volume is before approving.</td></tr><tr><td><strong>Market</strong></td><td>Capability is converging fast and open VLMs are strong. The durable advantage is labelled domain imagery — which, if you have industrial or inspection data, you already have.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;How does a VLM process an image?&quot;</td><td>Mechanism</td><td>A vision encoder produces patch embeddings, a projection maps them into the language model&#39;s embedding space, and the LM attends to them as ordinary tokens. No architectural change to the LM — which is why it arrived so fast.</td></tr><tr><td>⭐ &quot;VLM or a trained detector?&quot;</td><td>Judgement</td><td>Detector for a fixed class set, high volume, or pixel-accurate localisation — cheaper by orders of magnitude and deterministic. VLM for open-ended interpretation and low volume. Often both: detector for where, VLM for what it means.</td></tr><tr><td>&quot;Why are images so expensive?&quot;</td><td>Cost awareness</td><td>Each image becomes a thousand or more tokens, tiled at higher resolution, so cost grows roughly with the square of the dimension. Resizing to the smallest resolution the task needs is the biggest single lever.</td></tr><tr><td>&quot;Where do VLMs fail?&quot;</td><td>Honesty</td><td>Precise localisation, counting beyond a handful, dense small text, spatial relations, and fine-grained discrimination — all with full confidence, which makes the failures hard to catch.</td></tr><tr><td>&quot;High-volume image classification. Design it.&quot;</td><td>The pattern</td><td>Do not serve a VLM per image. Use it to label a training set, distil into a small supervised model, serve that. VLM generality at classifier cost.</td></tr><tr><td>⭐ &quot;Can images carry prompt injection?&quot;</td><td>Depth</td><td>Yes — embedded text is read by the encoder and enters context as instructions. Same architectural controls as text, and input filtering is even weaker because you cannot pattern-match an image.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>describe the encoder-projection-LM path in one breath,</li>
+<li>estimate an image&#39;s token cost and say why it is non-linear in resolution,</li>
+<li>name four things VLMs are unreliable at,</li>
+<li>describe the detector-plus-VLM hybrid and why it wins, and</li>
+<li>explain image-borne prompt injection.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>The projection approach</td><td><em>Visual Instruction Tuning</em> (Liu et al., 2023) — the LLaVA paper</td></tr><tr><td>Resamplers</td><td><em>BLIP-2</em> (Li et al., 2023) for the Q-Former</td></tr><tr><td>Vision encoders</td><td><em>CLIP</em> (Radford et al., 2021); <em>An Image is Worth 16x16 Words</em> (Dosovitskiy et al., 2020)</td></tr><tr><td>Practical</td><td>Provider vision documentation on tiling and token counting — the pricing mechanics are documented and worth reading once</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="prompt-engineering.html"><span>previous</span>Prompt engineering & structured output</a><a class="pager next" href="long-context.html"><span>next</span>Long context</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow-choosing-the-right-tool">3 · Flow — choosing the right tool</a></li><li class="d2"><a href="#4-uml-a-document-understanding-pipeline">4 · UML — a document-understanding pipeline</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -96,7 +96,7 @@ All modules written. Nothing is padded to look finished.
 
 | Module | Pages |
 |---|---|
-| **LLM foundations** | Transformers & attention · Tokenization · Decoding & sampling · LLM APIs & model selection · Prompt engineering |
+| **LLM foundations** | Transformers & attention · Tokenization · Decoding & sampling · LLM APIs & model selection · Prompt engineering · Multimodal & vision-language · Long context |
 | **Retrieval & advanced RAG** | Chunking & ingestion · Embeddings & vector databases · Reranking · Query transformation & HyDE · Corrective & self-RAG |
 | **Evaluation & judging** | LLM as a judge · Drift detection · Regression gates · Bias & explainability |
 | **Inference optimization** | Quantization · Distillation & pruning |
@@ -105,7 +105,8 @@ All modules written. Nothing is padded to look finished.
 | **Training & adaptation** | Fine-tuning & adaptation |
 | **Deployment & operations** | Serving & operations |
 | **Market & business** | Unit economics, build vs buy, where the moat is not |
-| **Reference** | Glossary — every term, one line each |
+| **Practice & interviews** | System design walkthroughs · Interview question bank |
+| **Reference** | Glossary · Research papers · Numbers to know · Anti-patterns |
 
 ## A note on honesty
 

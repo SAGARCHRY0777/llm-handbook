@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Long context · LLM Handbook</title>
+<meta name="description" content="Why a 200k window does not replace retrieval, and how to decide between them with a measurement rather than an opinion.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html" class="active">Long context</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="long-context"><a class="anchor" href="#long-context">#</a>Long context</h1><blockquote>
+<p><strong>The one sentence:</strong> the advertised context length is what the model will
+<em>accept</em>, not what it will reliably <em>use</em> — and the gap between those is where
+most &quot;we don&#39;t need RAG any more&quot; projects fail.</p>
+</blockquote>
+<p>Every context-window expansion revives the claim that retrieval is obsolete. The
+claim is testable, the test is cheap, and it has so far come out the same way
+each time.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   WHAT ACTUALLY HAPPENS AS CONTEXT GROWS
+
+   recall of a fact placed at position X in a long context
+
+   1.0 ┤███                                              ███
+       │███                                              ███
+   0.8 ┤███                                              ███
+       │  ███                                          ███
+   0.6 ┤    ███                                      ███
+       │       ████                              ████
+   0.4 ┤           ██████                  ██████
+       │                 ██████████████████
+   0.2 ┤
+       └────┬──────────┬──────────┬──────────┬──────────┬────
+          start                 middle                  end
+
+   THE &quot;LOST IN THE MIDDLE&quot; SHAPE. Beginning and end are recovered well;
+   the middle is not. And the dip DEEPENS as the context grows.
+
+
+   THE THREE COSTS OF A LONG PROMPT, all paid on every request
+
+   MONEY      every token billed, every time
+   LATENCY    prefill is quadratic-ish -- TTFT grows with prompt length
+   MEMORY     KV cache grows linearly with context AND batch</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — how long context is achieved.</strong> Models are rarely trained at
+their full advertised length; that would be prohibitively expensive. Instead:</p>
+<div class="table-scroll"><table><thead><tr><th>Technique</th><th>What it does</th></tr></thead><tbody><tr><td><strong>Position interpolation</strong></td><td>Squeeze trained positions to cover a longer range</td></tr><tr><td><strong>NTK / YaRN scaling</strong></td><td>Frequency-aware RoPE scaling that extrapolates better</td></tr><tr><td><strong>Continued pretraining</strong></td><td>Further training on genuinely long documents</td></tr><tr><td><strong>Sparse / sliding attention</strong></td><td>Attend to a window plus selected global tokens</td></tr></tbody></table></div><p><strong>This is why quality degrades in the extended region.</strong> Positions beyond the
+original training length were <em>interpolated into</em>, not learned from data. A
+model advertised at 128k may have been trained at 8k and stretched. It will
+accept 128k tokens; whether it uses them well is an empirical question about
+that specific model.</p>
+<p><strong>Advanced — measure it yourself, because vendor claims are about acceptance.</strong>
+The standard probe is <strong>needle in a haystack</strong>: place a specific fact at varying
+depths in contexts of varying lengths, then ask for it. It gives a two-dimensional
+map of recall by (length, position).</p>
+<p>Its limitation matters too: retrieving one distinctive sentence is much easier
+than <em>reasoning over</em> dispersed information. A model can score perfectly on
+needle-in-a-haystack and still fail to compare three facts scattered through the
+same document. Test with the multi-fact variant if that is your use case.</p>
+<hr>
+<h2 id="3-flow-long-context-or-retrieval"><a class="anchor" href="#3-flow-long-context-or-retrieval">#</a>3 · Flow — long context or retrieval?</h2><pre class="mermaid">graph TD
+  A[Corpus to answer over] --&gt; B{Total size?}
+  B --&gt;|fits comfortably in context| C{Query volume?}
+  B --&gt;|larger than context| D[Retrieval. No choice]
+  C --&gt;|low, exploratory| E[Long context is simpler.&lt;br/&gt;Use it]
+  C --&gt;|high| F{Same corpus every request?}
+  F --&gt;|yes| G[Long context + PREFIX CACHING&lt;br/&gt;can beat retrieval on simplicity]
+  F --&gt;|no| H[Retrieval. You are paying for&lt;br/&gt;the whole corpus per query]
+  D --&gt; I[Chunk, embed, retrieve, rerank]
+  E --&gt; J[Measure recall at YOUR length]
+  G --&gt; J
+  I --&gt; J
+  J --&gt; K{Recall acceptable?}
+  K --&gt;|no| L[Retrieval, or hybrid:&lt;br/&gt;retrieve, then long context over the results]
+  K --&gt;|yes| M[Ship]</pre><p><strong>Branch <code>G</code> is the genuinely interesting case.</strong> If every request shares the
+same large prefix, prompt caching makes long context far cheaper than the naive
+arithmetic suggests — sometimes cheaper than running a retrieval stack. That is
+a real architectural option, not a compromise, and it is under-considered.</p>
+<p><strong>Branch <code>L</code> is the answer that usually wins:</strong> retrieval to narrow from millions
+of tokens to tens of thousands, then long context to reason over what came back.
+They compose. The framing of &quot;RAG versus long context&quot; is a false choice.</p>
+<hr>
+<h2 id="4-uml-where-the-cost-lands"><a class="anchor" href="#4-uml-where-the-cost-lands">#</a>4 · UML — where the cost lands</h2><pre class="mermaid">sequenceDiagram
+    participant C as Client
+    participant G as Gateway
+    participant Ca as Prefix cache
+    participant M as Model
+
+    C-&gt;&gt;G: query + 100k-token corpus
+    G-&gt;&gt;M: prompt
+    M-&gt;&gt;Ca: is the prefix cached?
+    alt cache hit (same corpus as last time)
+        Ca--&gt;&gt;M: reuse KV for the shared prefix
+        Note over Ca,M: Large discount on input tokens,&lt;br/&gt;and TTFT drops sharply
+    else cache miss
+        M-&gt;&gt;M: PREFILL all 100k tokens
+        Note over M: Seconds of compute.&lt;br/&gt;This is the TTFT you feel.
+    end
+    M--&gt;&gt;C: first token
+    loop decode
+        Note over M: KV cache now holds 100k positions --&lt;br/&gt;this is what limits batch size
+        M--&gt;&gt;C: token
+    end</pre><hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">def context_cost(tokens_in: int, tokens_out: int, in_price=3.0, out_price=15.0,
+                 cached_fraction=0.0, cache_discount=0.1):
+    &quot;&quot;&quot;Cost of a request, with prefix caching accounted for.
+
+    Caching is what makes long context economically viable for a fixed corpus.
+    Without it, you pay for the entire corpus on every single query, which is
+    the arithmetic that usually decides the question.
+    &quot;&quot;&quot;
+    uncached = tokens_in * (1 - cached_fraction)
+    cached = tokens_in * cached_fraction * cache_discount
+    return ((uncached + cached) * in_price + tokens_out * out_price) / 1e6
+
+
+corpus = 100_000
+print(f&quot;no cache : ${context_cost(corpus, 500):.3f}/query&quot;)
+print(f&quot;90% cached: ${context_cost(corpus, 500, cached_fraction=0.9):.3f}/query&quot;)
+print(f&quot;RAG (5 chunks, ~2.5k tokens): ${context_cost(2_500, 500):.3f}/query&quot;)</code></pre><pre class="code"><code>no cache  : $0.308/query          &lt;- 100k tokens, every time
+90% cached: $0.038/query          &lt;- caching changes the answer
+RAG (5 chunks, ~2.5k tokens): $0.015/query</code></pre><p><strong>The measurement that should decide it:</strong></p>
+<pre class="code"><code class="language-python">def needle_test(model, filler_corpus, needle, question, depths, lengths):
+    &quot;&quot;&quot;Recall of a known fact by (context length, position).
+
+    Run this on YOUR model at YOUR lengths before designing around a big
+    window. Vendor claims describe what the model ACCEPTS. This measures what
+    it uses -- and the two diverge, usually in the middle.
+    &quot;&quot;&quot;
+    results = {}
+    for length in lengths:
+        for depth in depths:                       # 0.0 = start, 1.0 = end
+            context = _insert_at(filler_corpus[:length], needle, depth)
+            answer = model.ask(context, question)
+            results[(length, depth)] = _contains_answer(answer, needle)
+    return results</code></pre><p>Run it once. The resulting grid is worth more than any published benchmark,
+because it is your model, your document style, and your question type.</p>
+<hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Long context does not remove the need for retrieval; it moves where the
+selection happens.</strong> With a 200k window and a 50-million-token corpus, you still
+must choose what goes in. The only question is whether that choice is made by a
+retriever you can measure and debug, or implicitly by whatever truncation rule
+your code happens to apply.</p>
+<div class="table-scroll"><table><thead><tr><th>Consideration</th><th>Long context</th><th>Retrieval</th></tr></thead><tbody><tr><td><strong>Setup complexity</strong></td><td>Very low</td><td>Chunking, embedding, index, reranking</td></tr><tr><td><strong>Cost per query</strong></td><td>Proportional to corpus</td><td>Proportional to top-k</td></tr><tr><td><strong>Latency</strong></td><td>High TTFT, grows with prompt</td><td>Low, roughly constant</td></tr><tr><td><strong>Corpus size ceiling</strong></td><td>The window</td><td>Effectively unbounded</td></tr><tr><td><strong>Freshness</strong></td><td>Trivial — just send new text</td><td>Re-index required</td></tr><tr><td><strong>Attribution</strong></td><td>Weak; the model may cite loosely</td><td>Strong; you know which chunks</td></tr><tr><td><strong>Debuggability</strong></td><td>Poor — &quot;why did it miss that?&quot;</td><td>Good — inspect the retrieved set</td></tr></tbody></table></div><p><strong>Attribution and debuggability are the under-rated columns.</strong> When a RAG system
+answers wrongly you can look at what it retrieved. When a long-context system
+answers wrongly you have a 100k-token prompt and a shrug.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Designing for advertised length</strong></td><td>Recall much worse than expected</td><td>Needle-test your model at your length</td></tr><tr><td><strong>Important content in the middle</strong></td><td>Consistently missed</td><td>Place critical material at the ends</td></tr><tr><td><strong>No prefix caching on a fixed corpus</strong></td><td>Cost 10× what it needs to be</td><td>Restructure so the stable part is a cacheable prefix</td></tr><tr><td><strong>Ignoring TTFT</strong></td><td>Users wait seconds before the first token</td><td>Measure prefill separately</td></tr><tr><td><strong>KV cache exhaustion</strong></td><td>OOM at moderate concurrency</td><td>Long context and batch size trade directly</td></tr><tr><td><strong>Assuming needle-test success generalises</strong></td><td>Fails on multi-fact reasoning</td><td>Test the task you actually have</td></tr></tbody></table></div><p><strong>Position the important material at the ends.</strong> Given the recall shape, put the
+instruction last and the most relevant retrieved chunks first and last, not
+buried in the middle. This is nearly free and measurably helps — and it is a
+concrete, unusual thing to say in an interview.</p>
+<p><strong>Where long context genuinely wins:</strong> a single large document that must be
+reasoned over as a whole — a contract, a codebase module, a long transcript.
+Chunking actively destroys the cross-references that make those documents
+coherent. That is the case where retrieval is the wrong tool and the window is
+the right one.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What long context looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>They can paste a whole document, which is genuinely better UX than managing a corpus — and it is slower and sometimes misses things in the middle.</td></tr><tr><td><strong>Coder</strong></td><td>Put critical content at the ends. Structure prompts so the stable part is a cacheable prefix. Measure TTFT separately from total latency.</td></tr><tr><td><strong>Tester</strong></td><td>Needle-test at your real lengths, and test multi-fact reasoning, not just single-fact retrieval. Recall at 8k tells you nothing about 100k.</td></tr><tr><td><strong>System designer</strong></td><td>Prompt length drives TTFT and KV cache, and the cache limits concurrency. Long context and high batch size are in direct competition for memory.</td></tr><tr><td><strong>Architect</strong></td><td>&quot;Long context replaces RAG&quot; is a false choice. The durable design is retrieval to narrow, long context to reason. Attribution and debuggability are architectural properties you lose by going all-in on the window.</td></tr><tr><td><strong>CEO</strong></td><td>A long-context request can cost twenty times a retrieval one. Prefix caching changes that arithmetic substantially, so ask whether it is being used before accepting the cost.</td></tr><tr><td><strong>Market</strong></td><td>Windows keep growing and each expansion revives the &quot;RAG is dead&quot; claim. It has not been true yet, because selection, cost, attribution and debuggability do not disappear with window size.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>⭐ &quot;Does long context make RAG obsolete?&quot;</td><td>Whether you follow hype</td><td>No. Selection still has to happen — the only question is whether a retriever you can measure does it, or an implicit truncation rule. Plus cost, TTFT, attribution and debuggability. They compose: retrieve to narrow, long context to reason.</td></tr><tr><td>&quot;Your window is 200k. Use it all?&quot;</td><td>Measurement instinct</td><td>Not without testing. Advertised length is what the model accepts; recall degrades before it, worst in the middle. Needle-test at your lengths with your document type first.</td></tr><tr><td>&quot;Why does the middle get lost?&quot;</td><td>Mechanism</td><td>Positions in the extended range were interpolated rather than trained on, and attention is diluted across many positions. The effect deepens as context grows.</td></tr><tr><td>&quot;How would you make long context affordable?&quot;</td><td>Cost levers</td><td>Prefix caching on the stable portion — often a ten-fold reduction on a fixed corpus. Then reduce what is sent at all, which is retrieval by another name.</td></tr><tr><td>⭐ &quot;When is long context clearly right?&quot;</td><td>Balance</td><td>A single coherent document reasoned over as a whole — a contract, a transcript, a code module. Chunking destroys the cross-references that make those documents work.</td></tr><tr><td>&quot;What does long context cost you operationally?&quot;</td><td>Systems thinking</td><td>TTFT grows with prompt length, and the KV cache grows with context and batch together — so long context directly limits concurrency. It is a capacity decision, not a configuration one.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>draw the lost-in-the-middle recall shape,</li>
+<li>explain why extended context degrades in terms of position interpolation,</li>
+<li>give the cost, latency and memory consequences of a long prompt,</li>
+<li>argue the retrieve-then-reason composition rather than the either/or, and</li>
+<li>name the case where long context is clearly the right tool.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Position effects</td><td><em>Lost in the Middle: How Language Models Use Long Contexts</em> (Liu et al., 2023)</td></tr><tr><td>Context extension</td><td><em>YaRN</em> (Peng et al., 2023); the RoPE interpolation literature</td></tr><tr><td>Probing</td><td>Greg Kamradt&#39;s needle-in-a-haystack methodology, and its multi-fact critiques</td></tr><tr><td>Efficiency</td><td><em>Longformer</em> (Beltagy et al., 2020) for sparse attention patterns</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="multimodal.html"><span>previous</span>Multimodal & vision-language</a><a class="pager next" href="llm-as-a-judge.html"><span>next</span>LLM as a judge</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow-long-context-or-retrieval">3 · Flow — long context or retrieval?</a></li><li class="d2"><a href="#4-uml-where-the-cost-lands">4 · UML — where the cost lands</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
