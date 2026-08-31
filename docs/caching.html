@@ -1,0 +1,304 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Caching strategies · LLM Handbook</title>
+<meta name="description" content="Four kinds of cache, ordered by how much they save, and the one that can quietly serve the wrong answer.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li><li><a href="reasoning-models.html">Reasoning models & test-time compute</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="text2sql.html">Text2SQL & structured data</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li><li><a href="synthetic-data.html">Synthetic data generation</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li><li><a href="caching.html" class="active">Caching strategies</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="caching-strategies"><a class="anchor" href="#caching-strategies">#</a>Caching strategies</h1><blockquote>
+<p><strong>The one sentence:</strong> caching is the largest cost lever in most LLM systems
+and the only one that also makes things faster — but one of the four kinds can
+serve a user someone else&#39;s answer, so they are not interchangeable.</p>
+</blockquote>
+<p>Most teams implement exact-match caching, get a low hit rate, and conclude
+caching does not help. The two that actually pay are the ones they skipped.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   FOUR CACHES, IN THE ORDER THEY SIT IN THE REQUEST PATH
+
+   request
+     │
+     ├─► 1. EXACT RESPONSE CACHE      identical request seen before?
+     │      hit rate 5-30%             saves 100% of the call
+     │      trivially safe             keyed on hash(prompt + params + model)
+     │
+     ├─► 2. SEMANTIC CACHE            similar QUESTION seen before?
+     │      hit rate 20-50%            saves 100% of the call
+     │      ⚠ CAN SERVE WRONG ANSWERS  keyed on embedding similarity
+     │
+     ├─► 3. PREFIX / KV CACHE         shared PREFIX seen before?
+     │      hit rate often 80-95%      saves most of the INPUT cost + TTFT
+     │      always safe                provider-side, needs prompt structuring
+     │
+     └─► 4. EMBEDDING CACHE           embedded this text before?
+            hit rate very high         saves embedding calls
+            always safe                keyed on hash(text + model)
+
+
+   WHICH ONE TO BUILD FIRST
+
+   #3 costs a prompt restructure and saves the most. Do it first.
+   #4 is trivial and saves a surprising amount at ingestion time.
+   #1 is easy and helps a little.
+   #2 is powerful and needs care -- see below.</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Prefix caching is first because it is nearly free money.</strong> Most LLM requests
+share a large stable prefix — a system prompt, tool definitions, a few-shot
+block, sometimes a fixed corpus. Providers charge a large discount on cached
+prefix tokens and skip recomputing their KV cache, which also cuts TTFT.</p>
+<p>It requires one thing: <strong>put the stable content first and the variable content
+last.</strong> A prompt that interleaves them caches nothing.</p>
+<pre class="code"><code>   CACHEABLE                          NOT CACHEABLE
+   system prompt        (stable)      &quot;Today is 2026-09-01&quot;   &lt;- moves every day
+   tool definitions     (stable)      user question           &lt;- varies
+   few-shot examples    (stable)      retrieved chunks        &lt;- varies
+   ─────────────────────────────
+   retrieved chunks     (varies)
+   user question        (varies)</code></pre><p>Putting a timestamp at the top of a system prompt invalidates the entire cache on
+every request. It is a one-line mistake with a large bill attached.</p>
+<p><strong>Exact caching is easy and limited.</strong> Key on
+<code>hash(model + version + params + full prompt)</code>. Include the model <em>version</em> and
+sampling parameters — a cached answer from a different model or temperature is a
+different answer.</p>
+<p><strong>Semantic caching is the powerful, dangerous one.</strong> Embed the question, search
+previous questions, and return a stored answer if similarity exceeds a threshold.
+Hit rates are much higher because real query distributions are Zipfian — the same
+questions recur in different words.</p>
+<p>The danger is that &quot;similar&quot; is not &quot;the same&quot;:</p>
+<pre class="code"><code>   &quot;how do I cancel my subscription?&quot;       vs
+   &quot;how do I cancel my subscription        -&gt;  SIMILAR embeddings
+    without losing my data?&quot;                    DIFFERENT correct answers</code></pre><p>And worse:</p>
+<pre class="code"><code>   &quot;what did I order last week?&quot;  -&gt;  identical across every user.
+   A shared semantic cache serves one customer another&#39;s order history.</code></pre><p><strong>Advanced — the rules that make semantic caching safe:</strong></p>
+<ol>
+<li><strong>Scope by user or tenant</strong> unless the query is provably stateless.</li>
+<li><strong>Never cache personalised or time-sensitive answers.</strong> Classify first.</li>
+<li><strong>Set the threshold high</strong> — 0.95+ — and validate it on real query pairs, not
+by intuition.</li>
+<li><strong>Cache the question and answer together</strong>, and check the retrieved question
+is genuinely equivalent before serving.</li>
+<li><strong>TTL aggressively.</strong> A correct answer from three months ago may now be wrong.</li>
+</ol>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Request] --&gt; B{Exact hash hit?}
+  B --&gt;|yes| Z[Serve. ~0ms]
+  B --&gt;|no| C{Cacheable at all?&lt;br/&gt;personalised? time-sensitive?}
+  C --&gt;|no| F[Skip semantic cache]
+  C --&gt;|yes| D{Semantic hit above&lt;br/&gt;threshold, same scope?}
+  D --&gt;|yes| E[Verify equivalence,&lt;br/&gt;then serve]
+  E --&gt; Z
+  D --&gt;|no| F
+  F --&gt; G[Structure prompt:&lt;br/&gt;stable prefix first]
+  G --&gt; H[Call model&lt;br/&gt;provider prefix cache applies]
+  H --&gt; I[Store in exact + semantic caches&lt;br/&gt;with TTL and scope]
+  I --&gt; Z</pre><p><strong>Node <code>C</code> is the safety gate and it belongs before the semantic lookup</strong>, not
+after. Deciding cacheability from the <em>question type</em> — is this personalised, is
+it time-sensitive — is a classification you can do cheaply and must do first.</p>
+<hr>
+<h2 id="4-uml-where-each-cache-saves"><a class="anchor" href="#4-uml-where-each-cache-saves">#</a>4 · UML — where each cache saves</h2><pre class="mermaid">sequenceDiagram
+    participant C as Client
+    participant E as Exact cache
+    participant S as Semantic cache
+    participant P as Provider
+    participant K as Provider prefix cache
+
+    C-&gt;&gt;E: hash lookup
+    alt exact hit
+        E--&gt;&gt;C: response (~1ms, $0)
+    else miss
+        C-&gt;&gt;S: embedding search (scoped)
+        alt semantic hit, verified
+            S--&gt;&gt;C: response (~20ms, $0)
+        else miss
+            C-&gt;&gt;P: request, stable prefix first
+            P-&gt;&gt;K: prefix cached?
+            K--&gt;&gt;P: reuse KV for the shared prefix
+            Note over K,P: input tokens heavily discounted,&lt;br/&gt;TTFT drops sharply
+            P--&gt;&gt;C: response
+            C-&gt;&gt;E: store
+            C-&gt;&gt;S: store with scope + TTL
+        end
+    end</pre><hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">import hashlib, json, time
+
+
+def exact_key(model: str, version: str, params: dict, prompt: str) -&gt; str:
+    &quot;&quot;&quot;Cache key including everything that changes the answer.
+
+    Model version and sampling parameters belong in the key. A response
+    generated at temperature 0.7 by last month&#39;s model is not a valid answer to
+    the same prompt today at temperature 0 -- and a cache that conflates them
+    produces bugs nobody can reproduce.
+    &quot;&quot;&quot;
+    blob = json.dumps([model, version, params, prompt], sort_keys=True)
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+CACHEABLE_NEVER = (&quot;my &quot;, &quot;i ordered&quot;, &quot;my account&quot;, &quot;last time i&quot;, &quot;for me&quot;)
+
+
+def is_semantically_cacheable(question: str) -&gt; bool:
+    &quot;&quot;&quot;Decide cacheability from the QUESTION TYPE, before any lookup.
+
+    Personalised and time-sensitive questions must never share a cache entry.
+    &#39;What did I order last week&#39; embeds almost identically for every user, so a
+    shared semantic cache would serve one customer another&#39;s history -- a data
+    breach caused by a performance optimisation.
+    &quot;&quot;&quot;
+    lowered = question.lower()
+    if any(marker in lowered for marker in CACHEABLE_NEVER):
+        return False
+    if any(word in lowered for word in (&quot;today&quot;, &quot;now&quot;, &quot;current&quot;, &quot;latest&quot;)):
+        return False
+    return True
+
+
+class SemanticCache:
+    &quot;&quot;&quot;Similarity cache with the guards that make it safe rather than clever.&quot;&quot;&quot;
+
+    def __init__(self, index, threshold=0.96, ttl_s=86_400):
+        self._index = index
+        self._threshold = threshold      # high on purpose; validate on real pairs
+        self._ttl = ttl_s
+
+    def get(self, question: str, scope: str):
+        if not is_semantically_cacheable(question):
+            return None
+
+        # Scope is part of the search, not a filter applied afterwards --
+        # post-filtering a semantic cache has the same flaw as post-filtering
+        # retrieval by permissions.
+        hits = self._index.search(question, k=1, filter={&quot;scope&quot;: scope})
+        if not hits or hits[0].score &lt; self._threshold:
+            return None
+
+        entry = hits[0]
+        if time.time() - entry.stored_at &gt; self._ttl:
+            return None
+        return entry.answer</code></pre><p><strong>Measuring whether it is working:</strong></p>
+<pre class="code"><code class="language-python">def cache_report(events) -&gt; dict:
+    &quot;&quot;&quot;Hit rate alone is not enough -- a cache that serves wrong answers has a
+    great hit rate. Track savings AND the signal that it is misfiring.
+    &quot;&quot;&quot;
+    total = len(events)
+    exact = sum(1 for e in events if e.source == &quot;exact&quot;)
+    semantic = sum(1 for e in events if e.source == &quot;semantic&quot;)
+    return {
+        &quot;exact_hit_rate&quot;: round(exact / total, 3),
+        &quot;semantic_hit_rate&quot;: round(semantic / total, 3),
+        &quot;cost_saved&quot;: round(sum(e.would_have_cost for e in events if e.source != &quot;live&quot;), 2),
+        # The one that matters for safety: users re-asking straight after a
+        # cached answer is the strongest available signal that the cache
+        # returned something that did not fit their question.
+        &quot;requery_after_cache_hit&quot;: round(
+            sum(1 for e in events if e.source != &quot;live&quot; and e.followed_by_requery)
+            / max(1, exact + semantic), 3
+        ),
+    }</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong><code>requery_after_cache_hit</code> is the metric that makes semantic caching
+operable.</strong> If users frequently re-ask immediately after a cached response, the
+threshold is too low and you are serving near-misses. It is a free label — no
+annotation, no judge — and it is the only practical way to detect the failure
+mode in production.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Timestamp in the system prompt</strong></td><td>Prefix cache never hits</td><td>Move volatile content to the end</td></tr><tr><td><strong>Model version not in the key</strong></td><td>Stale answers after an upgrade</td><td>Include model and version</td></tr><tr><td><strong>Unscoped semantic cache</strong></td><td>Cross-user data leakage</td><td>Scope by user or tenant, in the search</td></tr><tr><td><strong>Threshold too low</strong></td><td>Answers to questions nobody asked</td><td>0.95+, validated on real pairs</td></tr><tr><td><strong>No TTL</strong></td><td>Confidently outdated answers</td><td>Aggressive TTL by content type</td></tr><tr><td><strong>Caching personalised queries</strong></td><td>Wrong answers, possible breach</td><td>Classify before looking up</td></tr><tr><td><strong>Only exact caching</strong></td><td>Low hit rate, conclusion that caching fails</td><td>Prefix caching is the bigger win</td></tr></tbody></table></div><p><strong>Cache invalidation is the hard part here as everywhere</strong>, and RAG makes it
+harder: an answer cached from retrieved documents becomes wrong when those
+documents change. Two workable approaches — tag cache entries with the chunk ids
+that produced them and invalidate on re-index, or simply use a short TTL and
+accept some staleness. The second is usually right, because the first requires
+discipline that decays.</p>
+<p><strong>Caching interacts with evaluation in a way that bites people.</strong> A cached
+response during an eval run means you are scoring a stored answer, not the
+current system — and your numbers stop reflecting reality. <strong>Disable caching in
+eval runs</strong>, or key the cache on a run id. This is a real and easily-missed
+source of an eval suite that mysteriously stops catching regressions.</p>
+<p><strong>The ordering worth remembering</strong>, because it is the opposite of what most teams
+do:</p>
+<ol>
+<li><strong>Prefix caching</strong> — restructure the prompt. Largest saving, always safe.</li>
+<li><strong>Embedding caching</strong> — trivial, and ingestion re-embeds far more than you expect.</li>
+<li><strong>Exact caching</strong> — easy, modest gain.</li>
+<li><strong>Semantic caching</strong> — biggest hit rate, needs the safety work above.</li>
+</ol>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What caching looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Faster answers. And, if the semantic cache is careless, an answer to a question they did not ask — which erodes trust faster than slowness.</td></tr><tr><td><strong>Coder</strong></td><td>Stable content first in every prompt. Model version in every cache key. Scope semantic caches in the search, never as a post-filter. Disable caching during evals.</td></tr><tr><td><strong>Tester</strong></td><td>Test that the cache is off in eval runs. Test scope isolation directly — two users, similar questions, assert no cross-serving.</td></tr><tr><td><strong>System designer</strong></td><td>Caches are state with TTLs, invalidation and a memory budget. The semantic cache is a vector index with all of that index&#39;s operational needs.</td></tr><tr><td><strong>Architect</strong></td><td>Prompt structure is now an architectural concern, because it determines whether prefix caching works at all. That is unusual and worth writing down.</td></tr><tr><td><strong>CEO</strong></td><td>Usually the largest cost reduction available, often halving spend with no quality loss. The risk is a semantic cache serving wrong answers — ask what the threshold is and how it was chosen.</td></tr><tr><td><strong>Market</strong></td><td>Provider prefix caching is standard and free to adopt. Semantic caching is available off the shelf. No advantage in building either; the advantage is in using them correctly.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>⭐ &quot;How would you cut LLM costs by half?&quot;</td><td>Whether you reach for the biggest lever</td><td>Prefix caching first — restructure so the stable system prompt and tools come first. Then route easy traffic to a smaller model, then semantic caching, then cap output tokens. Infrastructure changes come last.</td></tr><tr><td>&quot;Why is your prefix cache never hitting?&quot;</td><td>Debugging instinct</td><td>Something volatile is at the top — usually a timestamp or a user id in the system prompt. The cache matches on prefix, so one changing token at the front invalidates everything after it.</td></tr><tr><td>⭐ &quot;What is dangerous about semantic caching?&quot;</td><td>Safety awareness</td><td>&quot;Similar&quot; is not &quot;the same&quot;. Two questions can embed closely with different correct answers, and personalised questions embed almost identically across users — an unscoped cache serves one user another&#39;s data.</td></tr><tr><td>&quot;How do you know the semantic cache is misfiring?&quot;</td><td>Operational depth</td><td>Re-query rate immediately after a cache hit. A free implicit label — if users re-ask, the answer did not fit, and the threshold is too low.</td></tr><tr><td>&quot;What goes in a cache key?&quot;</td><td>Detail</td><td>The prompt, the model, the model <em>version</em>, and the sampling parameters. Anything that changes the answer changes the key, or you serve stale responses after an upgrade.</td></tr><tr><td>⭐ &quot;Any interaction between caching and evaluation?&quot;</td><td>Rare, and a strong signal</td><td>Yes — a cached response during an eval means you are scoring a stored answer rather than the current system, so the suite silently stops catching regressions. Disable caching in eval runs.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>name the four caches and order them by saving,</li>
+<li>explain why a timestamp in a system prompt is expensive,</li>
+<li>give two ways a semantic cache serves a wrong answer,</li>
+<li>name the free signal that detects it, and</li>
+<li>say why caching must be off during evaluation.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Prefix caching</td><td>Provider documentation on prompt caching — the mechanics and discounts are published</td></tr><tr><td>KV cache reuse</td><td>The vLLM automatic prefix caching documentation</td></tr><tr><td>Semantic caching</td><td>GPTCache, and any write-up honest about its threshold problem</td></tr><tr><td>Invalidation</td><td>Ordinary cache-invalidation literature; nothing about LLMs makes this easier</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="serving-and-operations.html"><span>previous</span>Serving & operations</a><a class="pager next" href="market-and-business.html"><span>next</span>Market & business of LLMs</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-where-each-cache-saves">4 · UML — where each cache saves</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
