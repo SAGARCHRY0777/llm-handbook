@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fine-tuning &amp; adaptation · LLM Handbook</title>
+<meta name="description" content="LoRA, QLoRA and full fine-tuning — what they change, what they cannot, and why RAG is usually the right answer instead.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html" class="active">Fine-tuning & adaptation</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="fine-tuning-adaptation"><a class="anchor" href="#fine-tuning-adaptation">#</a>Fine-tuning & adaptation</h1><blockquote>
+<p><strong>The one sentence:</strong> fine-tuning teaches a model <em>how to behave</em>, not <em>what
+is true</em> — and almost every failed fine-tuning project confused the two.</p>
+</blockquote>
+<p>The most valuable thing on this page is the decision procedure that concludes
+&quot;do not fine-tune&quot;, because that is the correct answer far more often than the
+enthusiasm around it suggests.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   WHAT EACH TECHNIQUE ACTUALLY FIXES
+
+   PROBLEM                              RIGHT TOOL
+   -------                              ----------
+   &quot;it doesn&#39;t know our documents&quot;      RAG            (knowledge -&gt; retrieval)
+   &quot;it doesn&#39;t know last week&#39;s data&quot;   RAG            (freshness -&gt; retrieval)
+   &quot;it won&#39;t follow our format&quot;         FINE-TUNE      (behaviour -&gt; weights)
+   &quot;it doesn&#39;t understand our jargon&quot;   FINE-TUNE or a domain model
+   &quot;it&#39;s too verbose / wrong register&quot;  PROMPT first, then fine-tune
+   &quot;it&#39;s too slow / expensive&quot;          smaller model, distillation, quantization
+   &quot;it&#39;s wrong about facts&quot;             RAG. ALWAYS RAG.
+
+
+   THE MISTAKE, drawn plainly
+
+   fine-tuning on documents to teach FACTS
+     -&gt; the model learns the STYLE of your documents
+     -&gt; and hallucinates confidently in that style
+     -&gt; now it is wrong AND sounds exactly like your house voice</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — the methods and what they cost.</strong></p>
+<div class="table-scroll"><table><thead><tr><th>Method</th><th>Trains</th><th>Memory for a 7B</th><th>Use when</th></tr></thead><tbody><tr><td><strong>Full fine-tune</strong></td><td>All weights</td><td>~80 GB+</td><td>Rarely justified outside labs</td></tr><tr><td><strong>LoRA</strong></td><td>Small low-rank adapters</td><td>~16 GB</td><td>The default choice</td></tr><tr><td><strong>QLoRA</strong></td><td>LoRA on a 4-bit base</td><td>~6 GB</td><td>Consumer GPUs; slight quality cost</td></tr><tr><td><strong>Prompt/prefix tuning</strong></td><td>Soft prompt vectors</td><td>Tiny</td><td>Niche; largely superseded</td></tr></tbody></table></div><p><strong>LoRA is the one to understand.</strong> Instead of updating a weight matrix <code>W</code>, you
+learn a low-rank correction: <code>W + BA</code>, where <code>B</code> and <code>A</code> are much smaller. With
+rank 16 you might train 0.1% of the parameters and match full fine-tuning on most
+adaptation tasks.</p>
+<p>Two consequences that matter operationally:</p>
+<ol>
+<li><strong>Adapters are small</strong> — tens of megabytes. You can serve one base model with
+many adapters, swapping per request or per tenant. That is a genuinely
+different deployment story from one fine-tuned model per customer.</li>
+<li><strong>They are composable and reversible.</strong> Reverting means not loading the
+adapter. Compare with a full fine-tune, which is a new checkpoint.</li>
+</ol>
+<p><strong>The hyperparameters that matter</strong>, in order:</p>
+<pre class="code"><code>   rank (r)        8-16 for style and format; 32-64 for harder adaptation
+                   higher rank does not reliably mean better
+   alpha           scaling; commonly set to 2x rank
+   target modules  attention projections is the usual default; adding the MLP
+                   projections increases capacity and cost
+   learning rate   1e-4 to 2e-4 typical -- much higher than full fine-tuning
+   epochs          1-3. More overfits fast on small sets</code></pre><p><strong>Advanced — data quality dominates everything else.</strong> A thousand carefully
+curated, consistent examples beat fifty thousand scraped ones, reliably and by a
+lot. The failure is almost never &quot;not enough data&quot;; it is inconsistent data.
+If two examples show different formats for the same input type, you have taught
+the model that both are acceptable and it will pick one at random.</p>
+<div class="table-scroll"><table><thead><tr><th>Data property</th><th>Why it matters more than volume</th></tr></thead><tbody><tr><td><strong>Consistency</strong></td><td>Inconsistent targets teach randomness explicitly</td></tr><tr><td><strong>Coverage of edge cases</strong></td><td>The typical case is already handled</td></tr><tr><td><strong>Correct outputs</strong></td><td>Errors are learned faithfully, then reproduced</td></tr><tr><td><strong>Format uniformity</strong></td><td>The format <em>is</em> what is being learned</td></tr><tr><td><strong>Held-out split</strong></td><td>Without it you cannot tell learning from memorising</td></tr></tbody></table></div><hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Quality problem] --&gt; B{Is it about FACTS&lt;br/&gt;or FRESHNESS?}
+  B --&gt;|yes| C[RAG. Not fine-tuning]
+  B --&gt;|no| D{Have you exhausted&lt;br/&gt;prompting and few-shot?}
+  D --&gt;|no| E[Do that first. Hours, not weeks]
+  D --&gt;|yes| F{Do you have 500+ consistent&lt;br/&gt;examples of the desired behaviour?}
+  F --&gt;|no| G[Data collection is the project.&lt;br/&gt;Start there]
+  F --&gt;|yes| H{Would a smaller off-the-shelf&lt;br/&gt;model plus prompting do?}
+  H --&gt;|maybe| I[Try it. Often wins for none of the effort]
+  H --&gt;|no| J[LoRA fine-tune]
+  J --&gt; K[Evaluate on a HELD-OUT set]
+  K --&gt; L{Better than the prompted baseline?}
+  L --&gt;|no| M[Stop. Keep the baseline]
+  L --&gt;|yes| N[Check for regressions on&lt;br/&gt;general capability]
+  N --&gt; O{Catastrophic forgetting?}
+  O --&gt;|yes| P[Lower rank, fewer epochs,&lt;br/&gt;mix in general data]
+  O --&gt;|no| Q[Deploy with the adapter versioned&lt;br/&gt;against the base model]</pre><p><strong><code>L → M</code> is the branch people skip.</strong> A fine-tune that does not beat a
+well-prompted baseline is a maintenance burden with no payoff, and the honest
+move is to abandon it. The comparison must be against your <em>best</em> prompt, not
+against the first one you tried.</p>
+<hr>
+<h2 id="4-uml-lora-in-the-forward-pass"><a class="anchor" href="#4-uml-lora-in-the-forward-pass">#</a>4 · UML — LoRA in the forward pass</h2><pre class="mermaid">graph LR
+  A[input x] --&gt; B[frozen W&lt;br/&gt;base weights]
+  A --&gt; C[A: down-project&lt;br/&gt;d x r]
+  C --&gt; D[B: up-project&lt;br/&gt;r x d]
+  B --&gt; E((+))
+  D --&gt; E
+  E --&gt; F[output]
+  style B fill:#e4edf6
+  style C fill:#e2f0ea
+  style D fill:#e2f0ea</pre><p>The base weights never move. Only <code>A</code> and <code>B</code> are trained, and at inference they
+can be merged into <code>W</code> for zero added latency — or kept separate so adapters can
+be swapped per request. That choice is a serving decision, not a training one.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">from peft import LoraConfig, get_peft_model
+
+config = LoraConfig(
+    r=16,                 # rank: capacity of the adaptation
+    lora_alpha=32,        # scaling, conventionally 2x rank
+    lora_dropout=0.05,
+    bias=&quot;none&quot;,
+    task_type=&quot;CAUSAL_LM&quot;,
+    # Attention projections are the standard target. Adding the MLP projections
+    # increases capacity and cost; start without them and only add if the
+    # held-out score says the adaptation is capacity-limited.
+    target_modules=[&quot;q_proj&quot;, &quot;k_proj&quot;, &quot;v_proj&quot;, &quot;o_proj&quot;],
+)
+
+model = get_peft_model(base_model, config)
+model.print_trainable_parameters()
+# trainable params: 8,388,608 || all params: 6,746,804,224 || trainable%: 0.124</code></pre><p><strong>The check that decides whether it was worth doing:</strong></p>
+<pre class="code"><code class="language-python">def is_the_finetune_worth_keeping(baseline_prompted, finetuned, held_out, general):
+    &quot;&quot;&quot;Compare against the BEST prompt, and check for collateral damage.
+
+    Two failure modes this catches. First, a fine-tune that loses to a good
+    prompt -- all the maintenance cost, none of the benefit. Second,
+    catastrophic forgetting: the model got better at your task and worse at
+    everything else, which the task metric alone cannot see.
+    &quot;&quot;&quot;
+    task_before = evaluate(baseline_prompted, held_out)
+    task_after = evaluate(finetuned, held_out)
+    general_before = evaluate(baseline_prompted, general)
+    general_after = evaluate(finetuned, general)
+
+    return {
+        &quot;task_gain&quot;: round(task_after - task_before, 4),
+        &quot;general_loss&quot;: round(general_before - general_after, 4),
+        # A large task gain paid for with a large general loss is usually a bad
+        # trade for anything but a single-purpose model.
+        &quot;keep&quot;: (task_after - task_before) &gt; 0.05
+                and (general_before - general_after) &lt; 0.03,
+    }</code></pre><p><strong>Data preparation, which is most of the actual work:</strong></p>
+<pre class="code"><code class="language-python">def build_training_set(examples, min_examples=500):
+    &quot;&quot;&quot;Curate rather than collect.
+
+    Consistency is the property being taught. Two examples with different
+    formats for the same input type teach the model that both are acceptable,
+    and it will then choose between them unpredictably -- which looks exactly
+    like the problem you were trying to fix.
+    &quot;&quot;&quot;
+    seen_formats = {}
+    clean = []
+    for ex in examples:
+        shape = format_signature(ex[&quot;output&quot;])
+        seen_formats.setdefault(shape, 0)
+        seen_formats[shape] += 1
+        clean.append(ex)
+
+    if len(seen_formats) &gt; 1:
+        raise ValueError(
+            f&quot;inconsistent output formats: {seen_formats}. &quot;
+            &quot;Normalise before training -- the format IS the lesson.&quot;
+        )
+    if len(clean) &lt; min_examples:
+        raise ValueError(f&quot;{len(clean)} examples; collect more before training&quot;)
+    return clean</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Catastrophic forgetting is real and routinely unmeasured.</strong> Fine-tuning on a
+narrow task degrades unrelated capability — the model gets better at your format
+and worse at reasoning, other languages, or instruction-following in general.
+Nobody notices because the evaluation only covers the target task. Always
+evaluate on a general benchmark before and after, and treat a large general loss
+as a cost, not a footnote.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Fine-tuning for facts</strong></td><td>Confident hallucination in your house style</td><td>RAG</td></tr><tr><td><strong>Inconsistent training data</strong></td><td>Unpredictable output format</td><td>Normalise before training</td></tr><tr><td><strong>No held-out set</strong></td><td>Great training loss, poor deployment</td><td>Hold out from the start</td></tr><tr><td><strong>Not compared to a good prompt</strong></td><td>Maintenance burden, no gain</td><td>Compare against your best prompt</td></tr><tr><td><strong>Catastrophic forgetting</strong></td><td>Task better, everything else worse</td><td>Lower rank, fewer epochs, mix general data</td></tr><tr><td><strong>Too many epochs</strong></td><td>Memorises the training set</td><td>1–3 epochs on small sets</td></tr><tr><td><strong>Base model version unpinned</strong></td><td>Adapter silently mismatched</td><td>Version adapter against the exact base</td></tr></tbody></table></div><p><strong>Adapters are tied to their exact base model.</strong> A LoRA trained on one checkpoint
+will load against a slightly different one and produce quietly degraded output
+rather than an error. Pin the base model version in the adapter&#39;s metadata and
+verify it at load time.</p>
+<p><strong>The operational commitment is the part that is under-costed.</strong> Choosing to
+fine-tune means owning: a training pipeline, a data curation process, evaluation
+before and after, drift monitoring, and a re-training decision every time the
+base model improves. That is a permanent team responsibility traded for a
+capability gain — which is why &quot;would a smaller off-the-shelf model plus a good
+prompt do this?&quot; is a question worth answering honestly before starting.</p>
+<p><strong>Where fine-tuning genuinely wins</strong>, so this does not read as blanket
+discouragement:</p>
+<ol>
+<li><strong>Format and structure adherence</strong> — reliable output shape, especially for a
+schema too complex to prompt reliably.</li>
+<li><strong>Domain language</strong> — specialised vocabulary and register the base model
+handles awkwardly.</li>
+<li><strong>Latency and cost</strong> — a fine-tuned small model matching a large prompted one
+on a narrow task, at a fraction of the cost.</li>
+<li><strong>Classification at volume</strong> — small fine-tuned classifiers routinely beat
+prompting large models, faster and far cheaper.</li>
+</ol>
+<p>The fourth is the most under-used. For a high-volume classification task, a
+fine-tuned small encoder is often better <em>and</em> cheaper than an LLM call by two
+orders of magnitude, and reaching for an LLM there is a habit rather than a
+decision.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What fine-tuning looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Output that fits their domain and format. They cannot tell fine-tuning from good prompting, which is worth remembering before funding it.</td></tr><tr><td><strong>Coder</strong></td><td>Curate data before touching hyperparameters. Hold out a split from the start. Pin the base version in the adapter metadata. Evaluate general capability, not only the task.</td></tr><tr><td><strong>Tester</strong></td><td>Two evaluations: the target task, and a general set to detect forgetting. The baseline must be the <em>best prompted</em> version, not an untuned one, or the comparison flatters the fine-tune.</td></tr><tr><td><strong>System designer</strong></td><td>LoRA adapters swap per request, so one base model can serve many tenants. Merging removes latency but loses that flexibility — a real trade to make deliberately.</td></tr><tr><td><strong>Architect</strong></td><td>This is an ongoing commitment: pipeline, data, evaluation, retraining when the base improves. Take it on for a durable capability, not for a one-off quality bump.</td></tr><tr><td><strong>CEO</strong></td><td>Weeks of work with an uncertain outcome, against prompting which is hours. Ask what was tried first and what the comparison against a good prompt showed. Fine-tuned classifiers at volume are the clearest positive ROI case.</td></tr><tr><td><strong>Market</strong></td><td>Open weights plus LoRA has made adaptation cheap and non-differentiating. The moat is the curated dataset, not the technique — and that dataset is an asset worth protecting.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;RAG or fine-tuning?&quot;</td><td>The central distinction</td><td>RAG for knowledge and freshness; fine-tuning for behaviour, format and register. Fine-tuning on documents to teach facts produces confident hallucination in your house style.</td></tr><tr><td>&quot;What is LoRA?&quot;</td><td>Mechanism, not acronym</td><td>A low-rank correction <code>W + BA</code> with the base frozen. Around 0.1% of parameters trained, adapters tens of megabytes, swappable per request, and mergeable at inference for zero added latency.</td></tr><tr><td>&quot;How much data?&quot;</td><td>Whether you know what matters</td><td>Consistency over volume — 500–1000 curated consistent examples beat 50,000 scraped ones. Inconsistent formats teach the model that both are acceptable, which reproduces the original problem.</td></tr><tr><td>&quot;How do you know it worked?&quot;</td><td>Rigour</td><td>Held-out task evaluation against the <em>best prompted</em> baseline, plus a general benchmark to detect catastrophic forgetting. A task gain bought with a large general loss is usually a bad trade.</td></tr><tr><td>&quot;When would you not fine-tune?&quot;</td><td>Judgement</td><td>When the problem is facts or freshness, when prompting has not been exhausted, when the data is not consistent, or when a smaller off-the-shelf model with a good prompt does the job — which is often.</td></tr><tr><td>&quot;Where does it clearly win?&quot;</td><td>Balance</td><td>Format adherence, domain register, and above all high-volume classification, where a fine-tuned small model beats a prompted large one on quality, latency and cost simultaneously.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>state the knowledge-versus-behaviour split in one sentence,</li>
+<li>explain LoRA&#39;s mechanism and its two operational consequences,</li>
+<li>say why consistency beats volume in training data,</li>
+<li>name catastrophic forgetting and how you would detect it, and</li>
+<li>give the case where fine-tuning is clearly correct.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>LoRA</td><td><em>LoRA: Low-Rank Adaptation of Large Language Models</em> (Hu et al., 2021)</td></tr><tr><td>QLoRA</td><td><em>QLoRA: Efficient Finetuning of Quantized LLMs</em> (Dettmers et al., 2023)</td></tr><tr><td>Practical</td><td>The Hugging Face PEFT documentation — the defaults are sensible and explained</td></tr><tr><td>Data quality</td><td><em>LIMA: Less Is More for Alignment</em> (Zhou et al., 2023) — 1,000 curated examples, and the argument for curation</td></tr><tr><td>Forgetting</td><td>Any continual-learning survey; the problem long predates LLMs</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="guardrails-and-security.html"><span>previous</span>Guardrails & security</a><a class="pager next" href="serving-and-operations.html"><span>next</span>Serving & operations</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-lora-in-the-forward-pass">4 · UML — LoRA in the forward pass</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -92,26 +92,20 @@ is also the single most common gap in an LLM engineer's interview answers.
 
 ## Status
 
-Written gap-first rather than front-to-back, because the material this exists to
-replace is the material that was missing. Every module below is written; nothing
-is padded with filler to look finished.
+All modules written. Nothing is padded to look finished.
 
 | Module | Pages |
 |---|---|
+| **LLM foundations** | Transformers & attention · Tokenization · Decoding & sampling · LLM APIs & model selection · Prompt engineering |
+| **Retrieval & advanced RAG** | Chunking & ingestion · Embeddings & vector databases · Reranking · Query transformation & HyDE · Corrective & self-RAG |
 | **Evaluation & judging** | LLM as a judge · Drift detection · Regression gates · Bias & explainability |
-| **Retrieval & advanced RAG** | Query transformation & HyDE · Corrective & self-RAG |
 | **Inference optimization** | Quantization · Distillation & pruning |
 | **Orchestration frameworks** | LangChain, LlamaIndex, DSPy |
-| **LLM foundations** | LLM APIs & model selection · Prompt engineering & structured output |
+| **Agents & safety** | Agents & tool use · Guardrails & security |
+| **Training & adaptation** | Fine-tuning & adaptation |
 | **Deployment & operations** | Serving & operations |
 | **Market & business** | Unit economics, build vs buy, where the moat is not |
-
-Subjects already covered well in the companion study notes -- transformers and
-the KV cache, RAG end to end, chunking, embeddings and vector indexes,
-reranking, agents and ReAct, LangGraph, MCP, Text2SQL, guardrails -- are
-deliberately not repeated here.
-
----
+| **Reference** | Glossary — every term, one line each |
 
 ## A note on honesty
 

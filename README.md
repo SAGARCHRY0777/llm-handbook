@@ -97,18 +97,18 @@ the published site would quietly drift from the source.
 
 ## Status
 
-All seven modules are written. Nothing is padded to look finished.
+All modules written. Nothing is padded to look finished.
 
 | Module | Pages |
 |---|---|
-| Evaluation & judging | LLM as a judge · Drift detection · Regression gates · Bias & explainability |
-| Retrieval & advanced RAG | Query transformation & HyDE · Corrective & self-RAG |
-| Inference optimization | Quantization · Distillation & pruning |
-| Orchestration frameworks | LangChain, LlamaIndex, DSPy |
-| LLM foundations | LLM APIs & model selection · Prompt engineering & structured output |
-| Deployment & operations | Serving & operations |
-| Market & business | Unit economics, build vs buy, where the moat is not |
+| **LLM foundations** | Transformers & attention · Tokenization · Decoding & sampling · LLM APIs & model selection · Prompt engineering |
+| **Retrieval & advanced RAG** | Chunking & ingestion · Embeddings & vector databases · Reranking · Query transformation & HyDE · Corrective & self-RAG |
+| **Evaluation & judging** | LLM as a judge · Drift detection · Regression gates · Bias & explainability |
+| **Inference optimization** | Quantization · Distillation & pruning |
+| **Orchestration frameworks** | LangChain, LlamaIndex, DSPy |
+| **Agents & safety** | Agents & tool use · Guardrails & security |
+| **Training & adaptation** | Fine-tuning & adaptation |
+| **Deployment & operations** | Serving & operations |
+| **Market & business** | Unit economics, build vs buy, where the moat is not |
+| **Reference** | Glossary — every term, one line each |
 
-Subjects already covered well in the companion study notes — transformers and
-the KV cache, RAG end to end, chunking, embeddings, reranking, agents, LangGraph,
-MCP, Text2SQL, guardrails — are deliberately not repeated.
