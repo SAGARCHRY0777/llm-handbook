@@ -1,0 +1,33 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Site builds and docs/ is current
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      # docs/ is committed so GitHub Pages can serve it straight from the
+      # branch with no Pages-source change. That only stays true if it is
+      # rebuilt whenever content changes, so fail the build when it drifts.
+      - name: Fail if docs/ is stale
+        run: |
+          if ! git diff --quiet -- docs; then
+            echo "docs/ is out of date. Run 'npm run build' and commit the result."
+            git --no-pager diff --stat -- docs
+            exit 1
+          fi

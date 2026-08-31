@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Start here · LLM Handbook</title>
+<meta name="description" content="What this handbook is, who each page is written for, and the order to read it in.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html" class="active">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="the-llm-handbook"><a class="anchor" href="#the-llm-handbook">#</a>The LLM Handbook</h1><p>A working engineer&#39;s handbook for building, testing, operating and <em>arguing about</em>
+LLM systems. Every topic is written at three depths, and every topic is examined
+from every seat that has to live with the decision — not just the coder&#39;s.</p>
+<blockquote>
+<p><strong>This handbook does not repeat what you already have.</strong> Where a subject is
+already covered well in the study folder (<code>02_AI_CORE/03_genai_rag_agents.md</code>
+covers transformers, RAG end-to-end, chunking, embeddings, reranking, agents,
+LangGraph, MCP, Text2SQL and guardrails), this handbook links there instead of
+writing it twice. What follows is the material that was <em>missing</em>.</p>
+</blockquote>
+<hr>
+<h2 id="how-each-page-is-built"><a class="anchor" href="#how-each-page-is-built">#</a>How each page is built</h2><p>Every topic page follows the same eight-part shape, so you always know where to
+look for the thing you need:</p>
+<div class="table-scroll"><table><thead><tr><th>Part</th><th>What it gives you</th></tr></thead><tbody><tr><td><strong>1 · Diagram</strong></td><td>The mental model as a picture, before any prose</td></tr><tr><td><strong>2 · Design</strong></td><td>The components and why each one is load-bearing</td></tr><tr><td><strong>3 · Flow</strong></td><td>The sequence, in the order it actually happens</td></tr><tr><td><strong>4 · UML</strong></td><td>Structure: classes, states, or a sequence diagram</td></tr><tr><td><strong>5 · Example</strong></td><td>Code you can run, not pseudocode</td></tr><tr><td><strong>6 · Depth</strong></td><td>The senior layer — failure modes, scale, trade-offs</td></tr><tr><td><strong>7 · From each seat</strong></td><td>The same topic seen by seven different roles</td></tr><tr><td><strong>8 · Interview questions</strong></td><td>What gets asked, and the answer sketch</td></tr></tbody></table></div><p>Plus a <strong>stop condition</strong>: the sentence that tells you that you are done, so a
+topic has an end rather than dissolving into endless reading.</p>
+<h3 id="the-three-depths"><a class="anchor" href="#the-three-depths">#</a>The three depths</h3><p>Every topic is layered, and the layers are labelled inline:</p>
+<ul>
+<li><strong>Basic</strong> — the definition and the one-sentence why. Enough to follow a
+conversation without nodding along blankly.</li>
+<li><strong>Intermediate</strong> — how to build it, what the knobs are, what breaks first.
+Enough to ship it.</li>
+<li><strong>Advanced</strong> — why the obvious approach is wrong at scale, what the research
+actually says, and where the trade-off genuinely bites.</li>
+</ul>
+<h3 id="the-seven-seats"><a class="anchor" href="#the-seven-seats">#</a>The seven seats</h3><p>Section 7 of every page. The same technology looks completely different
+depending on what you are accountable for, and being able to switch seats
+mid-conversation is most of what &quot;senior&quot; means in an interview.</p>
+<div class="table-scroll"><table><thead><tr><th>Seat</th><th>The question they are asking</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Does this help me, and can I tell when it is wrong?</td></tr><tr><td><strong>Coder</strong></td><td>What do I type, and what will bite me at 2am?</td></tr><tr><td><strong>Tester</strong></td><td>How do I prove this works when the output is non-deterministic?</td></tr><tr><td><strong>System designer</strong></td><td>What are the components, the failure modes, the budgets?</td></tr><tr><td><strong>Architect</strong></td><td>What does this commit us to for the next three years?</td></tr><tr><td><strong>CEO</strong></td><td>What does it cost, what does it earn, and what is the risk?</td></tr><tr><td><strong>Market</strong></td><td>Who else does this, what is commoditised, where is the moat?</td></tr></tbody></table></div><hr>
+<h2 id="reading-order"><a class="anchor" href="#reading-order">#</a>Reading order</h2><pre class="mermaid">graph TD
+  A[Start here] --&gt; B[LLM foundations]
+  B --&gt; C[Retrieval and advanced RAG]
+  C --&gt; D[Evaluation and judging]
+  D --&gt; E[Inference optimization]
+  E --&gt; F[Orchestration frameworks]
+  F --&gt; G[Deployment and operations]
+  G --&gt; H[Market and business]
+  D -.-&gt;|the gate everything else feeds| C</pre><p><strong>Evaluation is deliberately early.</strong> Every other decision in this handbook —
+which chunker, which reranker, whether the quantised model is good enough,
+whether the new prompt shipped an improvement — is unanswerable without it. It
+is also the single most common gap in an LLM engineer&#39;s interview answers.</p>
+<hr>
+<h2 id="status"><a class="anchor" href="#status">#</a>Status</h2><p>This handbook is written gap-first rather than front-to-back, because the
+material it exists to replace is the material that is missing. Pages marked
+<strong>draft</strong> in the sidebar are outlined but not yet written; nothing is padded
+with filler to look finished.</p>
+<div class="table-scroll"><table><thead><tr><th>Module</th><th>Covers</th><th>State</th></tr></thead><tbody><tr><td>Evaluation &amp; judging</td><td>LLM-as-a-judge, regression gates, drift, bias, explainability</td><td>In progress</td></tr><tr><td>Retrieval &amp; advanced RAG</td><td>HyDE, query transformation, corrective RAG, retrieval finetuning</td><td>Planned</td></tr><tr><td>Inference optimization</td><td>Quantization, distillation, pruning, serving maths</td><td>Planned</td></tr><tr><td>Orchestration frameworks</td><td>LangChain primitives, LlamaIndex, DSPy</td><td>Planned</td></tr><tr><td>LLM foundations</td><td>LLM APIs, open-source model selection, licensing, prompt engineering</td><td>Planned</td></tr><tr><td>Deployment &amp; operations</td><td>Serving, monitoring, cost control</td><td>Planned</td></tr><tr><td>Market &amp; business</td><td>Build vs buy, unit economics, vendor landscape</td><td>Planned</td></tr></tbody></table></div><hr>
+<h2 id="a-note-on-honesty"><a class="anchor" href="#a-note-on-honesty">#</a>A note on honesty</h2><p>Two things this handbook will keep doing, because they are what separates a
+useful technical document from a confident one:</p>
+<p><strong>It names what it does not know.</strong> Where the research is contested, or a number
+depends on your workload, it says so rather than picking a convenient figure.</p>
+<p><strong>It shows the failure.</strong> Every technique here has a regime where it is the
+wrong choice, and that regime is stated as plainly as the benefits. A page that
+only tells you when something works has not taught you how to decide.</p>
+</article>
+    <div class="pager-row"><a class="pager next" href="llm-as-a-judge.html"><span>next</span>LLM as a judge</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#how-each-page-is-built">How each page is built</a></li><li class="d3"><a href="#the-three-depths">The three depths</a></li><li class="d3"><a href="#the-seven-seats">The seven seats</a></li><li class="d2"><a href="#reading-order">Reading order</a></li><li class="d2"><a href="#status">Status</a></li><li class="d2"><a href="#a-note-on-honesty">A note on honesty</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

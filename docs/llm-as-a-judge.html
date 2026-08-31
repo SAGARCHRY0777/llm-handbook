@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM as a judge · LLM Handbook</title>
+<meta name="description" content="Using a model to score model output, and the validation step that decides whether the score means anything.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html" class="active">LLM as a judge</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="llm-as-a-judge"><a class="anchor" href="#llm-as-a-judge">#</a>LLM as a judge</h1><blockquote>
+<p><strong>The one sentence:</strong> an LLM judge is a measuring instrument you built
+yourself, and an instrument nobody calibrated is not a measurement — it is a
+number with a decimal point.</p>
+</blockquote>
+<p>Most teams get the first half right and skip the second. They write a scoring
+prompt, run it over 200 outputs, get 0.83, and ship. The question that separates
+an engineer from someone quoting a dashboard is: <strong>how do you know 0.83 is
+true?</strong></p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   WHAT YOU ARE ACTUALLY BUILDING
+
+   candidate output ──┐
+                      ├──&gt; [ JUDGE MODEL + RUBRIC ] ──&gt; score
+   question + context ┘                                   │
+                                                          │
+                          ┌───────────────────────────────┘
+                          │
+                          ▼
+              ┌───────────────────────────┐
+              │  IS THE JUDGE ANY GOOD?   │   &lt;-- the step everyone skips
+              └───────────────────────────┘
+                          │
+      human labels ───────┤
+                          ▼
+           agreement (Cohen&#39;s kappa / % agreement)
+                          │
+            ┌─────────────┴─────────────┐
+            │                           │
+      kappa &gt;= 0.6                 kappa &lt; 0.4
+      judge is usable          the judge is noise;
+      as a proxy               fix the rubric, not the model</code></pre><p>The left half is a two-hour build. The right half is what makes it evidence.</p>
+<hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic.</strong> A judge is three things: a <strong>model</strong>, a <strong>rubric</strong>, and an <strong>output
+contract</strong>. The rubric is the part that carries the quality; the model is
+mostly interchangeable above a certain capability floor.</p>
+<p><strong>Intermediate.</strong> There are three judge shapes, and picking the wrong one is the
+most common design error:</p>
+<div class="table-scroll"><table><thead><tr><th>Shape</th><th>Prompt</th><th>Returns</th><th>Use when</th></tr></thead><tbody><tr><td><strong>Pointwise</strong></td><td>one output + rubric</td><td>a score, 1–5</td><td>You need an absolute number to gate on</td></tr><tr><td><strong>Pairwise</strong></td><td>two outputs, A vs B</td><td>which is better</td><td>You are comparing two systems</td></tr><tr><td><strong>Reference-based</strong></td><td>output + a gold answer</td><td>matches / does not</td><td>You have gold answers</td></tr></tbody></table></div><p><strong>Pairwise is far more reliable than pointwise</strong>, and this is the single most
+useful practical fact on this page. Models are poor at absolute calibration —
+ask for 1–5 and you get 4s for everything — but good at relative comparison.
+If your real question is &quot;is the new prompt better than the old one&quot;, ask that
+question directly rather than scoring both and subtracting.</p>
+<p><strong>Advanced.</strong> The rubric must define the <em>failure</em>, not the <em>virtue</em>. &quot;Rate the
+helpfulness 1–5&quot; produces noise. &quot;Score 0 if the answer contains any claim not
+supported by the provided context; otherwise 1&quot; produces a signal, because it
+names a specific, checkable event. Every vague criterion you add costs you
+agreement with humans.</p>
+<div class="table-scroll"><table><thead><tr><th>Rubric</th><th>Kappa you can expect</th></tr></thead><tbody><tr><td>&quot;Rate the quality 1–10&quot;</td><td>~0.1–0.3. Effectively noise</td></tr><tr><td>&quot;Rate helpfulness 1–5 with anchors per level&quot;</td><td>~0.4–0.6</td></tr><tr><td>&quot;Is every claim supported by the context? yes/no&quot;</td><td>~0.7–0.85</td></tr></tbody></table></div><p>Binary and near-binary rubrics agree with humans far better than fine-grained
+scales, for the same reason a 5-point Likert scale collapses to &quot;3 or 4&quot; in
+human raters too.</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><p>The order matters, and the mistake is doing steps 1 and 6 while skipping 2–5.</p>
+<ol>
+<li><strong>Write the rubric</strong> as a decidable question, not an adjective.</li>
+<li><strong>Label 50–100 items by hand.</strong> This is the calibration set. It is tedious
+and it is the whole point.</li>
+<li><strong>Run the judge</strong> over those same items.</li>
+<li><strong>Measure agreement</strong> with your labels — Cohen&#39;s kappa, not raw percentage
+(raw percentage flatters any imbalanced set).</li>
+<li><strong>Iterate the rubric</strong> until kappa clears your bar. Change the <em>prompt</em>, not
+the labels — moving the labels to match the judge is circular and it happens
+more than anyone admits.</li>
+<li><strong>Only now</strong> run it at scale, and re-check agreement whenever the judge model
+version changes.</li>
+</ol>
+<pre class="mermaid">graph TD
+  A[Write rubric as a decidable question] --&gt; B[Human-label 50-100 items]
+  B --&gt; C[Run judge on the same items]
+  C --&gt; D{Cohen&#39;s kappa}
+  D --&gt;|below 0.4| E[Rewrite the rubric]
+  E --&gt; C
+  D --&gt;|0.4 to 0.6| F[Usable with caution: report the kappa]
+  D --&gt;|above 0.6| G[Deploy as a proxy metric]
+  G --&gt; H[Vendor bumps the model version]
+  H --&gt; C</pre><p>That loop from <strong>H back to C</strong> is the one people forget. A judge is pinned to a
+model <em>version</em>; when the vendor silently upgrades it, your historical scores
+stop being comparable and your trend line lies.</p>
+<hr>
+<h2 id="4-uml-where-the-judge-sits"><a class="anchor" href="#4-uml-where-the-judge-sits">#</a>4 · UML — where the judge sits</h2><pre class="mermaid">sequenceDiagram
+    participant CI as CI pipeline
+    participant R as Eval runner
+    participant S as System under test
+    participant J as Judge model
+    participant B as Baseline file
+
+    CI-&gt;&gt;R: run golden set
+    loop each item
+        R-&gt;&gt;S: question + context
+        S--&gt;&gt;R: candidate answer
+        R-&gt;&gt;J: rubric + context + candidate
+        J--&gt;&gt;R: verdict + reason
+    end
+    R-&gt;&gt;R: aggregate, attach confidence interval
+    R-&gt;&gt;B: compare against last accepted scores
+    alt below floor or regressed
+        R--&gt;&gt;CI: exit 1, list flipped items
+    else within tolerance
+        R--&gt;&gt;CI: exit 0
+    end</pre><p><strong>Note the <code>reason</code> in the judge&#39;s response.</strong> Always ask the judge to state
+its reason <em>before</em> its verdict. Two reasons: it measurably improves accuracy
+(the model conditions its answer on its own reasoning), and it makes
+disagreements debuggable — you can read why it was wrong instead of guessing.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><p>A judge with the three things that make it usable: a decidable rubric, a
+structured output, and a caching key that makes re-runs free.</p>
+<pre class="code"><code class="language-python">import hashlib, json
+
+JUDGE_MODEL = &quot;claude-sonnet-4-5-20250929&quot;   # pin the VERSION, not the alias
+
+RUBRIC = &quot;&quot;&quot;You are scoring whether an answer is grounded in its context.
+
+Return JSON only: {&quot;reason&quot;: &quot;&lt;one sentence&gt;&quot;, &quot;grounded&quot;: true|false}
+
+Rules:
+- grounded = false if ANY factual claim in the answer is absent from the context.
+- Fluency, tone and completeness are irrelevant. Judge grounding only.
+- If the answer says it cannot answer from the context, grounded = true.
+
+Give the reason BEFORE deciding.&quot;&quot;&quot;
+
+
+def cache_key(context: str, answer: str) -&gt; str:
+    &quot;&quot;&quot;Identical inputs must never be paid for twice.
+
+    Keyed on the model version and rubric as well as the data: changing either
+    is a different measurement and must not silently reuse old verdicts.
+    &quot;&quot;&quot;
+    blob = json.dumps([JUDGE_MODEL, RUBRIC, context, answer], sort_keys=True)
+    return hashlib.sha256(blob.encode()).hexdigest()
+
+
+def judge(client, context: str, answer: str, cache: dict) -&gt; dict:
+    key = cache_key(context, answer)
+    if key in cache:
+        return cache[key]
+
+    response = client.messages.create(
+        model=JUDGE_MODEL,
+        max_tokens=200,
+        temperature=0,          # a judge that varies run to run is a broken ruler
+        system=RUBRIC,
+        messages=[{
+            &quot;role&quot;: &quot;user&quot;,
+            &quot;content&quot;: f&quot;&lt;context&gt;{context}&lt;/context&gt;\n&lt;answer&gt;{answer}&lt;/answer&gt;&quot;,
+        }],
+    )
+    verdict = json.loads(response.content[0].text)
+    cache[key] = verdict
+    return verdict</code></pre><p>And the part that makes it a measurement rather than a number:</p>
+<pre class="code"><code class="language-python">def cohens_kappa(human: list[bool], model: list[bool]) -&gt; float:
+    &quot;&quot;&quot;Agreement corrected for the agreement you would get by chance.
+
+    Raw agreement is misleading on imbalanced sets: if 90% of items are
+    grounded, a judge that always says &quot;grounded&quot; scores 90% and has learned
+    nothing. Kappa scores that judge at 0.0, which is the honest answer.
+    &quot;&quot;&quot;
+    n = len(human)
+    observed = sum(h == m for h, m in zip(human, model)) / n
+
+    p_true = (sum(human) / n) * (sum(model) / n)
+    p_false = (1 - sum(human) / n) * (1 - sum(model) / n)
+    expected = p_true + p_false
+
+    return (observed - expected) / (1 - expected) if expected &lt; 1 else 1.0</code></pre><p><strong>Read the kappa scale honestly.</strong> Below 0.4 the judge is not measuring your
+construct. 0.4–0.6 is usable if you report it alongside every number it
+produces. Above 0.6 you can gate on it. Above 0.8 is rare and usually means the
+task is nearly mechanical — in which case ask whether you needed an LLM at all.</p>
+<hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Position bias is real and large.</strong> In pairwise judging, models prefer whichever
+answer came first — sometimes by 10–20 points. The fix is cheap and mandatory:
+run every comparison twice with the order swapped, and count it as a tie unless
+both orders agree. If you present a pairwise number without saying you did this,
+an informed interviewer will assume you did not.</p>
+<p><strong>Self-preference bias.</strong> A model judging its own family&#39;s output scores it
+higher. If you generate with a model and judge with the same one, the number
+flatters you. Use a different family for the judge where you can, and say so
+when you cannot.</p>
+<p><strong>Verbosity bias.</strong> Judges reward longer answers roughly independent of content.
+If your change made answers longer, some of your gain is length, not quality.
+Control for it: bucket by response length, or state length alongside the score.</p>
+<div class="table-scroll"><table><thead><tr><th>Bias</th><th>Direction</th><th>Cheap mitigation</th></tr></thead><tbody><tr><td>Position</td><td>Prefers first</td><td>Swap order, require agreement</td></tr><tr><td>Self-preference</td><td>Prefers own family</td><td>Different judge family</td></tr><tr><td>Verbosity</td><td>Prefers longer</td><td>Report length with score</td></tr><tr><td>Formatting</td><td>Prefers markdown, lists</td><td>Normalise before judging</td></tr></tbody></table></div><p><strong>Cost forces tiering.</strong> A judge over 500 items on every pull request is a real
+monthly bill and the team will disable it within a month. The tiering that
+survives:</p>
+<div class="table-scroll"><table><thead><tr><th>Lane</th><th>What runs</th><th>When</th></tr></thead><tbody><tr><td>PR</td><td>deterministic scorers only — exact match, retrieval hit rate, schema checks</td><td>every push</td></tr><tr><td>Nightly</td><td>judge over the full set</td><td>scheduled</td></tr><tr><td>Release</td><td>judge + human review of a stratified sample</td><td>before shipping</td></tr></tbody></table></div><p><strong>A judge is a proxy, and proxies drift from the thing they proxy.</strong> Track the
+correlation between your judge score and whatever real outcome you care about
+(complaints, escalations, thumbs-down). If they have never moved together, the
+judge is measuring something — just not the thing you are being paid to improve.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What this topic looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Never sees the judge, but feels it: fewer confidently wrong answers reach them. If the product exposes a confidence signal, the judge is often what backs it.</td></tr><tr><td><strong>Coder</strong></td><td>Pin the model version, set temperature 0, cache on <code>hash(prompt + model + version + input)</code>, ask for reason-before-verdict, parse JSON defensively — judges return prose when they panic.</td></tr><tr><td><strong>Tester</strong></td><td>The judge is the system under test as much as the product is. Unit-test the parsing, hold out a labelled set the rubric was not tuned on, and keep a regression suite for the judge itself.</td></tr><tr><td><strong>System designer</strong></td><td>It is a network call in a hot loop: bound concurrency, cache aggressively, set a timeout and a fallback. Decide what happens when the judge is down — usually &quot;skip the gate and mark the run incomplete&quot;, never &quot;pass&quot;.</td></tr><tr><td><strong>Architect</strong></td><td>Committing to a judge is committing to a vendor&#39;s model versioning policy. Budget for re-baselining when they deprecate. Keep the rubric and the labelled set in your repo — those are the durable assets, not the prompt.</td></tr><tr><td><strong>CEO</strong></td><td>This is what replaces &quot;the team says it feels better&quot; with a number in a pull request. It costs model spend and a day of labelling per rubric. Frame it as insurance against shipping a regression to customers, and note the fixed cost is the labelling, not the inference.</td></tr><tr><td><strong>Market</strong></td><td>Commoditised at the tooling layer — Ragas, DeepEval, Braintrust, LangSmith, Arize all do this. Nobody&#39;s moat is the judge harness. The moat is the labelled data and the rubric, because those encode your domain&#39;s definition of correct.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;How do you know your LLM judge is any good?&quot;</td><td>Whether you closed the loop</td><td>Human-label 50–100 items, measure Cohen&#39;s kappa against the judge, iterate the rubric until kappa clears the bar. Report the kappa alongside every number the judge produces. Below 0.4 it is noise.</td></tr><tr><td>&quot;Pointwise or pairwise?&quot;</td><td>Practical depth</td><td>Pairwise where possible — models are bad at absolute calibration, good at comparison. Pointwise only when you need an absolute gate. And swap the order to control position bias.</td></tr><tr><td>&quot;Your judge score went up 4 points. Ship?&quot;</td><td>Statistical literacy</td><td>Not on its own. Check n and the interval, check it is not verbosity, compare paired per-item rather than aggregates, and look at the items that flipped.</td></tr><tr><td>&quot;The vendor updated the judge model. What now?&quot;</td><td>Operational thinking</td><td>Historical scores are no longer comparable. Re-run the agreement check, re-baseline deliberately as a reviewed diff, and annotate the trend line at that date. This is why the version is pinned, not the alias.</td></tr><tr><td>&quot;When would you <em>not</em> use an LLM judge?&quot;</td><td>Judgement</td><td>When a deterministic check exists — schema validation, exact numeric match, retrieval hit rate. A cheap exact assertion beats a judge every time. Also when you cannot afford to label, because then you cannot validate it.</td></tr><tr><td>&quot;Your judge and your users disagree.&quot;</td><td>Seniority</td><td>The users are right. Judge measures the construct in the rubric; if that construct is not what users value, the rubric is wrong. Go read 30 bad sessions, find what the rubric is missing, and add it as a criterion.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done with this topic when you can, without notes:</p>
+<ol>
+<li>explain why an unvalidated judge is not a measurement,</li>
+<li>state the kappa bands and what you do in each,</li>
+<li>name three judge biases and the cheap mitigation for each,</li>
+<li>say why pairwise beats pointwise, and</li>
+<li>describe the tiering that keeps a judge affordable in CI.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Judge agreement and biases</td><td><em>Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena</em> (Zheng et al., 2023) — the paper that established position, verbosity and self-enhancement bias</td></tr><tr><td>Rubric design</td><td>Anthropic and OpenAI evaluation cookbooks; both argue for binary, decidable criteria</td></tr><tr><td>Agreement statistics</td><td>Cohen (1960) for kappa; Krippendorff&#39;s alpha when you have more than two raters or missing labels</td></tr><tr><td>Tooling</td><td>Ragas, DeepEval, Braintrust, LangSmith — read one implementation before writing your own</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="index.html"><span>previous</span>Start here</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-where-the-judge-sits">4 · UML — where the judge sits</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

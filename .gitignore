@@ -1,0 +1,4 @@
+node_modules/
+_shot*
+*.local
+.DS_Store

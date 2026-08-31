@@ -1,0 +1,19 @@
+{
+  "name": "llm-handbook",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "A working engineer's handbook for LLM systems: every topic from the applications-engineer roadmap, at basic, intermediate and advanced depth, seen from every seat that has to live with the decision.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "dev": "node scripts/build.mjs --watch",
+    "serve": "node scripts/serve.mjs",
+    "check": "node scripts/check.mjs"
+  },
+  "devDependencies": {
+    "marked": "^14.1.3"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
