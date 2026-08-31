@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text2SQL &amp; structured data · LLM Handbook</title>
+<meta name="description" content="Natural language to queries — where the difficulty is schema comprehension, not SQL generation.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li><li><a href="reasoning-models.html">Reasoning models & test-time compute</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="text2sql.html" class="active">Text2SQL & structured data</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="text2sql-structured-data"><a class="anchor" href="#text2sql-structured-data">#</a>Text2SQL & structured data</h1><blockquote>
+<p><strong>The one sentence:</strong> models write syntactically perfect SQL against schemas
+they have misunderstood, and the failure is silent because the query runs and
+returns a number.</p>
+</blockquote>
+<p>That is what makes this harder than it looks. A RAG system that retrieves badly
+gives an obviously vague answer. A Text2SQL system that misreads your schema
+returns a confident, precise, wrong figure — and someone puts it in a board deck.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   WHERE IT ACTUALLY BREAKS
+
+   &quot;how many active customers did we have last quarter?&quot;
+          │
+          ▼
+   SELECT COUNT(*) FROM customers
+   WHERE status = &#39;active&#39;
+     AND created_at &gt;= &#39;2026-04-01&#39;
+          │
+          ▼
+   runs fine. Returns 48,213. Looks authoritative.
+
+   BUT:
+     - &quot;active&quot; in this schema means status_id = 3, not status = &#39;active&#39;
+     - created_at is SIGNUP date, not activity
+     - the business defines a quarter as a fiscal quarter starting in February
+     - deleted rows are soft-deleted and not filtered
+
+   Four semantic errors. Zero syntax errors. Nobody notices.
+
+
+   THE DIFFICULTY IS NOT SQL
+
+   syntax          the model is excellent at this
+   schema          which table, which join, which column      &lt;- hard
+   semantics       what &quot;active&quot; MEANS in this business       &lt;- harder
+   correctness     is the returned number right               &lt;- unverifiable
+                                                                 without ground truth</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — the pipeline that works.</strong></p>
+<div class="table-scroll"><table><thead><tr><th>Stage</th><th>Purpose</th></tr></thead><tbody><tr><td><strong>Schema retrieval</strong></td><td>Select only the relevant tables — full schemas do not fit and dilute attention</td></tr><tr><td><strong>Semantic layer</strong></td><td>Business definitions: what &quot;active&quot;, &quot;revenue&quot;, &quot;churn&quot; mean here</td></tr><tr><td><strong>Generation</strong></td><td>Model writes SQL against that curated context</td></tr><tr><td><strong>Static validation</strong></td><td>Parse it; check tables, columns and permissions before executing</td></tr><tr><td><strong>Safe execution</strong></td><td>Read-only role, <code>LIMIT</code>, statement timeout</td></tr><tr><td><strong>Verification</strong></td><td>Sanity checks, and show the SQL to the user</td></tr></tbody></table></div><p><strong>Schema retrieval is the part that determines success.</strong> A real warehouse has
+hundreds of tables and thousands of columns; you cannot put it all in context,
+and doing so would hurt anyway. Retrieve the relevant subset — by embedding
+table and column descriptions and searching them with the question, plus
+join-graph expansion to pull in bridging tables.</p>
+<p><strong>Advanced — the semantic layer is the difference between a demo and a product.</strong>
+The model cannot infer that <code>status_id = 3</code> means active, or that the company&#39;s
+fiscal year starts in February. That knowledge lives in people&#39;s heads, and
+Text2SQL projects fail when nobody writes it down.</p>
+<pre class="code"><code>   what a semantic layer holds
+
+   metric definitions      &quot;active customer&quot; = status_id 3 AND last_seen &lt; 90 days
+   canonical joins         orders -&gt; customers is ALWAYS via customer_id, never email
+   grain                   one row per order LINE, not per order -- watch your SUMs
+   filters that always apply   deleted_at IS NULL
+   fiscal calendar         Q1 starts 1 February
+   known traps             the legacy `amount` column is in cents</code></pre><p>Every one of those is a wrong answer waiting to happen, and none are discoverable
+from the schema alone.</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Question] --&gt; B[Retrieve relevant tables&lt;br/&gt;+ join graph expansion]
+  B --&gt; C[Attach semantic definitions&lt;br/&gt;for terms in the question]
+  C --&gt; D[Generate SQL]
+  D --&gt; E[Parse: is it valid SQL?]
+  E --&gt;|no| F[Repair with the parse error]
+  F --&gt; D
+  E --&gt;|yes| G{Only permitted tables&lt;br/&gt;and columns?}
+  G --&gt;|no| H[Reject. Do not execute]
+  G --&gt;|yes| I{Read-only?}
+  I --&gt;|no| H
+  I --&gt;|yes| J[EXPLAIN: estimated cost acceptable?]
+  J --&gt;|no| K[Reject or add LIMIT]
+  J --&gt;|yes| L[Execute: read-only role,&lt;br/&gt;LIMIT, timeout]
+  L --&gt; M[Sanity checks:&lt;br/&gt;empty? absurd magnitude?]
+  M --&gt; N[Return result WITH the SQL]</pre><p><strong><code>E</code> through <code>J</code> is a static analysis pipeline, not an LLM problem</strong>, and it is
+where the safety comes from. Parsing the SQL and checking it against a permitted
+schema is deterministic, fast, and catches the dangerous cases before anything
+touches the database.</p>
+<p><strong><code>N</code> is the most important product decision on this page.</strong> <strong>Always show the
+SQL.</strong> A user who can read it will catch semantic errors you cannot detect
+automatically, and one who cannot at least knows a query was run rather than an
+answer conjured.</p>
+<hr>
+<h2 id="4-uml-defence-in-depth"><a class="anchor" href="#4-uml-defence-in-depth">#</a>4 · UML — defence in depth</h2><pre class="mermaid">sequenceDiagram
+    participant U as User
+    participant G as Generator
+    participant P as SQL parser
+    participant A as Authorisation
+    participant D as Database (read-only role)
+
+    U-&gt;&gt;G: question
+    G--&gt;&gt;P: candidate SQL
+    P-&gt;&gt;P: parse; extract tables, columns, operations
+    alt not parseable
+        P--&gt;&gt;G: syntax error, regenerate
+    end
+    P-&gt;&gt;A: tables, columns, operation type
+    A-&gt;&gt;A: check against THIS user&#39;s grants
+    alt not permitted
+        A--&gt;&gt;U: refuse, explain what was not allowed
+    end
+    A-&gt;&gt;D: EXPLAIN first
+    D--&gt;&gt;A: estimated rows and cost
+    alt too expensive
+        A--&gt;&gt;U: refuse or narrow
+    end
+    A-&gt;&gt;D: execute with LIMIT + timeout
+    D--&gt;&gt;U: rows + THE SQL THAT PRODUCED THEM</pre><p><strong>The database role is the real control.</strong> A read-only role with row-level
+security cannot be talked into a <code>DELETE</code> by any prompt. Everything above it is
+defence in depth.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">import sqlglot
+from sqlglot import exp
+
+
+def validate_sql(sql: str, allowed_tables: set[str], allowed_columns: dict) -&gt; tuple[bool, str]:
+    &quot;&quot;&quot;Static checks before the query goes anywhere near the database.
+
+    Deterministic and fast. It catches the dangerous cases -- writes, unknown
+    tables, unpermitted columns -- without relying on the model having behaved,
+    which is the only kind of guarantee worth having here.
+    &quot;&quot;&quot;
+    try:
+        tree = sqlglot.parse_one(sql, read=&quot;postgres&quot;)
+    except Exception as exc:
+        return False, f&quot;unparseable: {exc}&quot;
+
+    # Anything that is not a SELECT is rejected outright. The read-only role
+    # would refuse it too -- this is the earlier, clearer error.
+    if not isinstance(tree, exp.Select):
+        return False, f&quot;only SELECT permitted, got {type(tree).__name__}&quot;
+
+    for table in tree.find_all(exp.Table):
+        if table.name not in allowed_tables:
+            return False, f&quot;table {table.name!r} not permitted&quot;
+
+    for column in tree.find_all(exp.Column):
+        if column.table and column.name not in allowed_columns.get(column.table, set()):
+            return False, f&quot;column {column.table}.{column.name} not permitted&quot;
+
+    return True, &quot;&quot;
+
+
+def sanity_check(rows, question: str) -&gt; list[str]:
+    &quot;&quot;&quot;Cheap checks that catch the obviously-wrong before a human trusts it.
+
+    None of these prove correctness. They catch the failures that are
+    embarrassing rather than subtle, which is most of what reaches users.
+    &quot;&quot;&quot;
+    warnings = []
+    if not rows:
+        warnings.append(&quot;query returned no rows -- check filters and date ranges&quot;)
+    if len(rows) == 1 and len(rows[0]) == 1:
+        value = list(rows[0].values())[0]
+        if isinstance(value, (int, float)) and value == 0:
+            warnings.append(&quot;result is exactly zero -- often a join or filter error&quot;)
+    return warnings</code></pre><p><strong>The semantic layer, as data rather than prose:</strong></p>
+<pre class="code"><code class="language-python">SEMANTICS = {
+    &quot;active customer&quot;: {
+        &quot;definition&quot;: &quot;status_id = 3 AND last_seen_at &gt; now() - interval &#39;90 days&#39;&quot;,
+        &quot;note&quot;: &quot;NOT status = &#39;active&#39; -- that column is legacy and unreliable&quot;,
+    },
+    &quot;revenue&quot;: {
+        &quot;definition&quot;: &quot;SUM(order_lines.amount_cents) / 100.0&quot;,
+        &quot;note&quot;: &quot;amount_cents is in CENTS. Grain is one row per LINE, not per order&quot;,
+    },
+    &quot;quarter&quot;: {
+        &quot;definition&quot;: &quot;fiscal quarters starting 1 February&quot;,
+        &quot;note&quot;: &quot;never calendar quarters&quot;,
+    },
+}
+
+
+def attach_semantics(question: str) -&gt; str:
+    &quot;&quot;&quot;Include only the definitions whose terms appear in the question.
+
+    Attaching everything wastes context and dilutes attention; attaching
+    nothing is how you get status = &#39;active&#39;.
+    &quot;&quot;&quot;
+    relevant = {k: v for k, v in SEMANTICS.items() if k in question.lower()}
+    if not relevant:
+        return &quot;&quot;
+    lines = [f&quot;- {k}: {v[&#39;definition&#39;]} ({v[&#39;note&#39;]})&quot; for k, v in relevant.items()]
+    return &quot;Business definitions that apply here:\n&quot; + &quot;\n&quot;.join(lines)</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Evaluation needs execution accuracy, not string matching.</strong> Two different
+queries can be equally correct, so comparing generated SQL to a reference string
+under-reports badly. The standard is <strong>execution accuracy</strong>: run both, compare
+result sets.</p>
+<div class="table-scroll"><table><thead><tr><th>Metric</th><th>What it tells you</th></tr></thead><tbody><tr><td><strong>Execution accuracy</strong></td><td>Same results as the reference query. The headline</td></tr><tr><td><strong>Valid SQL rate</strong></td><td>Parses and runs at all. A floor, not a target</td></tr><tr><td><strong>Schema-error rate</strong></td><td>Wrong table or column — the diagnostic that matters</td></tr><tr><td><strong>Refusal rate</strong></td><td>Declined rather than guessed. Should not be zero</td></tr></tbody></table></div><p><strong>A per-question difficulty split is worth building</strong>: single table, single join,
+multi-join, aggregation with grouping, window functions, nested subqueries.
+Aggregate accuracy hides the fact that everything above two joins is failing.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Whole schema in context</strong></td><td>Wrong tables chosen, high cost</td><td>Retrieve the relevant subset</td></tr><tr><td><strong>No semantic layer</strong></td><td>Syntactically perfect, semantically wrong</td><td>Write the definitions down</td></tr><tr><td><strong>Write access</strong></td><td>One prompt away from data loss</td><td>Read-only role. Non-negotiable</td></tr><tr><td><strong>No cost check</strong></td><td>A cross join takes the warehouse down</td><td><code>EXPLAIN</code> first; reject expensive plans</td></tr><tr><td><strong>SQL hidden from the user</strong></td><td>Silent wrong answers trusted</td><td>Always show the query</td></tr><tr><td><strong>String-match evaluation</strong></td><td>Under-reports real accuracy</td><td>Execution accuracy</td></tr><tr><td><strong>No refusal path</strong></td><td>Guesses on ambiguous questions</td><td>Ask a clarifying question instead</td></tr></tbody></table></div><p><strong>Ambiguity should produce a question, not a guess.</strong> &quot;How many customers last
+month?&quot; — by signup, by activity, by billing? A system that asks is more useful
+and far more trustworthy than one that silently picks one interpretation. This
+is one of the few places where a clarifying question is unambiguously better
+product design than an answer.</p>
+<p><strong>Where Text2SQL genuinely works well</strong>, so this does not read as blanket
+scepticism: a curated star schema with clear naming, a written semantic layer, a
+bounded set of question types, and users who can read the SQL. That describes
+most internal analytics use cases. It works badly on sprawling legacy OLTP
+schemas with cryptic column names and undocumented conventions — which also
+describes a lot of real databases.</p>
+<p><strong>The honest online metric</strong> is worth stealing for any similar product: log the
+SQL you generated and the SQL the user actually ran. <strong>The edit distance between
+them is a near-perfect implicit quality label</strong>, it costs one database column,
+and it needs no annotation effort at all.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What Text2SQL looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>They ask in English and get a number. Whether they can trust it depends entirely on whether they can see and read the query.</td></tr><tr><td><strong>Coder</strong></td><td>Parse and validate before executing. Read-only role. <code>EXPLAIN</code> before running. Show the SQL. Log generated-versus-executed for free quality labels.</td></tr><tr><td><strong>Tester</strong></td><td>Execution accuracy, not string match. Split the eval set by join count and aggregation complexity — the aggregate hides where it falls over.</td></tr><tr><td><strong>System designer</strong></td><td>A user-controlled query generator pointed at your warehouse. Timeouts, row limits, cost checks and a separate read-only replica are the design, not extras.</td></tr><tr><td><strong>Architect</strong></td><td>The semantic layer is the durable asset and the thing that must be maintained. Without an owner it rots, and the system degrades silently as the schema evolves.</td></tr><tr><td><strong>CEO</strong></td><td>Self-service analytics without a data-team queue. The risk is confident wrong numbers reaching decisions. Ask whether users see the SQL, and who owns the definitions.</td></tr><tr><td><strong>Market</strong></td><td>Every BI vendor now ships this. The differentiator is the semantic layer and schema quality — which is your data team&#39;s work, not the vendor&#39;s.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>⭐ &quot;What makes Text2SQL hard?&quot;</td><td>Whether you know where the difficulty is</td><td>Not SQL syntax — models are good at that. Schema selection at scale, and business semantics: what &quot;active&quot; or &quot;revenue&quot; mean here. Those produce syntactically perfect, semantically wrong queries that run and return a number.</td></tr><tr><td>&quot;How do you stop it dropping a table?&quot;</td><td>Safety instinct</td><td>A read-only database role. Then static validation before execution, permitted-table checks, and <code>EXPLAIN</code> for cost. The role is the control; the rest is defence in depth.</td></tr><tr><td>&quot;How do you evaluate it?&quot;</td><td>Method</td><td>Execution accuracy — run generated and reference queries, compare result sets. String matching under-reports because different queries can be equally correct. Split by join count and aggregation complexity.</td></tr><tr><td>⭐ &quot;How do you handle an ambiguous question?&quot;</td><td>Product judgement</td><td>Ask. &quot;Customers last month&quot; by signup, activity or billing are different questions. A clarifying question is more trustworthy than a silent interpretation, and this is one of the clearest cases where asking beats answering.</td></tr><tr><td>&quot;The schema has 400 tables.&quot;</td><td>Scale realism</td><td>Retrieve the relevant subset — embed table and column descriptions, search with the question, expand along the join graph. The full schema does not fit and dilutes attention even when it does.</td></tr><tr><td>&quot;What online metric would you use?&quot;</td><td>Depth</td><td>Edit distance between the SQL generated and the SQL the user actually ran. A near-perfect implicit label, one column to store, no annotation needed.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>explain why syntax is the easy part,</li>
+<li>describe what a semantic layer contains and why it cannot be inferred,</li>
+<li>give the validation pipeline between generation and execution,</li>
+<li>say why execution accuracy replaces string matching, and</li>
+<li>name the online metric that costs one database column.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Benchmarks</td><td>Spider and BIRD — BIRD is the more realistic, with dirty schemas and business semantics</td></tr><tr><td>Evaluation</td><td>The execution-accuracy methodology in the Spider papers</td></tr><tr><td>Practical</td><td><code>sqlglot</code> for parsing and dialect handling; the right tool for the validation stage</td></tr><tr><td>Semantic layers</td><td>dbt&#39;s metric definitions, and the semantic-layer literature from BI — this problem predates LLMs</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="reranking.html"><span>previous</span>Reranking & filtering</a><a class="pager next" href="query-transformation.html"><span>next</span>Query transformation & HyDE</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-defence-in-depth">4 · UML — defence in depth</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
