@@ -1,0 +1,286 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chunking &amp; ingestion · LLM Handbook</title>
+<meta name="description" content="Cutting documents into retrievable pieces, and why this unglamorous step decides more of your quality than the model does.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html" class="active">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="chunking-ingestion"><a class="anchor" href="#chunking-ingestion">#</a>Chunking & ingestion</h1><blockquote>
+<p><strong>The one sentence:</strong> retrieval can only ever return a chunk, so a chunk that
+does not contain the answer is a ceiling on quality that no model, reranker or
+prompt can lift.</p>
+</blockquote>
+<p>More RAG failures trace back to chunking than to any other stage, and it is the
+stage that gets the least attention because it happens once, offline, before
+anything interesting starts.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   THE FAILURE CHUNKING CAUSES, and why nothing downstream can fix it
+
+   source document
+   ┌──────────────────────────────────────────────┐
+   │ The maximum operating temperature is 810 °C.  │
+   │ Above this, the seal degrades within hours.   │
+   └──────────────────────────────────────────────┘
+                    │  chunk boundary falls HERE
+                    ▼
+     chunk A: &quot;The maximum operating temperature is 810 °C.&quot;
+     chunk B: &quot;Above this, the seal degrades within hours.&quot;
+
+   query: &quot;what happens above the max temperature?&quot;
+     -&gt; retrieves chunk B
+     -&gt; &quot;Above this&quot; ... above WHAT? The referent is in chunk A.
+     -&gt; the model answers anyway, plausibly, and wrongly
+
+
+   THE THREE THINGS A CHUNK MUST BE
+
+   1. SELF-CONTAINED   understandable without its neighbours
+   2. FOCUSED          about one thing, so its embedding means something
+   3. SIZED for the embedding model&#39;s real capacity, not its stated limit</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic — the strategies, in ascending order of effort.</strong></p>
+<div class="table-scroll"><table><thead><tr><th>Strategy</th><th>How</th><th>Good for</th><th>Fails on</th></tr></thead><tbody><tr><td><strong>Fixed-size</strong></td><td>Every N tokens with overlap</td><td>Anything; the baseline</td><td>Cuts mid-sentence, mid-table</td></tr><tr><td><strong>Sentence / paragraph</strong></td><td>Split on punctuation or blank lines</td><td>Prose</td><td>Wildly uneven sizes</td></tr><tr><td><strong>Structural</strong></td><td>Split on markdown headings, HTML sections</td><td>Documentation, wikis</td><td>Requires structure to exist</td></tr><tr><td><strong>Semantic</strong></td><td>Split where adjacent-sentence similarity drops</td><td>Unstructured prose</td><td>Costs embeddings up front</td></tr><tr><td><strong>Hierarchical</strong></td><td>Parent summaries over leaf chunks</td><td>Long documents needing both scales</td><td>Most complex to build</td></tr></tbody></table></div><p><strong>Overlap is the standard mitigation for boundary loss</strong> and it is not free: with
+chunk size C and overlap O, you store and embed roughly <code>C/(C−O)</code> times the
+original text. At 400 tokens with 100 overlap that is 33% more index, embedded
+and stored forever. Overlap buys boundary safety with permanent cost.</p>
+<p><strong>Intermediate — sizing, and the mistake almost everyone makes.</strong> Embedding
+models have a <em>stated</em> maximum sequence length and a much shorter <em>effective</em>
+one. Feed 512 tokens to a model whose useful capacity is around 256 and the
+extra content is averaged into mush — the vector stops representing anything in
+particular.</p>
+<pre class="code"><code>   typical starting points, to be validated on YOUR corpus
+
+   dense retrieval, general prose     256 - 512 tokens
+   code                              function or class boundaries, not token counts
+   tables                            never split a table from its header
+   conversation logs                 whole turns, never mid-turn
+   legal / regulatory                clause boundaries; the structure is the meaning</code></pre><p><strong>Advanced — the decoupling that fixes most of this.</strong> The chunk you <em>retrieve
+on</em> does not have to be the chunk you <em>give the model</em>. This is the single most
+useful idea on the page:</p>
+<div class="table-scroll"><table><thead><tr><th>Pattern</th><th>Retrieve on</th><th>Send to the model</th></tr></thead><tbody><tr><td><strong>Small-to-big</strong></td><td>Small precise chunk</td><td>Its surrounding parent section</td></tr><tr><td><strong>Sentence window</strong></td><td>One sentence</td><td>That sentence ± k neighbours</td></tr><tr><td><strong>Summary index</strong></td><td>An LLM-written summary</td><td>The full original chunk</td></tr><tr><td><strong>Metadata-enriched</strong></td><td>Chunk + prepended heading path</td><td>The chunk itself</td></tr></tbody></table></div><p>Small chunks embed precisely; large chunks give the model enough to answer.
+Decoupling gets both. The metadata-enriched variant is the cheapest real win
+available: prepend the document title and heading path to each chunk before
+embedding, so a chunk reading &quot;It must not exceed 810 °C&quot; becomes &quot;Turbine
+Manual &gt; Section 4 &gt; Thermal limits: It must not exceed 810 °C&quot; — and suddenly
+it is retrievable by a query mentioning turbines.</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Source documents] --&gt; B[Parse to text&lt;br/&gt;PDF, HTML, code, tables]
+  B --&gt; C{Structure available?}
+  C --&gt;|yes| D[Split on structure:&lt;br/&gt;headings, functions, clauses]
+  C --&gt;|no| E[Split on sentences,&lt;br/&gt;then group to target size]
+  D --&gt; F[Enrich: prepend title + heading path]
+  E --&gt; F
+  F --&gt; G[Attach metadata:&lt;br/&gt;source, date, section, permissions]
+  G --&gt; H[Embed]
+  H --&gt; I[Store vector + text + metadata]
+  I --&gt; J{Corpus changed?}
+  J --&gt;|document updated| K[Re-chunk and re-embed&lt;br/&gt;ONLY that document]
+  J --&gt;|embedding model changed| L[Re-embed EVERYTHING&lt;br/&gt;this is a migration]
+  K --&gt; I</pre><p><strong><code>B</code> is where most real projects lose their time.</strong> PDF extraction is genuinely
+hard: multi-column layouts interleave, tables become word soup, headers and
+footers pollute every chunk. Budget for it. A pipeline that chunks beautifully
+from badly-parsed text is producing beautiful nonsense.</p>
+<p><strong><code>L</code> is a migration, not a config change.</strong> Changing embedding models invalidates
+every vector you have. On a large corpus that is hours of compute and a
+dual-index cutover — plan it as a project.</p>
+<hr>
+<h2 id="4-uml-small-to-big-retrieval"><a class="anchor" href="#4-uml-small-to-big-retrieval">#</a>4 · UML — small-to-big retrieval</h2><pre class="mermaid">sequenceDiagram
+    participant Q as Query
+    participant I as Index (small chunks)
+    participant S as Document store
+    participant M as Model
+
+    Q-&gt;&gt;I: embed and search
+    I--&gt;&gt;Q: top-k small chunk ids
+    Note over I: small chunks embed PRECISELY --&lt;br/&gt;one idea per vector
+    Q-&gt;&gt;S: fetch parent section for each hit
+    S--&gt;&gt;Q: full surrounding context
+    Note over S: large context ANSWERS well --&lt;br/&gt;the referent is present
+    Q-&gt;&gt;M: parent sections as context
+    M--&gt;&gt;Q: grounded answer</pre><hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">import re
+
+
+def structural_chunks(markdown: str, source: str, target: int = 400, overlap: int = 60):
+    &quot;&quot;&quot;Split on headings first, then size within each section.
+
+    Structure before size, always. A heading boundary is a real semantic
+    boundary the author put there; a token count is an arbitrary one we impose.
+    Splitting on structure first means arbitrary cuts only ever happen INSIDE a
+    section that was already about one thing.
+    &quot;&quot;&quot;
+    sections, path, buffer = [], [], []
+
+    for line in markdown.splitlines():
+        heading = re.match(r&quot;^(#{1,6})\s+(.*)&quot;, line)
+        if heading:
+            if buffer:
+                sections.append((list(path), &quot;\n&quot;.join(buffer)))
+                buffer = []
+            level = len(heading.group(1))
+            path = path[: level - 1] + [heading.group(2).strip()]
+        else:
+            buffer.append(line)
+    if buffer:
+        sections.append((list(path), &quot;\n&quot;.join(buffer)))
+
+    chunks = []
+    for heading_path, body in sections:
+        for piece in _window(body, target, overlap):
+            # The heading path is prepended BEFORE embedding. A chunk saying
+            # &quot;It must not exceed 810 C&quot; is unretrievable on its own; the same
+            # chunk with &quot;Turbine Manual &gt; Thermal limits&quot; in front of it is not.
+            prefix = &quot; &gt; &quot;.join([source] + heading_path)
+            chunks.append({
+                &quot;text&quot;: piece,
+                &quot;embed_text&quot;: f&quot;{prefix}: {piece}&quot;,
+                &quot;source&quot;: source,
+                &quot;heading_path&quot;: heading_path,
+            })
+    return chunks
+
+
+def _window(text: str, target: int, overlap: int):
+    &quot;&quot;&quot;Group whole sentences up to a token target, overlapping by sentences.
+
+    Overlapping by SENTENCES rather than tokens means the repeated region is
+    always a complete thought, so an overlapped chunk never begins mid-clause.
+    &quot;&quot;&quot;
+    sentences = re.findall(r&quot;[^.!?]+[.!?]+|\S+{{content}}quot;, text)
+    out, current, size = [], [], 0
+    for sentence in sentences:
+        n = len(sentence.split())
+        if size + n &gt; target and current:
+            out.append(&quot; &quot;.join(current).strip())
+            back, kept = 0, []
+            for s in reversed(current):          # carry back ~overlap tokens
+                back += len(s.split())
+                kept.insert(0, s)
+                if back &gt;= overlap:
+                    break
+            current, size = kept, back
+        current.append(sentence)
+        size += n
+    if current:
+        out.append(&quot; &quot;.join(current).strip())
+    return [c for c in out if c]</code></pre><p><strong>Measure the ceiling before tuning anything downstream:</strong></p>
+<pre class="code"><code class="language-python">def retrieval_ceiling(chunks, qa_pairs) -&gt; float:
+    &quot;&quot;&quot;What fraction of answers exist in SOME chunk at all.
+
+    This is the hard upper bound on the whole pipeline. If it is 0.82, no
+    reranker, prompt or model can take end-to-end quality above 0.82 -- the
+    answer is not in the index. Run this before optimising retrieval; it is
+    ten minutes and it regularly redirects a month of work.
+    &quot;&quot;&quot;
+    found = 0
+    for question, answer_span in qa_pairs:
+        if any(answer_span.lower() in c[&quot;text&quot;].lower() for c in chunks):
+            found += 1
+    return found / len(qa_pairs)</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Metadata is worth more than most chunking cleverness.</strong> Storing source, date,
+section, author and permissions with each chunk enables filtered retrieval —
+&quot;only documents from this year&quot;, &quot;only what this user may see&quot; — which fixes
+whole classes of failure that no amount of embedding quality addresses.
+Permission filtering in particular has to happen <em>at retrieval</em>, not after: a
+model that has seen a document it should not have has already leaked it, and
+filtering the output is not a control.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Split referents</strong></td><td>Confident answers about &quot;this&quot; and &quot;above&quot;</td><td>Overlap, or structural boundaries</td></tr><tr><td><strong>Chunks too large</strong></td><td>Retrieval imprecise, everything looks relevant</td><td>Smaller chunks; decouple retrieval from context</td></tr><tr><td><strong>Chunks too small</strong></td><td>Retrieved chunk lacks the answer</td><td>Small-to-big</td></tr><tr><td><strong>Tables split from headers</strong></td><td>Numbers with no column meaning</td><td>Treat tables as atomic units</td></tr><tr><td><strong>No metadata</strong></td><td>Cannot filter by date, source or permission</td><td>Attach at ingestion; retrofitting means re-ingesting</td></tr><tr><td><strong>Bad PDF parsing</strong></td><td>Garbage in every chunk</td><td>Fix parsing first; nothing downstream can recover</td></tr><tr><td><strong>Re-embedding not planned</strong></td><td>Model upgrade blocked</td><td>Dual index and cutover</td></tr></tbody></table></div><p><strong>Ingestion is a pipeline with state, and it needs the discipline of one.</strong>
+Idempotent updates keyed on a document hash, so re-running does not duplicate.
+Deletions must propagate — an answer sourced from a deleted document is worse
+than no answer. Version the chunking configuration alongside the index, because
+&quot;which chunker produced this vector&quot; is unanswerable later otherwise, and that
+question arrives the first time quality drops.</p>
+<p><strong>Where the effort actually pays.</strong> Ranked by return on time invested:</p>
+<ol>
+<li><strong>Fix document parsing.</strong> Everything downstream inherits it.</li>
+<li><strong>Add heading paths and metadata.</strong> Cheap, large effect.</li>
+<li><strong>Decouple retrieval size from context size.</strong> Small-to-big.</li>
+<li><strong>Tune chunk size</strong> against your eval set. Real but smaller.</li>
+<li><strong>Semantic chunking.</strong> Usually the smallest gain for the most machinery.</li>
+</ol>
+<p>Most teams start at 5. The ordering above is the one that is defensible when
+someone asks why you spent the week on it.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What chunking looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Whether the answer cites something that actually supports it. A split referent produces an answer that is fluent, cited, and wrong — the worst combination.</td></tr><tr><td><strong>Coder</strong></td><td>Prepend heading paths before embedding. Keep tables atomic. Overlap by sentences, not tokens. Store metadata at ingestion; you cannot add it later without re-ingesting.</td></tr><tr><td><strong>Tester</strong></td><td>Measure the retrieval ceiling first — the fraction of answers present in any chunk at all. It is the upper bound on everything, and it is ten minutes of work.</td></tr><tr><td><strong>System designer</strong></td><td>Ingestion is a stateful pipeline: idempotent updates, propagated deletes, versioned config. Re-embedding is a migration needing a dual index, not a config change.</td></tr><tr><td><strong>Architect</strong></td><td>The chunking decision is coupled to the embedding model, and changing either invalidates the index. That coupling is the migration cost nobody budgets for.</td></tr><tr><td><strong>CEO</strong></td><td>The least glamorous stage and the one that most often determines whether the product works. When quality is poor, the honest first question is whether the answer was ever in the index.</td></tr><tr><td><strong>Market</strong></td><td>Commoditised — every framework ships chunkers. What is not commoditised is a clean corpus, which is why data quality is the durable advantage and chunking strategy is not.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;How would you chunk a technical manual?&quot;</td><td>Method</td><td>Structure first — split on headings so arbitrary cuts only happen inside a coherent section. Prepend the heading path before embedding. Keep tables atomic. Then size within sections against the embedding model&#39;s effective length.</td></tr><tr><td>&quot;How do you pick chunk size?&quot;</td><td>Whether you measure</td><td>Against an eval set, not from a blog post. Start at 256–512 tokens for prose, then measure retrieval hit rate at several sizes. And decouple: retrieve on small, send large.</td></tr><tr><td>&quot;RAG quality is poor. Where do you look first?&quot;</td><td>Diagnostic order</td><td>The retrieval ceiling — is the answer in any chunk at all. If not, no reranker or prompt fixes it. Then parsing quality, then chunk boundaries, then retrieval, then the model.</td></tr><tr><td>&quot;What is small-to-big?&quot;</td><td>Depth</td><td>Embed and retrieve on small precise chunks, then send the surrounding parent section to the model. Small chunks embed precisely; large context answers well. Decoupling gets both instead of compromising.</td></tr><tr><td>&quot;You are changing embedding model. What is involved?&quot;</td><td>Operational awareness</td><td>Re-embedding the whole corpus — a migration, not a config change. Dual index, backfill, cutover, and a re-run of the eval suite because retrieval behaviour changes.</td></tr><tr><td>&quot;How do you handle permissions in RAG?&quot;</td><td>Security instinct</td><td>Filter at retrieval using metadata attached at ingestion. Never post-filter the generated answer — once the model has seen the document, it has already leaked.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>explain the split-referent failure and why nothing downstream fixes it,</li>
+<li>describe small-to-big and what each half buys,</li>
+<li>say why heading-path enrichment is the cheapest large win,</li>
+<li>compute the storage cost of overlap, and</li>
+<li>give the ordering of where chunking effort actually pays.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Practical strategies</td><td>LlamaIndex node-parser documentation — the clearest catalogue of patterns</td></tr><tr><td>Small-to-big</td><td>LlamaIndex&#39;s auto-merging and sentence-window retrievers</td></tr><tr><td>Hierarchical</td><td><em>RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval</em> (Sarthi et al., 2024)</td></tr><tr><td>Parsing</td><td>Any comparison of PDF extraction libraries; the differences are larger than any chunking decision</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="bias-and-explainability.html"><span>previous</span>Bias monitoring & explainability</a><a class="pager next" href="embeddings-and-vector-databases.html"><span>next</span>Embeddings & vector databases</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-small-to-big-retrieval">4 · UML — small-to-big retrieval</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

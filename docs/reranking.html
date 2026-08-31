@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reranking &amp; filtering · LLM Handbook</title>
+<meta name="description" content="A second, more expensive opinion on a shortlist — the highest reliable quality-per-effort in retrieval.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html" class="active">Reranking & filtering</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="reranking-filtering"><a class="anchor" href="#reranking-filtering">#</a>Reranking & filtering</h1><blockquote>
+<p><strong>The one sentence:</strong> retrieval is optimised to not miss things, reranking is
+optimised to put the right one first, and asking one component to do both is
+why so many pipelines are mediocre at each.</p>
+</blockquote>
+<p>If you add one thing to a working RAG pipeline, add a reranker. It is the change
+with the most consistent measured benefit and the least architectural
+disruption.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   TWO STAGES, TWO OBJECTIVES
+
+   STAGE 1 - RETRIEVE            optimise RECALL
+   ------------------            get the right passage into the pool AT ALL
+   bi-encoder over the corpus    cheap: one vector comparison per document
+   top 50                        precision does not matter here
+
+                │
+                ▼
+
+   STAGE 2 - RERANK              optimise PRECISION
+   ---------------               put the right passage FIRST
+   cross-encoder over 50 pairs   expensive: a model pass per (query, passage)
+   top 5                         only affordable because 50 &lt;&lt; corpus
+
+
+   WHY A CROSS-ENCODER IS BETTER, and why you cannot use it alone
+
+   bi-encoder     embed(query) · embed(passage)     -&gt; vectors never meet
+                  precomputable, one comparison      -&gt; scales to millions
+                  cannot model INTERACTION
+
+   cross-encoder  model(query + passage together)   -&gt; full attention across both
+                  nothing precomputable              -&gt; one pass PER PAIR
+                  100x more accurate on hard cases   -&gt; 100x too slow for a corpus</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — the options, in ascending cost.</strong></p>
+<div class="table-scroll"><table><thead><tr><th>Reranker</th><th>Latency for 50 docs</th><th>Notes</th></tr></thead><tbody><tr><td><strong>Cross-encoder</strong> (ms-marco MiniLM)</td><td>~50–100ms on GPU</td><td>The workhorse. Small, fast, strong</td></tr><tr><td><strong>ColBERT / late interaction</strong></td><td>~20–40ms</td><td>Per-token MaxSim; precomputable doc vectors</td></tr><tr><td><strong>LLM reranker</strong></td><td>500ms–2s</td><td>Most accurate, hardest to justify on latency</td></tr><tr><td><strong>Rule/metadata reordering</strong></td><td>~0ms</td><td>Recency, authority, permissions. Free and underused</td></tr></tbody></table></div><p><strong>Depth-versus-latency is the parameter that matters.</strong> Reranking cost is linear
+in shortlist size, so the retrieve-50-rerank-5 shape is a direct trade:</p>
+<pre class="code"><code>   retrieve 20, rerank 5   fast, but if the answer was at rank 35 it is gone
+   retrieve 50, rerank 5   the usual sweet spot
+   retrieve 200, rerank 5  better ceiling, 4x the rerank cost</code></pre><p>Choose it by measuring <strong>retrieval recall at each depth</strong> on your eval set. If
+recall@50 and recall@200 are both 0.94, reranking 200 buys nothing but latency.</p>
+<p><strong>Advanced — filtering is reranking&#39;s neglected sibling and does work no model
+can.</strong> Some reordering is not a relevance judgement at all:</p>
+<div class="table-scroll"><table><thead><tr><th>Filter</th><th>Why a model cannot do it</th></tr></thead><tbody><tr><td><strong>Permissions</strong></td><td>A correctness and security requirement, not a preference</td></tr><tr><td><strong>Recency</strong></td><td>&quot;Current policy&quot; needs the newest, not the most semantically similar</td></tr><tr><td><strong>Source authority</strong></td><td>Official documentation should outrank a forum post</td></tr><tr><td><strong>Deduplication</strong></td><td>Three copies of the same passage waste three of five slots</td></tr></tbody></table></div><p><strong>Deduplication before reranking is a genuinely cheap win.</strong> Near-duplicate
+chunks — from overlap, or from the same content in several documents — routinely
+occupy multiple top-k slots and crowd out the passage that would have completed
+the answer. Collapsing near-duplicates by content hash or high mutual similarity
+costs nothing and frequently improves end-to-end quality more than a reranker
+upgrade.</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Query] --&gt; B[Retrieve top-N&lt;br/&gt;bi-encoder, cheap]
+  B --&gt; C[Hard filters:&lt;br/&gt;permissions, date, source]
+  C --&gt; D[Deduplicate near-identical chunks]
+  D --&gt; E{Enough candidates left?}
+  E --&gt;|no| F[Widen N, or relax soft filters&lt;br/&gt;never relax permissions]
+  F --&gt; B
+  E --&gt;|yes| G[Rerank with cross-encoder]
+  G --&gt; H[Take top-k]
+  H --&gt; I{Top score below threshold?}
+  I --&gt;|yes| J[Treat as no relevant context&lt;br/&gt;-&gt; corrective RAG path]
+  I --&gt;|no| K[Send to the model]</pre><p><strong>Filters before the reranker, always.</strong> Reranking a document the user may not
+see is wasted compute at best and, if a bug lets it through, a leak. Hard filters
+cost nothing and shrink the expensive stage.</p>
+<p><strong><code>I</code> connects this page to corrective RAG.</strong> A reranker gives you a calibrated-ish
+relevance score, which is the natural signal for deciding there is nothing worth
+answering from.</p>
+<hr>
+<h2 id="4-uml-the-two-stages"><a class="anchor" href="#4-uml-the-two-stages">#</a>4 · UML — the two stages</h2><pre class="mermaid">sequenceDiagram
+    participant Q as Query
+    participant V as Vector index
+    participant F as Filters
+    participant X as Cross-encoder
+    participant M as Model
+
+    Q-&gt;&gt;V: embed, search top-50
+    Note over V: one vector comparison per document.&lt;br/&gt;Cheap enough for millions.
+    V--&gt;&gt;F: 50 candidates
+    F-&gt;&gt;F: permissions, recency, dedupe
+    F--&gt;&gt;X: ~40 survivors
+    loop each (query, passage) pair
+        X-&gt;&gt;X: full attention across both texts
+    end
+    Note over X: 40 model passes. Only affordable&lt;br/&gt;because it is 40, not 4 million.
+    X--&gt;&gt;M: top 5, reordered
+    M--&gt;&gt;Q: grounded answer</pre><hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">def retrieve_and_rerank(index, reranker, query, *, user, depth=50, k=5,
+                        min_score=0.3):
+    &quot;&quot;&quot;Two-stage retrieval with filtering between the stages.
+
+    Order matters: filter before reranking, because reranking is the expensive
+    stage and there is no reason to spend it on documents that will be dropped
+    -- or worse, that the user is not permitted to see.
+    &quot;&quot;&quot;
+    candidates = index.search(query, depth)
+
+    # Hard filters. Permissions are a correctness requirement and are applied
+    # first; a relevance model must never be able to override them.
+    candidates = [c for c in candidates if user.may_read(c.source)]
+    candidates = deduplicate(candidates)
+
+    if not candidates:
+        return []
+
+    scores = reranker.predict([(query, c.text) for c in candidates])
+    ranked = sorted(zip(candidates, scores), key=lambda p: p[1], reverse=True)
+
+    # A relevance floor turns the reranker into a decision, not just an order.
+    # Without it the pipeline always returns its five best guesses, however bad.
+    return [c for c, s in ranked[:k] if s &gt;= min_score]
+
+
+def deduplicate(candidates, threshold=0.95):
+    &quot;&quot;&quot;Collapse near-identical chunks before they consume top-k slots.
+
+    Overlap during chunking and duplicated content across documents both
+    produce near-copies. Three copies of one passage occupying three of five
+    slots is a quality loss that no reranker can repair, because from its point
+    of view all three genuinely are relevant.
+    &quot;&quot;&quot;
+    kept = []
+    for candidate in candidates:
+        if all(similarity(candidate.text, k.text) &lt; threshold for k in kept):
+            kept.append(candidate)
+    return kept</code></pre><p><strong>Choosing the shortlist depth by measurement, not by habit:</strong></p>
+<pre class="code"><code class="language-python">def recall_by_depth(index, eval_set, depths=(10, 20, 50, 100, 200)) -&gt; dict:
+    &quot;&quot;&quot;Where does retrieval recall stop improving?
+
+    Reranking cost is linear in depth, so paying for 200 when recall plateaus
+    at 50 is pure latency. This is a ten-minute measurement that sets a
+    parameter people otherwise copy from a tutorial.
+    &quot;&quot;&quot;
+    out = {}
+    for depth in depths:
+        hits = sum(
+            any(c.id in item.relevant_ids for c in index.search(item.query, depth))
+            for item in eval_set
+        )
+        out[depth] = round(hits / len(eval_set), 3)
+    return out</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Reranker scores are not probabilities</strong>, even when they look like them. A
+sigmoid output of 0.7 does not mean 70% relevant, and the distribution shifts
+with query length and domain. If you use a threshold — and the corrective-RAG
+path needs one — calibrate it on your data, and re-calibrate whenever the
+reranker changes. A threshold copied from a model card is a guess wearing a
+number.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Reranking too few candidates</strong></td><td>Reranker cannot help; answer never in the pool</td><td>Measure recall by depth; widen</td></tr><tr><td><strong>Reranking too many</strong></td><td>Latency for no quality gain</td><td>Same measurement, other direction</td></tr><tr><td><strong>No deduplication</strong></td><td>Top-k is three copies of one passage</td><td>Collapse near-duplicates first</td></tr><tr><td><strong>Filtering after reranking</strong></td><td>Wasted compute; permission risk</td><td>Filter first</td></tr><tr><td><strong>Uncalibrated threshold</strong></td><td>Refuses good answers, or accepts junk</td><td>Calibrate per reranker on your data</td></tr><tr><td><strong>LLM reranker on the hot path</strong></td><td>Seconds of latency</td><td>Cross-encoder; reserve LLM reranking for offline or high-value queries</td></tr></tbody></table></div><p><strong>Where reranking does not help.</strong> If your retrieval recall at the shortlist
+depth is already near 1.0 <em>and</em> the right passage is already at rank 1, a
+reranker adds latency and nothing else. That is rare but real for small,
+well-structured corpora with distinctive vocabulary. Measure first — this is the
+counter-case to &quot;always add a reranker&quot;, and knowing it exists is the difference
+between a rule and a judgement.</p>
+<p><strong>ColBERT sits between the two stages and is worth understanding as a category.</strong>
+It keeps a vector per token and scores by MaxSim, so document token vectors are
+precomputable — giving much of a cross-encoder&#39;s precision at closer to a
+bi-encoder&#39;s cost. The trade is storage: a vector per token is far larger than
+a vector per chunk. It is covered in its own right in the ColBERT material of the
+retrieval module.</p>
+<p><strong>Reranking is where hybrid retrieval resolves.</strong> BM25 and dense retrieval
+produce two ranked lists whose scores are not comparable. Reciprocal Rank Fusion
+merges them by <em>rank</em>, and a reranker then produces a single, consistent ordering
+over the fused pool. That is the standard production shape: hybrid retrieve,
+fuse, dedupe, rerank, threshold.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What reranking looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>The right answer is first rather than fourth — which matters because most people read the first thing and stop.</td></tr><tr><td><strong>Coder</strong></td><td>Filter before reranking. Deduplicate. Batch the pairs into one call. Cache reranker scores on <code>(query, chunk_id)</code> — repeated queries are common and this is free latency.</td></tr><tr><td><strong>Tester</strong></td><td>Measure recall by depth to justify the shortlist size, and measure precision@k before and after reranking separately. Reranking cannot fix what retrieval never found, and conflating the two hides which stage is failing.</td></tr><tr><td><strong>System designer</strong></td><td>A second model on the critical path: bound the shortlist, batch, set a timeout, and decide the fallback — degrade to retrieval order rather than failing the request.</td></tr><tr><td><strong>Architect</strong></td><td>Another model dependency with its own versioning and its own eval baseline. Worth it, but it is a component, not a setting.</td></tr><tr><td><strong>CEO</strong></td><td>The highest reliable quality gain per unit of effort in retrieval — a small model, tens of milliseconds, no re-indexing and no retraining. Cheap by any standard.</td></tr><tr><td><strong>Market</strong></td><td>Commoditised: strong open cross-encoders are free, and hosted rerank APIs exist for those who prefer not to serve one. No moat; just adopt one.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;Why two stages instead of one?&quot;</td><td>The core idea</td><td>Different objectives. Retrieval optimises recall over millions of documents cheaply; reranking optimises precision over tens of candidates expensively. A cross-encoder cannot scan a corpus, and a bi-encoder cannot model query–passage interaction.</td></tr><tr><td>&quot;How deep should the shortlist be?&quot;</td><td>Whether you measure</td><td>Measure retrieval recall at several depths on the eval set and stop where it plateaus. Rerank cost is linear in depth, so paying for 200 when recall plateaus at 50 is pure latency.</td></tr><tr><td>&quot;When does a reranker not help?&quot;</td><td>Judgement</td><td>When recall at the shortlist depth is near 1.0 and the right passage is already first. Small, distinctive corpora sometimes are. Measure rather than assume in either direction.</td></tr><tr><td>&quot;Where does filtering go?&quot;</td><td>Correctness</td><td>Before reranking. Permissions especially — never spend the expensive stage on documents that will be dropped, and never let a relevance model influence an access decision.</td></tr><tr><td>&quot;Your top-3 are near-duplicates.&quot;</td><td>Practical detail</td><td>Deduplicate before reranking. Chunk overlap and repeated content produce near-copies, and the reranker cannot fix it because all the copies genuinely are relevant.</td></tr><tr><td>&quot;Is a 0.7 reranker score good?&quot;</td><td>Over-trusting numbers</td><td>Not inherently — it is not a probability and the distribution shifts with domain and query length. Use it to rank; calibrate any threshold on your own data and re-calibrate when the model changes.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>state the two stages&#39; different objectives,</li>
+<li>explain why a cross-encoder is more accurate and unusable alone,</li>
+<li>justify a shortlist depth from measurement,</li>
+<li>say why filtering and deduplication come first, and</li>
+<li>name the case where a reranker is not worth adding.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Cross-encoders</td><td>Sentence-Transformers cross-encoder documentation and the ms-marco model cards</td></tr><tr><td>Late interaction</td><td><em>ColBERT</em> (Khattab &amp; Zaharia, 2020) and <em>ColBERTv2</em></td></tr><tr><td>Rank fusion</td><td>Cormack et al. on Reciprocal Rank Fusion</td></tr><tr><td>Benchmarks</td><td>BEIR — how retrievers and rerankers generalise across domains, which is the honest comparison</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="embeddings-and-vector-databases.html"><span>previous</span>Embeddings & vector databases</a><a class="pager next" href="query-transformation.html"><span>next</span>Query transformation & HyDE</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-the-two-stages">4 · UML — the two stages</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

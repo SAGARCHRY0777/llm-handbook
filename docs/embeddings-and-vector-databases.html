@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Embeddings &amp; vector databases · LLM Handbook</title>
+<meta name="description" content="Turning text into vectors, finding neighbours fast, and the recall you silently trade away to do it.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html" class="active">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="embeddings-vector-databases"><a class="anchor" href="#embeddings-vector-databases">#</a>Embeddings & vector databases</h1><blockquote>
+<p><strong>The one sentence:</strong> approximate nearest-neighbour search is called
+<em>approximate</em> for a reason, and the fraction of true neighbours you are
+quietly missing is a number most teams have never measured.</p>
+</blockquote>
+<p>Embeddings are the retrieval substrate; the database is how you search them at
+scale. Both involve trade-offs that are invisible until you look for them.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   THE PIPELINE, and what each stage costs you
+
+   text ──► EMBEDDING MODEL ──► vector (384 / 768 / 1536 / 3072 dims)
+                                     │
+                                     ▼
+                              VECTOR INDEX
+                                     │
+              ┌──────────────────────┼──────────────────────┐
+              │                      │                      │
+          FLAT (exact)          HNSW (graph)            IVF (clusters)
+          100% recall           ~95-99% recall          ~90-95% recall
+          O(n) per query        O(log n)                O(n/clusters)
+          fine to ~100k         the default             good for huge sets
+
+
+   THE TRADE NOBODY MEASURES
+
+   &quot;our retrieval hit rate is 0.85&quot;
+      -&gt; but is the index returning the TRUE nearest neighbours?
+      -&gt; at HNSW defaults you may be losing 3-8% of them before
+         any of your retrieval logic runs.
+      -&gt; that loss is invisible unless you compare against a flat index.</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic — what an embedding is.</strong> A fixed-length vector positioned so that
+semantically similar text lands nearby. Similarity is cosine (or dot product on
+normalised vectors, which is the same thing). The model is trained so that
+paraphrases converge and unrelated text diverges.</p>
+<div class="table-scroll"><table><thead><tr><th>Property</th><th>Consequence</th></tr></thead><tbody><tr><td><strong>Dimensions</strong> (384–3072)</td><td>Higher costs more memory and compute; gains diminish sharply</td></tr><tr><td><strong>Max sequence length</strong></td><td>Effective length is well below the stated one</td></tr><tr><td><strong>Symmetric vs asymmetric</strong></td><td>Trained for query↔document, or document↔document. They differ</td></tr><tr><td><strong>Domain</strong></td><td>General models underperform on specialised jargon</td></tr></tbody></table></div><p><strong>Asymmetric versus symmetric is a real and commonly-missed distinction.</strong>
+Retrieval models are trained on <em>(short query, long passage)</em> pairs — the two
+sides are different shapes. Some models expect explicit prefixes (<code>&quot;query: &quot;</code> /
+<code>&quot;passage: &quot;</code>) and lose measurable quality without them. Using a symmetric
+similarity model for asymmetric retrieval is a silent quality loss.</p>
+<p><strong>Intermediate — the index structures.</strong></p>
+<div class="table-scroll"><table><thead><tr><th>Index</th><th>Mechanism</th><th>Use when</th></tr></thead><tbody><tr><td><strong>Flat</strong></td><td>Compare against everything</td><td>Under ~100k vectors, or as a recall baseline</td></tr><tr><td><strong>HNSW</strong></td><td>Navigable small-world graph, greedy descent</td><td>The default. Fast, high recall, memory-hungry</td></tr><tr><td><strong>IVF</strong></td><td>Cluster, then search nearest clusters</td><td>Very large sets, memory-constrained</td></tr><tr><td><strong>IVF+PQ</strong></td><td>Clusters plus compressed vectors</td><td>Billions of vectors; recall drops noticeably</td></tr></tbody></table></div><p><strong>HNSW&#39;s knobs</strong>, and what each actually controls:</p>
+<pre class="code"><code>   M                 graph connectivity. Higher = better recall, more memory
+   ef_construction   effort at BUILD time. Higher = better graph, slower build
+   ef_search         effort at QUERY time. Higher = better recall, slower query
+                     ^ the one you can tune live, per query</code></pre><p><code>ef_search</code> is the runtime recall/latency dial. It is the right thing to raise
+when recall matters more than a few milliseconds, and it needs no reindexing.</p>
+<p><strong>Advanced — measure your recall, because nobody ships with it measured.</strong>
+Approximate search trades recall for speed, and the default settings of most
+libraries lose several percent of true neighbours. That loss happens <em>before</em>
+your reranker, your query transformation and your prompt — it is a ceiling
+underneath everything else.</p>
+<p>Measuring it is straightforward and almost nobody does it: build a flat index
+over a sample, compare the top-k against your production index, and report the
+overlap. If it is 0.92, then eight percent of the time the best passage never
+reached your reranker.</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Chunks] --&gt; B[Choose embedding model]
+  B --&gt; C{Domain-specific jargon?}
+  C --&gt;|yes| D[Evaluate domain models&lt;br/&gt;or plan fine-tuning]
+  C --&gt;|no| E[Strong general model]
+  D --&gt; F[Embed corpus]
+  E --&gt; F
+  F --&gt; G{Corpus size?}
+  G --&gt;|under 100k| H[Flat index. Exact, simple]
+  G --&gt;|100k - 10M| I[HNSW]
+  G --&gt;|over 10M| J[IVF or IVF+PQ]
+  H --&gt; K[Measure recall@k&lt;br/&gt;vs a flat baseline]
+  I --&gt; K
+  J --&gt; K
+  K --&gt; L{Recall acceptable?}
+  L --&gt;|no| M[Raise ef_search,&lt;br/&gt;or M and rebuild]
+  M --&gt; K
+  L --&gt;|yes| N[Add metadata filters]
+  N --&gt; O[Serve]</pre><p><strong>Node <code>H</code> is under-used.</strong> Below about 100k vectors, exact search is fast enough
+on modern hardware, gives 100% recall, and removes an entire category of
+tuning and doubt. Many production systems do not need an ANN index at all and
+adopt one because it feels professional.</p>
+<hr>
+<h2 id="4-uml-filtered-search-and-why-the-order-matters"><a class="anchor" href="#4-uml-filtered-search-and-why-the-order-matters">#</a>4 · UML — filtered search, and why the order matters</h2><pre class="mermaid">sequenceDiagram
+    participant Q as Query
+    participant F as Metadata filter
+    participant I as Vector index
+    participant R as Results
+
+    alt post-filter (naive)
+        Q-&gt;&gt;I: search top-k
+        I--&gt;&gt;F: k candidates
+        F-&gt;&gt;F: drop those failing the filter
+        F--&gt;&gt;R: possibly FAR FEWER than k
+        Note over F,R: A restrictive filter can empty&lt;br/&gt;the result set entirely
+    else pre-filter / filtered search
+        Q-&gt;&gt;F: resolve the allowed set first
+        F--&gt;&gt;I: search WITHIN that subset
+        I--&gt;&gt;R: k results, all valid
+        Note over F,I: Correct, but a very small allowed&lt;br/&gt;set can degrade graph traversal --&lt;br/&gt;fall back to exact search there
+    end</pre><p><strong>Post-filtering is the wrong default</strong> and it is what a naive implementation
+does. Searching top-10 then discarding those the user may not see can return two
+results, or none, while perfectly good permitted documents sat at rank 11.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">import numpy as np
+
+
+def recall_at_k(exact_index, approx_index, queries, k=10) -&gt; float:
+    &quot;&quot;&quot;What fraction of the TRUE nearest neighbours the ANN index returns.
+
+    This is the ceiling under the whole retrieval stack, and it is invisible
+    without an exact baseline to compare against. Measure it once on a sample;
+    it is usually the cheapest quality finding available.
+    &quot;&quot;&quot;
+    total = 0.0
+    for q in queries:
+        truth = set(exact_index.search(q, k))
+        got = set(approx_index.search(q, k))
+        total += len(truth &amp; got) / k
+    return total / len(queries)
+
+
+def normalise(vectors: np.ndarray) -&gt; np.ndarray:
+    &quot;&quot;&quot;Unit-normalise so dot product IS cosine similarity.
+
+    Most indexes are faster with inner product than with cosine. Normalising at
+    write time makes the two identical, so you get cosine semantics at inner
+    product speed -- provided queries are normalised too. Forgetting the query
+    side is a classic bug: results are subtly wrong rather than obviously
+    broken, because longer documents score higher regardless of relevance.
+    &quot;&quot;&quot;
+    norms = np.linalg.norm(vectors, axis=1, keepdims=True)
+    return vectors / np.maximum(norms, 1e-12)</code></pre><p><strong>The dimension trade, made concrete:</strong></p>
+<pre class="code"><code class="language-python">def index_memory_gb(n_vectors, dims, bytes_per=4, hnsw_M=16):
+    &quot;&quot;&quot;Memory for vectors plus HNSW graph links.
+
+    The graph is not free -- at M=16 the link structure adds meaningfully to
+    the raw vector size, and it is the part people forget when sizing a box.
+    &quot;&quot;&quot;
+    vectors = n_vectors * dims * bytes_per
+    graph = n_vectors * hnsw_M * 2 * 8      # bidirectional links, 8 bytes each
+    return (vectors + graph) / 1e9
+
+
+for dims in (384, 768, 1536, 3072):
+    print(f&quot;{dims:&gt;5} dims, 10M vectors -&gt; {index_memory_gb(10_000_000, dims):6.1f} GB&quot;)</code></pre><pre class="code"><code>  384 dims, 10M vectors -&gt;   17.9 GB
+  768 dims, 10M vectors -&gt;   33.3 GB
+ 1536 dims, 10M vectors -&gt;   64.0 GB
+ 3072 dims, 10M vectors -&gt;  125.4 GB</code></pre><p><strong>Matryoshka embeddings</strong> are the useful response to that table: models trained
+so a vector can be truncated to fewer dimensions while keeping most of its
+quality. Truncating 3072 to 768 often costs a small amount of recall for a
+four-fold memory saving — and you can store the full vector for a rerank pass and
+search on the truncated one.</p>
+<hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Cosine similarity has no absolute meaning, and treating it as though it does
+causes real bugs.</strong> A score of 0.82 is not &quot;82% relevant&quot;. Score distributions
+differ per model, per domain, and per query length — a fixed relevance threshold
+tuned on one model silently breaks on another. Use scores to <em>rank</em>, and if you
+need a threshold, calibrate it on your data and re-calibrate whenever the
+embedding model changes.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Unmeasured ANN recall</strong></td><td>Ceiling nobody knows about</td><td>Compare against a flat index on a sample</td></tr><tr><td><strong>Post-filtering</strong></td><td>Empty or short result sets with filters</td><td>Pre-filter or use native filtered search</td></tr><tr><td><strong>Unnormalised queries</strong></td><td>Long documents win regardless of relevance</td><td>Normalise both sides</td></tr><tr><td><strong>Fixed score threshold</strong></td><td>Breaks on model change</td><td>Rank, or calibrate per model</td></tr><tr><td><strong>Symmetric model for retrieval</strong></td><td>Quietly worse quality</td><td>Use an asymmetric retrieval model, with its prefixes</td></tr><tr><td><strong>ANN below 100k vectors</strong></td><td>Tuning complexity for no gain</td><td>Use a flat index</td></tr><tr><td><strong>Ignoring index build time</strong></td><td>Ingestion far slower than expected</td><td>HNSW build is expensive; batch it</td></tr></tbody></table></div><p><strong>Choosing a database is mostly not about the algorithm.</strong> Everyone implements
+HNSW. The real differentiators are operational:</p>
+<div class="table-scroll"><table><thead><tr><th>Concern</th><th>Why it decides more than benchmarks</th></tr></thead><tbody><tr><td><strong>Filtering</strong></td><td>Native filtered search versus post-filtering is a correctness difference</td></tr><tr><td><strong>Updates and deletes</strong></td><td>Some indexes handle deletion by tombstoning and degrade until rebuilt</td></tr><tr><td><strong>Persistence and backup</strong></td><td>An in-memory index that must be rebuilt on restart is an availability problem</td></tr><tr><td><strong>Hybrid search</strong></td><td>Built-in BM25 alongside vectors saves running a second system</td></tr><tr><td><strong>Operational fit</strong></td><td><code>pgvector</code> in an existing Postgres is often the right answer purely because it is one fewer system</td></tr></tbody></table></div><p><strong><code>pgvector</code> deserves more consideration than it gets.</strong> If you already run
+Postgres, you get transactions, backups, joins to your business data, permissions
+and existing operational knowledge — and it handles millions of vectors
+comfortably. A dedicated vector database earns its place at scale or when you
+need features Postgres lacks, but &quot;we need a vector database&quot; is a conclusion
+that should be argued rather than assumed.</p>
+<p><strong>Fine-tuning the embedding model is the highest-ceiling retrieval improvement
+and the least-attempted.</strong> With a few thousand (query, relevant passage) pairs —
+which you can mine from click logs or generate with a strong model — a
+contrastive fine-tune of a small embedding model routinely beats a much larger
+general one on your domain. It is covered in the retrieval-finetuning page.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What this layer looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Whether the right document comes back. Nothing else here is visible to them.</td></tr><tr><td><strong>Coder</strong></td><td>Normalise both sides. Use the model&#39;s required prefixes. Never post-filter. Store the model name and version with the index, because vectors from two models are not comparable.</td></tr><tr><td><strong>Tester</strong></td><td>Measure ANN recall against an exact baseline — it is the ceiling under every other retrieval metric. Test filtered queries specifically; that is where naive implementations break.</td></tr><tr><td><strong>System designer</strong></td><td>Memory is set by vectors plus graph links. Index build is expensive and belongs offline. Decide what happens to search when the index is rebuilding.</td></tr><tr><td><strong>Architect</strong></td><td>The embedding model and the index are coupled: changing the model is a full re-embed and a dual-index cutover. Choosing a database is choosing an operational commitment, and <code>pgvector</code> may already be paid for.</td></tr><tr><td><strong>CEO</strong></td><td>Cost is memory, and memory scales with dimensions × documents. Dimension reduction and Matryoshka truncation are real savings. A separate vector database is a new system to run — ask whether Postgres would do.</td></tr><tr><td><strong>Market</strong></td><td>Crowded and commoditising: Pinecone, Qdrant, Weaviate, Milvus, pgvector, plus every cloud. Algorithms are shared; competition is on operations and price. Little lock-in beyond your own coupling — keep the interface thin.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;How does HNSW work?&quot;</td><td>Whether you know your tools</td><td>A layered navigable small-world graph. Search starts at a sparse top layer and greedily descends to denser ones. <code>M</code> sets connectivity, <code>ef_search</code> sets query-time effort and is the live recall/latency dial.</td></tr><tr><td>&quot;What recall does your index get?&quot;</td><td>The question almost nobody has answered</td><td>Compare top-k against a flat exact index on a sample. Defaults commonly lose several percent, and that loss sits underneath every downstream metric.</td></tr><tr><td>&quot;Filtering with vector search?&quot;</td><td>Correctness instinct</td><td>Pre-filter or use native filtered search. Post-filtering searches top-k then discards, which returns short or empty result sets while valid documents sat just below the cut.</td></tr><tr><td>&quot;Which vector database?&quot;</td><td>Pragmatism</td><td>Whichever fits operations. <code>pgvector</code> if Postgres is already there — transactions, backups, joins, one fewer system. A dedicated store at scale or for features Postgres lacks. Everyone implements the same algorithms.</td></tr><tr><td>&quot;Is 0.82 cosine similarity good?&quot;</td><td>Whether you over-trust a number</td><td>It has no absolute meaning. Distributions vary by model, domain and query length. Use scores to rank; calibrate any threshold per model and re-calibrate when the model changes.</td></tr><tr><td>&quot;How would you cut index memory in half?&quot;</td><td>Practical levers</td><td>Fewer dimensions — Matryoshka truncation if the model supports it — or quantised vectors, measuring recall loss each time. Check the ANN parameters too; <code>M</code> costs memory directly.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>explain why ANN recall is a ceiling and how to measure it,</li>
+<li>describe HNSW&#39;s three parameters and which is tunable at query time,</li>
+<li>say why post-filtering is wrong,</li>
+<li>explain why a cosine score has no absolute meaning, and</li>
+<li>argue for a flat index or <code>pgvector</code> where they are the right answer.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>HNSW</td><td>Malkov &amp; Yashunin (2016) — readable, and the diagrams carry it</td></tr><tr><td>Product quantization</td><td>Jégou et al. (2011)</td></tr><tr><td>Matryoshka</td><td><em>Matryoshka Representation Learning</em> (Kusupati et al., 2022)</td></tr><tr><td>Benchmarks</td><td>ANN-Benchmarks — recall/latency curves for every library, which is the comparison that matters</td></tr><tr><td>Practical</td><td>The <code>pgvector</code> README, for an honest account of where it does and does not scale</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="chunking.html"><span>previous</span>Chunking & ingestion</a><a class="pager next" href="reranking.html"><span>next</span>Reranking & filtering</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-filtered-search-and-why-the-order-matters">4 · UML — filtered search, and why the order matters</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
