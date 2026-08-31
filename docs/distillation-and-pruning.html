@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Distillation &amp; pruning · LLM Handbook</title>
+<meta name="description" content="The two ways to make a model structurally smaller, and why one of them is usually a better idea than the other.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html" class="active">Distillation & pruning</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="distillation-pruning"><a class="anchor" href="#distillation-pruning">#</a>Distillation & pruning</h1><blockquote>
+<p><strong>The one sentence:</strong> quantization keeps every weight and stores it in fewer
+bits; distillation and pruning change how many weights there are at all.</p>
+</blockquote>
+<p>They are grouped together because they answer the same question — <em>can this be a
+smaller model?</em> — and because the honest comparison between them, and against
+quantization, is what an interviewer is actually probing.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   THREE WAYS TO MAKE A MODEL CHEAPER, AND WHAT EACH ONE SACRIFICES
+
+   QUANTIZATION          same architecture, same weights, fewer bits each
+                         |####|####|####|  -&gt;  |##|##|##|
+                         cheap, reversible, no training
+                         sacrifices: numerical precision
+
+   PRUNING               same architecture, FEWER weights
+                         |####|####|####|  -&gt;  |#  #|#  #|#  #|
+                         needs fine-tuning to recover
+                         sacrifices: capacity, unevenly
+
+   DISTILLATION          NEW smaller architecture, trained to imitate
+                         |####|####|####|  -&gt;  |##|##|
+                         needs a full training run + data
+                         sacrifices: generality outside the training distribution
+
+
+   COST TO DO IT           quantization  &lt;&lt;  pruning  &lt;  distillation
+   QUALITY YOU KEEP        depends entirely on the task
+   WHO SHOULD DO IT        everyone         few          fewer still</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — distillation.</strong> A large <strong>teacher</strong> produces outputs; a smaller
+<strong>student</strong> is trained to reproduce them. What the student learns from matters:</p>
+<div class="table-scroll"><table><thead><tr><th>Signal</th><th>What the student sees</th><th>Notes</th></tr></thead><tbody><tr><td><strong>Hard labels</strong></td><td>The teacher&#39;s chosen token</td><td>Wastes most of the signal</td></tr><tr><td><strong>Soft labels (logits)</strong></td><td>The full probability distribution</td><td>The classic method; carries the teacher&#39;s uncertainty</td></tr><tr><td><strong>Intermediate states</strong></td><td>Hidden layers, attention maps</td><td>Stronger, needs architectural compatibility</td></tr><tr><td><strong>Generated data</strong></td><td>Teacher-written examples</td><td>What most &quot;distillation&quot; means in practice today</td></tr></tbody></table></div><p><strong>The reason soft labels work is the interesting part.</strong> A teacher saying
+<code>{cat: 0.7, dog: 0.25, car: 0.001}</code> tells the student that cats resemble dogs
+and not cars. That relational information — Hinton called it <em>dark knowledge</em> —
+is absent from the hard label <code>cat</code>, and it is why a student trained on
+distributions beats the same student trained on the same data&#39;s ground truth.</p>
+<blockquote>
+<p><strong>What &quot;distillation&quot; usually means in 2026.</strong> Most teams calling it
+distillation are doing <em>synthetic data generation</em>: use a strong model to
+write training examples, fine-tune a small model on them. That is practical
+and effective, but it is training on hard labels — the dark knowledge is gone.
+Worth naming the difference precisely, because interviewers notice.</p>
+</blockquote>
+<p><strong>Intermediate — pruning.</strong> Remove weights and keep the rest. The split that
+decides whether you get a speedup at all:</p>
+<div class="table-scroll"><table><thead><tr><th>Type</th><th>Removes</th><th>Speedup on normal hardware</th></tr></thead><tbody><tr><td><strong>Unstructured</strong></td><td>Individual weights, anywhere</td><td><strong>None</strong> without sparse kernels — you get a sparse matrix stored densely</td></tr><tr><td><strong>Semi-structured (2:4)</strong></td><td>2 of every 4 weights</td><td>Real, on Ampere and newer with sparse tensor cores</td></tr><tr><td><strong>Structured</strong></td><td>Whole heads, channels, layers</td><td>Real everywhere — the matrix is genuinely smaller</td></tr></tbody></table></div><p><strong>This is the trap.</strong> Unstructured pruning reaches far higher sparsity with far
+less quality loss, and delivers <em>no speedup at all</em> on a normal GPU. You get a
+model that is 90% zeros, stored as dense FP16, running at exactly the original
+speed. Structured pruning hurts quality more and is the one that actually makes
+inference faster.</p>
+<p><strong>Advanced — what pruning tells you about the model.</strong> Prune by magnitude and
+you discover transformers are wildly uneven: some attention heads can be removed
+with no measurable effect, while others are load-bearing. Middle layers tend to
+be more redundant than the first and last. Depth pruning — dropping whole layers
+— often beats width pruning at the same parameter reduction, which is a genuinely
+surprising result worth knowing.</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Model too big or too slow] --&gt; B{Quantize first}
+  B --&gt; C{Fast enough now?}
+  C --&gt;|yes| D[Stop. You are done]
+  C --&gt;|no| E{Do you have training data&lt;br/&gt;and a training budget?}
+  E --&gt;|no| F[Structured-prune + light fine-tune]
+  E --&gt;|yes| G{Is the task narrow?}
+  G --&gt;|broad, general| F
+  G --&gt;|narrow and well-defined| H[Distil a task-specific student]
+  F --&gt; I[Evaluate on task metrics]
+  H --&gt; I
+  I --&gt; J{Quality acceptable?}
+  J --&gt;|no| K[Reconsider: a smaller off-the-shelf&lt;br/&gt;model may beat both]
+  J --&gt;|yes| L[Deploy]</pre><p><strong>Two branches carry most of the judgement.</strong></p>
+<p><code>B</code> first, always: quantization is hours of work, no training, and reversible.
+Pruning and distillation are projects. Doing them before quantizing is skipping
+the cheap option to start with the expensive one.</p>
+<p><code>G</code> is where distillation succeeds or fails. Distillation works when the task is
+narrow — classification, extraction, routing, one domain of question answering.
+A student trained to imitate a general model <em>in general</em> mostly reproduces a
+worse general model, and an off-the-shelf small model probably beats it for
+none of the effort.</p>
+<hr>
+<h2 id="4-uml-distillation-as-a-sequence"><a class="anchor" href="#4-uml-distillation-as-a-sequence">#</a>4 · UML — distillation as a sequence</h2><pre class="mermaid">sequenceDiagram
+    participant D as Task data
+    participant T as Teacher (large)
+    participant S as Student (small)
+    participant E as Eval suite
+
+    loop each batch
+        D-&gt;&gt;T: inputs
+        T--&gt;&gt;S: soft targets (full distribution)
+        D-&gt;&gt;S: same inputs
+        Note over S: loss = alpha * KL(student || teacher)&lt;br/&gt;+ (1-alpha) * CE(student, true labels)
+        S-&gt;&gt;S: update
+    end
+    S-&gt;&gt;E: evaluate on held-out task data
+    E--&gt;&gt;S: task metrics, not just loss
+    Note over E: The student is only useful if it holds up&lt;br/&gt;ON THE TASK. Matching the teacher&#39;s loss&lt;br/&gt;is not the objective.</pre><p>The two-term loss matters: pure imitation inherits the teacher&#39;s mistakes, pure
+ground truth throws away the dark knowledge. <code>alpha</code> around 0.5–0.9 is typical,
+and it is worth tuning.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">import torch
+import torch.nn.functional as F
+
+
+def distillation_loss(student_logits, teacher_logits, labels, alpha=0.7, T=2.0):
+    &quot;&quot;&quot;Combine imitation of the teacher with the ground truth.
+
+    Temperature T softens both distributions so the student sees the teacher&#39;s
+    relative preferences among the WRONG answers -- that ranking is the useful
+    signal a hard label throws away.
+
+    The T*T factor restores the gradient magnitude, which softening otherwise
+    scales down by 1/T^2. Omitting it is a common bug: training silently
+    becomes a very low learning rate on the distillation term.
+    &quot;&quot;&quot;
+    soft = F.kl_div(
+        F.log_softmax(student_logits / T, dim=-1),
+        F.softmax(teacher_logits / T, dim=-1),
+        reduction=&quot;batchmean&quot;,
+    ) * (T * T)
+
+    hard = F.cross_entropy(student_logits, labels)
+    return alpha * soft + (1 - alpha) * hard
+
+
+@torch.no_grad()
+def head_importance(model, batches) -&gt; torch.Tensor:
+    &quot;&quot;&quot;Rank attention heads by how much the loss depends on them.
+
+    Magnitude alone is a poor guide: a small weight in a sensitive position
+    matters more than a large one in a redundant head. This masks each head and
+    measures the loss it costs, which is expensive but honest.
+
+    Run it before structured pruning; the spread is usually far wider than
+    people expect, and some heads cost essentially nothing.
+    &quot;&quot;&quot;
+    baseline = evaluate_loss(model, batches)
+    scores = torch.zeros(model.config.num_hidden_layers, model.config.num_attention_heads)
+
+    for layer in range(scores.shape[0]):
+        for head in range(scores.shape[1]):
+            with mask_head(model, layer, head):
+                scores[layer, head] = evaluate_loss(model, batches) - baseline
+    return scores</code></pre><p><strong>The check that stops you shipping a useless prune:</strong></p>
+<pre class="code"><code class="language-python">def will_pruning_actually_be_faster(sparsity_pattern: str, gpu: str) -&gt; bool:
+    &quot;&quot;&quot;Sparsity only becomes speed if the hardware and kernels support it.
+
+    An unstructured 90%-sparse model stored densely runs at exactly the speed
+    of the dense original. This is the single most common disappointment in
+    pruning work, and it is knowable in advance.
+    &quot;&quot;&quot;
+    if sparsity_pattern == &quot;structured&quot;:
+        return True                      # the matrices are genuinely smaller
+    if sparsity_pattern == &quot;2:4&quot;:
+        return gpu in {&quot;A100&quot;, &quot;H100&quot;, &quot;L40S&quot;, &quot;RTX-30xx&quot;, &quot;RTX-40xx&quot;}
+    return False                         # unstructured: no speedup without sparse kernels</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>The comparison that decides the whole question.</strong> Before distilling or
+pruning, check whether someone has already released a good small model:</p>
+<div class="table-scroll"><table><thead><tr><th>Path</th><th>Effort</th><th>Typical outcome</th></tr></thead><tbody><tr><td>Off-the-shelf small model + fine-tune</td><td>Days</td><td>Usually the best quality-per-effort</td></tr><tr><td>Quantize the big model</td><td>Hours</td><td>Best first move; often sufficient</td></tr><tr><td>Structured prune + recover</td><td>Weeks</td><td>Worth it when the architecture must stay fixed</td></tr><tr><td>Distil a task-specific student</td><td>Weeks–months</td><td>Best result <strong>on a narrow task</strong>, worst on a broad one</td></tr></tbody></table></div><p>A 3B model trained by a well-resourced lab has seen more data than your
+distillation run ever will. Distilling a general-purpose student to compete with
+it is a losing race. Distilling a <em>narrow</em> student that beats it on your one task
+is very winnable.</p>
+<p><strong>Distillation inherits the teacher&#39;s flaws, including its biases and its
+confident errors.</strong> The student cannot exceed the teacher on the distribution it
+was distilled on — it can only get closer to it, more cheaply. If the teacher is
+wrong about something in your domain, the student will be wrong about it too,
+with less capacity to be argued out of it.</p>
+<p><strong>Legal reality, and it is not a footnote.</strong> Many commercial model licences
+explicitly prohibit using outputs to train competing models. Distilling from a
+hosted API can breach the terms you agreed to. Check the licence before the
+architecture — an architect who does not raise this is not doing the job.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Unstructured pruning for speed</strong></td><td>90% sparse, identical latency</td><td>Structured or 2:4; check kernel support first</td></tr><tr><td><strong>Distilling a general model</strong></td><td>Student is a worse generalist</td><td>Narrow the task, or use an off-the-shelf small model</td></tr><tr><td><strong>Pruning without fine-tuning</strong></td><td>Sharp quality drop</td><td>Always recover afterwards; even a short run helps</td></tr><tr><td><strong>Uniform pruning across layers</strong></td><td>Avoidable damage</td><td>Measure per-head and per-layer importance; the spread is large</td></tr><tr><td><strong>Distilling on the wrong distribution</strong></td><td>Great offline, poor live</td><td>Generate teacher outputs on real production inputs</td></tr><tr><td><strong>Ignoring the licence</strong></td><td>Legal exposure</td><td>Read it before you start</td></tr></tbody></table></div><p><strong>What to actually reach for.</strong> For most application teams, in order: quantize;
+if that is not enough, take a smaller off-the-shelf model and fine-tune it; only
+then consider pruning or distillation. That ordering is unglamorous and it is
+correct — and saying it plainly in an interview reads as experience, not as a
+lack of ambition.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What this looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>A faster, cheaper model that is usually slightly worse in ways they cannot articulate. The failure is silent: the student sounds exactly as confident as the teacher.</td></tr><tr><td><strong>Coder</strong></td><td>Do not skip the <code>T*T</code> factor. Check sparse kernel support before pruning. Version the student against the teacher&#39;s exact checkpoint — a re-distilled student from a different teacher build is a different model.</td></tr><tr><td><strong>Tester</strong></td><td>The compressed model needs the <em>full</em> regression suite, not a spot check. Compare student against teacher per item, not in aggregate — the interesting failures are concentrated in specific buckets, usually the rare ones.</td></tr><tr><td><strong>System designer</strong></td><td>A smaller model changes memory, batch size and throughput together. It may also change your hardware tier, which is where the real money is — dropping from A100 to L4 saves more than the token maths suggests.</td></tr><tr><td><strong>Architect</strong></td><td>Distillation creates a model you now own and must maintain: retraining when the teacher improves, drift monitoring, a data pipeline. That is a permanent commitment traded for per-token cost. And check the teacher&#39;s licence.</td></tr><tr><td><strong>CEO</strong></td><td>Distillation is an R&amp;D project with a several-week horizon and an uncertain outcome; quantization is an afternoon. Ask why the cheap option was not enough before funding the expensive one. There is genuine legal risk in distilling from a commercial API.</td></tr><tr><td><strong>Market</strong></td><td>Small strong models are released constantly, and each release makes in-house distillation less attractive. The moat was never the technique — it is proprietary task data. If your student&#39;s advantage is data nobody else has, it holds; otherwise next quarter&#39;s open release erases it.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;Quantization, pruning or distillation?&quot;</td><td>Judgement and cost sense</td><td>Quantize first — hours, no training, reversible. Then a smaller off-the-shelf model. Pruning and distillation are week-to-month projects and are only right when those fail or the task is narrow.</td></tr><tr><td>&quot;Why do soft labels beat hard labels?&quot;</td><td>Whether you understand the mechanism</td><td>The distribution encodes relationships between classes — that cats resemble dogs and not cars. Hard labels discard it. That relational signal is why a student on distributions beats the same student on ground truth.</td></tr><tr><td>&quot;You pruned to 90% sparsity and it is not faster.&quot;</td><td>The classic trap</td><td>Unstructured sparsity gives no speedup without sparse kernels; the model is stored densely. You need structured pruning, or 2:4 semi-structured on hardware with sparse tensor cores.</td></tr><tr><td>&quot;When does distillation fail?&quot;</td><td>Realism</td><td>When the task is broad. A general student mostly reproduces a worse generalist, and a released small model beats it for none of the effort. Distillation wins on narrow, well-defined tasks with proprietary data.</td></tr><tr><td>&quot;What is the risk in distilling from a commercial API?&quot;</td><td>Commercial awareness</td><td>Most licences prohibit training competing models on their outputs. It is a licence question before it is a technical one, and it belongs in the design review.</td></tr><tr><td>&quot;How do you decide what to prune?&quot;</td><td>Depth</td><td>Not magnitude alone. Measure per-head and per-layer importance by masking and observing the loss — the spread is wide, middle layers are more redundant, and depth pruning often beats width at equal reduction.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>state what each of the three techniques sacrifices,</li>
+<li>explain why unstructured pruning gives no speedup,</li>
+<li>say what dark knowledge is and why soft labels carry it,</li>
+<li>give the ordering you would actually recommend and defend it, and</li>
+<li>raise the licensing issue unprompted.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Distillation</td><td><em>Distilling the Knowledge in a Neural Network</em> (Hinton, Vinyals &amp; Dean, 2015) — still the clearest statement</td></tr><tr><td>Pruning</td><td><em>The Lottery Ticket Hypothesis</em> (Frankle &amp; Carbin, 2018); <em>SparseGPT</em> (Frantar &amp; Alistarh, 2023) for one-shot LLM pruning</td></tr><tr><td>Head redundancy</td><td><em>Are Sixteen Heads Really Better than One?</em> (Michel et al., 2019)</td></tr><tr><td>Depth pruning</td><td><em>The Unreasonable Ineffectiveness of the Deeper Layers</em> (Gromov et al., 2024)</td></tr><tr><td>Practical</td><td>NVIDIA&#39;s 2:4 structured sparsity docs — what the hardware actually accelerates</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="quantization.html"><span>previous</span>Quantization</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-distillation-as-a-sequence">4 · UML — distillation as a sequence</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

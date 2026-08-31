@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quantization · LLM Handbook</title>
+<meta name="description" content="Storing weights in fewer bits, and why that makes generation faster even though the arithmetic does not change.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html" class="active">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="quantization"><a class="anchor" href="#quantization">#</a>Quantization</h1><blockquote>
+<p><strong>The one sentence:</strong> token generation is limited by how many bytes you can
+pull out of memory, not by how fast you can multiply — so making the weights
+smaller makes the model faster.</p>
+</blockquote>
+<p>That sentence is the whole topic. Almost everyone can define quantization;
+far fewer can say <em>why</em> it produces a speedup, and the answer is not &quot;smaller
+numbers multiply faster&quot;.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   WHY GENERATION IS SLOW: THE TWO PHASES ARE NOT ALIKE
+
+   PREFILL (reading the prompt)          DECODE (writing each token)
+   ----------------------------          ---------------------------
+   all prompt tokens at once             one token at a time
+   big matrix x big matrix               big matrix x ONE vector
+   arithmetic dominates                  MOVING THE WEIGHTS dominates
+   -&gt; COMPUTE-BOUND                      -&gt; MEMORY-BANDWIDTH-BOUND
+
+
+   DECODE, PER TOKEN:  read every weight once, do very little maths with it
+
+     7B model, FP16   =  14 GB of weights read PER TOKEN
+     at 2 TB/s HBM    =  ~7 ms/token   -&gt;   ~140 tokens/s ceiling
+
+     same model, INT4 =  3.5 GB read per token
+     at 2 TB/s        =  ~1.75 ms/token -&gt;  ~570 tokens/s ceiling
+
+   The maths did not get faster. There is simply 4x less to carry.</code></pre><p><strong>This is the reason quantization is the highest-leverage inference
+optimization</strong>, and the reason it helps decode far more than prefill.</p>
+<hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic.</strong> Quantization maps high-precision floats to a smaller numeric type. A
+tensor of FP16 values becomes INT8 or INT4 plus a <strong>scale</strong> (and often a
+<strong>zero-point</strong>) so the original range can be approximately recovered.</p>
+<pre class="code"><code>   real value  ≈  scale × (quantized_int − zero_point)</code></pre><p>The memory arithmetic everyone should be able to do in their head:</p>
+<div class="table-scroll"><table><thead><tr><th>Precision</th><th>Bytes/param</th><th>7B model</th><th>70B model</th></tr></thead><tbody><tr><td>FP32</td><td>4</td><td>28 GB</td><td>280 GB</td></tr><tr><td>FP16 / BF16</td><td>2</td><td>14 GB</td><td>140 GB</td></tr><tr><td>INT8 / FP8</td><td>1</td><td>7 GB</td><td>70 GB</td></tr><tr><td>INT4</td><td>0.5</td><td>3.5 GB</td><td>35 GB</td></tr></tbody></table></div><p>Add roughly 15–20% for the KV cache, activations and framework overhead. That
+table is what decides whether a model fits on the card you have — a 70B at INT4
+fits on a single 40GB A100; at FP16 it does not fit on two.</p>
+<p><strong>Intermediate — the axes that actually distinguish methods.</strong></p>
+<div class="table-scroll"><table><thead><tr><th>Axis</th><th>Options</th><th>Consequence</th></tr></thead><tbody><tr><td><strong>What is quantized</strong></td><td>Weights only / weights + activations</td><td>Weight-only is far easier and safer; activations carry outliers</td></tr><tr><td><strong>When</strong></td><td>Post-training (PTQ) / during training (QAT)</td><td>PTQ takes minutes; QAT needs a training run</td></tr><tr><td><strong>Granularity</strong></td><td>Per-tensor / per-channel / per-group</td><td>Finer granularity, better accuracy, slightly more overhead</td></tr><tr><td><strong>Symmetry</strong></td><td>Symmetric / asymmetric</td><td>Asymmetric handles skewed distributions, costs a zero-point</td></tr></tbody></table></div><p><strong>Advanced — the finding that shaped the whole field.</strong> Above roughly 6.7B
+parameters, transformers develop <strong>emergent outlier features</strong>: a small number
+of dimensions whose activations are 10–100× larger than the rest. Naive INT8
+quantization of activations destroys the model, because those outliers dominate
+the scale and everything else collapses into a couple of quantization levels.</p>
+<p>The responses to that discovery <em>are</em> the modern method landscape:</p>
+<div class="table-scroll"><table><thead><tr><th>Method</th><th>Core idea</th><th>Where it fits</th></tr></thead><tbody><tr><td><strong>LLM.int8()</strong></td><td>Keep outlier dimensions in FP16, quantize the rest to INT8</td><td>The original fix; simple, some overhead</td></tr><tr><td><strong>GPTQ</strong></td><td>Layer-by-layer, second-order-informed rounding against calibration data</td><td>Strong 4-bit accuracy, needs calibration</td></tr><tr><td><strong>AWQ</strong></td><td>Protect the ~1% of weights that matter most, guided by activation scale</td><td>Fast, robust, popular for 4-bit serving</td></tr><tr><td><strong>SmoothQuant</strong></td><td>Shift difficulty from activations into weights so both quantize well</td><td>Enables weight+activation INT8</td></tr><tr><td><strong>GGUF / llama.cpp k-quants</strong></td><td>Mixed per-block precision, CPU-friendly</td><td>Local and CPU inference</td></tr><tr><td><strong>FP8</strong></td><td>Hardware-native float8 on H100 and newer</td><td>Near-lossless, needs the silicon</td></tr></tbody></table></div><hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><p>Post-training quantization, in the order it happens:</p>
+<ol>
+<li><strong>Pick the target.</strong> Driven by the memory arithmetic above and the hardware
+you actually have, not by what sounds impressive.</li>
+<li><strong>Choose weight-only or weight+activation.</strong> Weight-only INT4 is the default
+for serving; it captures most of the bandwidth win with much less risk.</li>
+<li><strong>Gather calibration data</strong> — typically 128–512 samples. This is the step
+people rush, and it decides the result.</li>
+<li><strong>Run the quantizer.</strong> GPTQ or AWQ for 4-bit; minutes to a couple of hours.</li>
+<li><strong>Evaluate on your task</strong>, not on perplexity alone. See below.</li>
+<li><strong>Compare against the alternatives you did not take</strong> — a smaller model at
+FP16 is often better than a large one at INT4.</li>
+<li><strong>Deploy and measure real throughput</strong>, because the theoretical speedup
+assumes you were bandwidth-bound in the first place.</li>
+</ol>
+<pre class="mermaid">graph TD
+  A[FP16 checkpoint] --&gt; B{Fits in memory&lt;br/&gt;at acceptable speed?}
+  B --&gt;|yes| C[Ship it. Do nothing]
+  B --&gt;|no| D[Pick target precision from the memory table]
+  D --&gt; E[Gather calibration data&lt;br/&gt;from YOUR distribution]
+  E --&gt; F[Quantize: GPTQ / AWQ / FP8]
+  F --&gt; G[Evaluate on task metrics&lt;br/&gt;not perplexity alone]
+  G --&gt; H{Quality acceptable?}
+  H --&gt;|no| I[Coarser bits, finer granularity,&lt;br/&gt;or keep sensitive layers in FP16]
+  I --&gt; F
+  H --&gt;|yes| J[Benchmark real throughput]
+  J --&gt; K{Actually faster?}
+  K --&gt;|no| L[You were not bandwidth-bound.&lt;br/&gt;Look at batching instead]
+  K --&gt;|yes| M[Deploy]</pre><p><strong>Branch <code>K → L</code> catches a common disappointment.</strong> With large batches, decode
+stops being purely bandwidth-bound because each weight read is amortised across
+many sequences. Quantizing a heavily-batched server can produce a much smaller
+speedup than the memory arithmetic promised — the win is largest at batch size 1,
+which is exactly the interactive, single-user case.</p>
+<hr>
+<h2 id="4-uml-where-quantization-sits"><a class="anchor" href="#4-uml-where-quantization-sits">#</a>4 · UML — where quantization sits</h2><pre class="mermaid">graph LR
+  subgraph Offline[&quot;Offline, once&quot;]
+    A[FP16 checkpoint] --&gt; B[Calibration set]
+    B --&gt; C[Quantizer&lt;br/&gt;GPTQ / AWQ]
+    C --&gt; D[Quantized weights&lt;br/&gt;+ scales]
+  end
+  subgraph Serving[&quot;Per request&quot;]
+    D --&gt; E[Load into VRAM]
+    E --&gt; F[Prefill: compute-bound]
+    F --&gt; G[Decode loop:&lt;br/&gt;bandwidth-bound]
+    G --&gt; H[Dequantize block&lt;br/&gt;to FP16 in-kernel]
+    H --&gt; I[Matmul]
+    I --&gt; G
+  end</pre><p><strong>Note <code>H</code>.</strong> In weight-only quantization the arithmetic still happens in FP16 —
+weights are dequantized inside the kernel, block by block, as they are read.
+Nothing about the multiply got cheaper. The saving is entirely in the bytes
+crossing the memory bus, which is why the speedup tracks the compression ratio
+rather than any change in FLOPs.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">def memory_footprint(params_b: float, bits: int, kv_overhead: float = 0.18) -&gt; float:
+    &quot;&quot;&quot;Approximate VRAM in GB for a model at a given precision.
+
+    The overhead term covers the KV cache, activations and framework slack.
+    It grows with context length and batch size, so treat 0.18 as a floor for
+    interactive use rather than a promise.
+    &quot;&quot;&quot;
+    weights_gb = params_b * 1e9 * (bits / 8) / 1e9
+    return weights_gb * (1 + kv_overhead)
+
+
+def decode_ceiling(params_b: float, bits: int, bandwidth_tb_s: float = 2.0) -&gt; float:
+    &quot;&quot;&quot;Upper bound on tokens/second at batch size 1, from bandwidth alone.
+
+    Every weight is read once per token, so the ceiling is simply
+    bandwidth / bytes-per-pass. Real throughput lands below this -- attention
+    over the KV cache, kernel launches and sampling all cost time -- but if
+    your measured rate is far below this number, quantization is not your
+    bottleneck and you should look elsewhere.
+    &quot;&quot;&quot;
+    bytes_per_pass = params_b * 1e9 * (bits / 8)
+    return (bandwidth_tb_s * 1e12) / bytes_per_pass
+
+
+for bits in (16, 8, 4):
+    print(f&quot;7B @ INT{bits:&lt;2}  {memory_footprint(7, bits):5.1f} GB   &quot;
+          f&quot;ceiling ~{decode_ceiling(7, bits):5.0f} tok/s&quot;)</code></pre><pre class="code"><code>7B @ INT16   16.5 GB   ceiling ~  143 tok/s
+7B @ INT8     8.3 GB   ceiling ~  286 tok/s
+7B @ INT4     4.1 GB   ceiling ~  571 tok/s</code></pre><p><strong>Calibration data is the part that decides quality:</strong></p>
+<pre class="code"><code class="language-python">def calibration_samples(production_logs, n: int = 256) -&gt; list[str]:
+    &quot;&quot;&quot;Draw calibration data from real traffic, stratified by intent.
+
+    The quantizer decides which weights matter by watching activations on this
+    data. Calibrate on WikiText and deploy on customer support transcripts and
+    you have optimised for the wrong distribution -- perplexity will look fine
+    and your task metrics will not.
+
+    A few hundred samples is enough; representativeness beats volume.
+    &quot;&quot;&quot;
+    by_intent: dict[str, list[str]] = {}
+    for record in production_logs:
+        by_intent.setdefault(record[&quot;intent&quot;], []).append(record[&quot;text&quot;])
+
+    per_bucket = max(1, n // max(1, len(by_intent)))
+    out: list[str] = []
+    for texts in by_intent.values():
+        out.extend(texts[:per_bucket])
+    return out[:n]</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Perplexity is a bad acceptance test and it is the one everybody uses.</strong>
+Quantization papers report perplexity because it is cheap and comparable, but a
+0.1 perplexity increase can hide a large drop in a specific capability. The
+capabilities that degrade first, in roughly this order:</p>
+<ol>
+<li><strong>Long-context recall</strong> — retrieval from deep in the context window</li>
+<li><strong>Structured output</strong> — JSON validity, schema adherence, tool-call formatting</li>
+<li><strong>Multi-step reasoning</strong> — errors compound across steps</li>
+<li><strong>Rare languages and domain jargon</strong> — thin training signal, quantized away first</li>
+</ol>
+<p>If your product depends on tool calls or strict JSON, <strong>test exactly that</strong>. A
+model that has quietly lost 5% JSON validity is a production incident, and
+perplexity will not show it.</p>
+<p><strong>Quantize the KV cache too, and know that it is riskier.</strong> At long context the
+KV cache can exceed the weights. INT8 KV is usually safe; INT4 KV degrades
+long-context recall noticeably. Quantize weights first, measure, then consider
+the cache separately.</p>
+<p><strong>The comparison people forget to run.</strong> Before quantizing a large model, check
+the smaller model at full precision:</p>
+<div class="table-scroll"><table><thead><tr><th>Option</th><th>Memory</th><th>Typical outcome</th></tr></thead><tbody><tr><td>13B @ INT4</td><td>~7 GB</td><td>Often <em>worse</em> than the alternative below</td></tr><tr><td>7B @ FP16</td><td>~14 GB</td><td>Usually stronger on structured output and reasoning</td></tr><tr><td>13B @ INT8</td><td>~14 GB</td><td>Usually the best of the three</td></tr></tbody></table></div><p>There is no universal answer, but &quot;big model, aggressive quantization&quot; is not
+automatically better than &quot;smaller model, gentle quantization&quot;, and the
+assumption that it is costs teams real quality.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Wrong calibration distribution</strong></td><td>Benchmarks fine, production worse</td><td>Calibrate on real traffic, stratified</td></tr><tr><td><strong>Perplexity-only acceptance</strong></td><td>Subtle capability loss ships</td><td>Task metrics, especially JSON and tool calls</td></tr><tr><td><strong>Quantizing an under-batched server</strong></td><td>Expected 4×, got 1.2×</td><td>You were not bandwidth-bound; batch first</td></tr><tr><td><strong>INT4 KV cache at long context</strong></td><td>Recall from early context collapses</td><td>Keep KV at INT8 or FP16</td></tr><tr><td><strong>Uniform bits across layers</strong></td><td>Avoidable quality loss</td><td>Keep the first and last layers higher precision</td></tr><tr><td><strong>Ignoring hardware support</strong></td><td>INT4 kernels slower than FP16</td><td>Check the kernels exist for your GPU before choosing</td></tr></tbody></table></div><p><strong>Hardware determines what is even worth trying.</strong> FP8 needs Hopper or newer.
+INT4 needs good kernels — on hardware without them, dequantization overhead can
+make INT4 <em>slower</em> than FP16. The right order is: check what your silicon
+accelerates, then pick the format.</p>
+<p><strong>QAT versus PTQ, honestly.</strong> QAT gives better accuracy at very low bit widths
+(3-bit and below) but requires a training run, the data, and the expertise. For
+almost every application team, PTQ with GPTQ or AWQ at 4-bit is the right answer
+and QAT is a research project. Say that plainly rather than listing QAT as an
+equal option.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What quantization looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Faster responses, or the feature existing at all because it now fits on affordable hardware. The risk they carry is invisible: a subtly worse model that still sounds completely confident.</td></tr><tr><td><strong>Coder</strong></td><td>Pin the quantization method <em>and</em> its version alongside the model — a re-quantized checkpoint is a different model. Verify structured output after quantizing; that is what breaks first. Check kernel support before choosing a format.</td></tr><tr><td><strong>Tester</strong></td><td>Your regression suite is the acceptance test for quantization. Run it on the quantized model and gate on task metrics, never perplexity. Add a JSON-validity and tool-call-accuracy check specifically — they degrade before anything a benchmark measures.</td></tr><tr><td><strong>System designer</strong></td><td>Changes your memory budget, which changes batch size, which changes throughput — often more than the quantization itself. Model the whole chain, and measure at your real batch size, not at batch 1.</td></tr><tr><td><strong>Architect</strong></td><td>It is what makes self-hosting viable against an API. That is a build-versus-buy decision with a three-year shape: you take on serving, GPU capacity, and a quantization pipeline in exchange for per-token cost and data residency.</td></tr><tr><td><strong>CEO</strong></td><td>Roughly 4× less GPU memory means roughly 4× fewer GPUs for the same load, and the option to self-host at all. The risk is a quality loss nobody measured. Ask one question: what did the eval suite say before and after?</td></tr><tr><td><strong>Market</strong></td><td>Commoditised and moving fast — GPTQ, AWQ, GGUF, bitsandbytes are free and well-supported; vLLM and TensorRT-LLM handle serving. No moat. The moat is having an eval suite good enough to know whether the quantized model is still acceptable.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;Why does quantization make inference faster?&quot;</td><td>The central misconception</td><td>Decode is memory-bandwidth-bound: every weight is read once per token and very little arithmetic is done with it. Fewer bytes per pass means more tokens per second. The multiply is unchanged — weights are dequantized in-kernel.</td></tr><tr><td>&quot;INT8 or INT4?&quot;</td><td>Trade-off reasoning</td><td>Start at INT4 weight-only for serving; it captures most of the bandwidth win with modern methods. Go to INT8 if task metrics drop, especially structured output. And check whether a smaller model at higher precision beats both.</td></tr><tr><td>&quot;What breaks first when you quantize?&quot;</td><td>Depth beyond the definition</td><td>Long-context recall, structured output validity, multi-step reasoning, and rare languages. Perplexity barely moves for all of these, which is why perplexity is the wrong acceptance test.</td></tr><tr><td>&quot;Why do large models quantize worse than small ones?&quot;</td><td>Whether you know the outlier result</td><td>Emergent outlier features above roughly 6.7B: a few activation dimensions run 10–100× larger and dominate the scale. LLM.int8, SmoothQuant and AWQ are all responses to that.</td></tr><tr><td>&quot;You quantized to INT4 and got a 1.2× speedup, not 4×.&quot;</td><td>Systems thinking</td><td>You were not bandwidth-bound. Large batches amortise weight reads across sequences, so the win shrinks. Check batch size and whether you are prefill-heavy — quantization helps decode far more than prefill.</td></tr><tr><td>&quot;How much calibration data?&quot;</td><td>Practical knowledge</td><td>A few hundred samples, drawn from your real distribution and stratified by intent. Representativeness matters far more than volume; calibrating on generic web text and serving a domain workload is the classic mistake.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>explain the speedup in terms of memory bandwidth, not arithmetic,</li>
+<li>do the memory arithmetic for a 7B and a 70B at four precisions from memory,</li>
+<li>name the outlier-feature result and two methods that respond to it,</li>
+<li>list what degrades before perplexity does, and</li>
+<li>state the case where a smaller model at FP16 beats a bigger one at INT4.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Outlier features</td><td><em>LLM.int8(): 8-bit Matrix Multiplication for Transformers at Scale</em> (Dettmers et al., 2022)</td></tr><tr><td>4-bit PTQ</td><td><em>GPTQ</em> (Frantar et al., 2022) and <em>AWQ</em> (Lin et al., 2023)</td></tr><tr><td>Activation quantization</td><td><em>SmoothQuant</em> (Xiao et al., 2022)</td></tr><tr><td>Serving</td><td>vLLM and TensorRT-LLM docs — which formats are actually accelerated on which hardware</td></tr><tr><td>Honest evaluation</td><td>Any careful study reporting task metrics rather than perplexity alone; the gap between the two is the point</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="corrective-rag.html"><span>previous</span>Corrective & self-RAG</a><a class="pager next" href="distillation-and-pruning.html"><span>next</span>Distillation & pruning</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-where-quantization-sits">4 · UML — where quantization sits</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
