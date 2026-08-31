@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Research papers · LLM Handbook</title>
+<meta name="description" content="The papers worth reading, the papers worth naming, and an honest split between the two.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html" class="active">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="research-papers"><a class="anchor" href="#research-papers">#</a>Research papers</h1><p>Most reading lists are undifferentiated: fifty papers, no guidance, so you read
+none of them. This one is sorted by <strong>what you should actually do with each
+paper</strong>, because that is the decision you are making.</p>
+<div class="table-scroll"><table><thead><tr><th>Marker</th><th>Means</th></tr></thead><tbody><tr><td>📖 <strong>Read it</strong></td><td>Sit down with it. The paper itself teaches something a summary cannot</td></tr><tr><td>📄 <strong>Skim it</strong></td><td>Read the abstract, figures and conclusion. Twenty minutes</td></tr><tr><td>🏷️ <strong>Name it</strong></td><td>Know what it established and why. Reading it adds little</td></tr></tbody></table></div><p>A caution before the list: <strong>papers report results under their own conditions.</strong>
+A method that beat baselines on MS MARCO in 2023 may do nothing for your corpus.
+Read them for mechanisms and for the shape of the trade-off, not for numbers to
+quote.</p>
+<hr>
+<h2 id="if-you-only-read-ten"><a class="anchor" href="#if-you-only-read-ten">#</a>If you only read ten</h2><p>In this order. This is roughly two weekends and it covers the mechanisms
+underneath everything else.</p>
+<div class="table-scroll"><table><thead><tr><th>#</th><th>Paper</th><th>Why this one</th></tr></thead><tbody><tr><td>1</td><td>📖 <em>Attention Is All You Need</em> (2017)</td><td>The architecture. Everything refers back to it</td></tr><tr><td>2</td><td>📖 <em>The Illustrated Transformer</em> — Alammar (not a paper)</td><td>Read alongside #1; the figures do what the prose cannot</td></tr><tr><td>3</td><td>📖 <em>Chain-of-Thought Prompting</em> (2022)</td><td>Where reasoning-in-context came from</td></tr><tr><td>4</td><td>📖 <em>Lost in the Middle</em> (2023)</td><td>Why long context is not the answer you hoped</td></tr><tr><td>5</td><td>📖 <em>ReAct</em> (2022)</td><td>The agent loop, stated plainly</td></tr><tr><td>6</td><td>📖 <em>Judging LLM-as-a-Judge</em> (2023)</td><td>Judge biases, and the validation step everyone skips</td></tr><tr><td>7</td><td>📖 <em>LoRA</em> (2021)</td><td>How adaptation became cheap</td></tr><tr><td>8</td><td>📖 <em>LLM.int8()</em> (2022)</td><td>Emergent outliers — why big models quantize badly</td></tr><tr><td>9</td><td>📖 <em>PagedAttention / vLLM</em> (2023)</td><td>Why modern serving looks the way it does</td></tr><tr><td>10</td><td>📖 <em>Precise Zero-Shot Dense Retrieval</em> — HyDE (2022)</td><td>Short, surprising, changes how you think about retrieval</td></tr></tbody></table></div><hr>
+<h2 id="architecture-training"><a class="anchor" href="#architecture-training">#</a>Architecture & training</h2><div class="table-scroll"><table><thead><tr><th>Paper</th><th>Year</th><th>What it established</th><th>Do</th></tr></thead><tbody><tr><td><strong>Attention Is All You Need</strong></td><td>2017</td><td>The transformer. Attention replaces recurrence</td><td>📖</td></tr><tr><td><strong>BERT</strong></td><td>2018</td><td>Bidirectional pretraining; the encoder lineage</td><td>🏷️</td></tr><tr><td><strong>GPT-3 / Language Models are Few-Shot Learners</strong></td><td>2020</td><td>In-context learning emerges with scale</td><td>📄</td></tr><tr><td><strong>Scaling Laws for Neural Language Models</strong></td><td>2020</td><td>Loss follows predictable power laws in compute, data, parameters</td><td>📄</td></tr><tr><td><strong>Training Compute-Optimal LLMs (Chinchilla)</strong></td><td>2022</td><td>Most models were badly undertrained on data</td><td>📖</td></tr><tr><td><strong>LLaMA</strong></td><td>2023</td><td>Small models trained far longer beat larger undertrained ones</td><td>📄</td></tr><tr><td><strong>RoFormer (RoPE)</strong></td><td>2021</td><td>Rotary position embeddings; relative position, extrapolable</td><td>🏷️</td></tr><tr><td><strong>GQA</strong></td><td>2023</td><td>Grouped-query attention; shrinks the KV cache</td><td>🏷️</td></tr><tr><td><strong>Switch Transformer</strong></td><td>2021</td><td>Sparse mixture-of-experts at scale</td><td>🏷️</td></tr></tbody></table></div><p><strong>Chinchilla is the one to actually read</strong> in this section. It reframed the field
+— the finding that parameter count had been over-weighted relative to training
+tokens is why the useful small models exist at all.</p>
+<hr>
+<h2 id="prompting-reasoning"><a class="anchor" href="#prompting-reasoning">#</a>Prompting & reasoning</h2><div class="table-scroll"><table><thead><tr><th>Paper</th><th>Year</th><th>What it established</th><th>Do</th></tr></thead><tbody><tr><td><strong>Chain-of-Thought Prompting</strong></td><td>2022</td><td>Intermediate reasoning steps improve multi-step tasks</td><td>📖</td></tr><tr><td><strong>Self-Consistency</strong></td><td>2022</td><td>Sample several reasoning paths, take the majority answer</td><td>📄</td></tr><tr><td><strong>Tree of Thoughts</strong></td><td>2023</td><td>Search over reasoning branches</td><td>🏷️</td></tr><tr><td><strong>Take a Step Back</strong></td><td>2023</td><td>Abstracting the question first improves retrieval and reasoning</td><td>📄</td></tr><tr><td><strong>Calibrate Before Use</strong></td><td>2021</td><td>Few-shot output is biased by example order and label distribution</td><td>📖</td></tr><tr><td><strong>Language Models Don&#39;t Always Say What They Think</strong></td><td>2023</td><td>Stated reasoning can be unfaithful to the actual computation</td><td>📖</td></tr></tbody></table></div><p><strong>The last one matters more than its citation count suggests.</strong> It is the
+evidence behind &quot;chain-of-thought is not an explanation&quot;, and it is the paper to
+cite when someone proposes showing CoT to a regulator.</p>
+<hr>
+<h2 id="retrieval-rag"><a class="anchor" href="#retrieval-rag">#</a>Retrieval & RAG</h2><div class="table-scroll"><table><thead><tr><th>Paper</th><th>Year</th><th>What it established</th><th>Do</th></tr></thead><tbody><tr><td><strong>Dense Passage Retrieval (DPR)</strong></td><td>2020</td><td>Dense retrieval beats BM25 with the right training</td><td>📄</td></tr><tr><td><strong>RAG (Lewis et al.)</strong></td><td>2020</td><td>The name and the pattern</td><td>🏷️</td></tr><tr><td><strong>ColBERT</strong></td><td>2020</td><td>Late interaction: per-token vectors, MaxSim scoring</td><td>📖</td></tr><tr><td><strong>ColBERTv2</strong></td><td>2021</td><td>Made it storage-practical</td><td>📄</td></tr><tr><td><strong>HyDE / Precise Zero-Shot Dense Retrieval</strong></td><td>2022</td><td>Embed a hypothetical answer, not the question</td><td>📖</td></tr><tr><td><strong>Lost in the Middle</strong></td><td>2023</td><td>Recall degrades in the middle of long contexts</td><td>📖</td></tr><tr><td><strong>Self-RAG</strong></td><td>2023</td><td>Reflection tokens to critique retrieval and output</td><td>📄</td></tr><tr><td><strong>Corrective RAG (CRAG)</strong></td><td>2024</td><td>Grade retrieval, correct before generating</td><td>📄</td></tr><tr><td><strong>RAPTOR</strong></td><td>2024</td><td>Recursive summary trees over chunks</td><td>📄</td></tr><tr><td><strong>HNSW</strong></td><td>2016</td><td>The graph index nearly everything uses</td><td>📖</td></tr><tr><td><strong>Product Quantization</strong></td><td>2011</td><td>Vector compression for billion-scale search</td><td>🏷️</td></tr><tr><td><strong>Matryoshka Representation Learning</strong></td><td>2022</td><td>Embeddings truncatable to fewer dimensions</td><td>📄</td></tr><tr><td><strong>BEIR</strong></td><td>2021</td><td>Retrievers generalise worse across domains than benchmarks suggest</td><td>📖</td></tr></tbody></table></div><p><strong>BEIR is the sobering one.</strong> It shows retrieval methods that dominate one
+benchmark falling behind BM25 on out-of-domain data — which is the honest
+argument for hybrid retrieval and for evaluating on your own corpus.</p>
+<hr>
+<h2 id="evaluation"><a class="anchor" href="#evaluation">#</a>Evaluation</h2><div class="table-scroll"><table><thead><tr><th>Paper</th><th>Year</th><th>What it established</th><th>Do</th></tr></thead><tbody><tr><td><strong>Judging LLM-as-a-Judge (MT-Bench, Chatbot Arena)</strong></td><td>2023</td><td>Judge viability, and position/verbosity/self-enhancement bias</td><td>📖</td></tr><tr><td><strong>RAGAS</strong></td><td>2023</td><td>Reference-free RAG metrics</td><td>📄</td></tr><tr><td><strong>HELM</strong></td><td>2022</td><td>Multi-metric holistic evaluation, not a single score</td><td>📄</td></tr><tr><td><strong>Model Cards for Model Reporting</strong></td><td>2019</td><td>Disaggregated reporting as a norm</td><td>📖</td></tr><tr><td><strong>Inherent Trade-Offs in Fair Classification</strong></td><td>2017</td><td>Fairness criteria cannot all hold simultaneously</td><td>📖</td></tr><tr><td><strong>Learning under Concept Drift: A Review</strong></td><td>2019</td><td>Drift taxonomy and detection methods</td><td>📄</td></tr></tbody></table></div><p><strong>Chouldechova (2017) and Kleinberg et al. (2016)</strong> are the fairness
+impossibility results. Short, mathematical, and they settle an argument that
+otherwise recurs forever in product meetings.</p>
+<hr>
+<h2 id="efficiency-serving"><a class="anchor" href="#efficiency-serving">#</a>Efficiency & serving</h2><div class="table-scroll"><table><thead><tr><th>Paper</th><th>Year</th><th>What it established</th><th>Do</th></tr></thead><tbody><tr><td><strong>LLM.int8()</strong></td><td>2022</td><td>Emergent outlier features above ~6.7B parameters</td><td>📖</td></tr><tr><td><strong>GPTQ</strong></td><td>2022</td><td>Accurate one-shot 4-bit post-training quantization</td><td>📄</td></tr><tr><td><strong>AWQ</strong></td><td>2023</td><td>Activation-aware weight quantization</td><td>📄</td></tr><tr><td><strong>SmoothQuant</strong></td><td>2022</td><td>Shift difficulty from activations to weights</td><td>📄</td></tr><tr><td><strong>QLoRA</strong></td><td>2023</td><td>Fine-tuning a 4-bit base with adapters</td><td>📖</td></tr><tr><td><strong>FlashAttention</strong></td><td>2022</td><td>IO-aware attention; same maths, far less memory traffic</td><td>📖</td></tr><tr><td><strong>PagedAttention / vLLM</strong></td><td>2023</td><td>KV cache paging; the modern serving design</td><td>📖</td></tr><tr><td><strong>Orca</strong></td><td>2022</td><td>Iteration-level (continuous) batching</td><td>📄</td></tr><tr><td><strong>Speculative Decoding</strong></td><td>2022–23</td><td>Draft-and-verify; faster with identical output</td><td>📄</td></tr><tr><td><strong>The Lottery Ticket Hypothesis</strong></td><td>2018</td><td>Sparse subnetworks that train as well as the whole</td><td>🏷️</td></tr><tr><td><strong>SparseGPT</strong></td><td>2023</td><td>One-shot pruning of large models</td><td>📄</td></tr><tr><td><strong>Are Sixteen Heads Really Better than One?</strong></td><td>2019</td><td>Many attention heads are removable</td><td>📄</td></tr><tr><td><strong>The Unreasonable Ineffectiveness of the Deeper Layers</strong></td><td>2024</td><td>Depth pruning often beats width pruning</td><td>📄</td></tr></tbody></table></div><hr>
+<h2 id="agents-tools-adaptation"><a class="anchor" href="#agents-tools-adaptation">#</a>Agents, tools & adaptation</h2><div class="table-scroll"><table><thead><tr><th>Paper</th><th>Year</th><th>What it established</th><th>Do</th></tr></thead><tbody><tr><td><strong>ReAct</strong></td><td>2022</td><td>Interleaved reasoning and acting</td><td>📖</td></tr><tr><td><strong>Reflexion</strong></td><td>2023</td><td>Verbal self-critique between attempts</td><td>📄</td></tr><tr><td><strong>Toolformer</strong></td><td>2023</td><td>Models learning when to call tools</td><td>🏷️</td></tr><tr><td><strong>LoRA</strong></td><td>2021</td><td>Low-rank adaptation of frozen weights</td><td>📖</td></tr><tr><td><strong>InstructGPT / RLHF</strong></td><td>2022</td><td>Preference alignment as a training stage</td><td>📖</td></tr><tr><td><strong>Direct Preference Optimization (DPO)</strong></td><td>2023</td><td>Preference optimisation without a reward model</td><td>📄</td></tr><tr><td><strong>Constitutional AI</strong></td><td>2022</td><td>AI feedback against written principles</td><td>📄</td></tr><tr><td><strong>LIMA</strong></td><td>2023</td><td>1,000 curated examples beat far larger noisy sets</td><td>📖</td></tr><tr><td><strong>Not What You&#39;ve Signed Up For</strong></td><td>2023</td><td>Indirect prompt injection via retrieved content</td><td>📖</td></tr></tbody></table></div><p><strong>LIMA is the one to read if you are about to fine-tune.</strong> It is the strongest
+published argument that data curation, not volume, is the work.</p>
+<hr>
+<h2 id="how-to-read-one-of-these-efficiently"><a class="anchor" href="#how-to-read-one-of-these-efficiently">#</a>How to read one of these efficiently</h2><p>Most papers do not need a linear read. A method that works:</p>
+<ol>
+<li><strong>Abstract, then figures.</strong> The figures usually carry the contribution. If
+you cannot tell what the paper claims after the figures, the abstract was
+badly written, not you.</li>
+<li><strong>Conclusion before the method.</strong> It tells you what to look for.</li>
+<li><strong>Method section only if you need the mechanism.</strong> Often you do not.</li>
+<li><strong>Skip the related work</strong> unless you are surveying the field.</li>
+<li><strong>Read the limitations section.</strong> It is the most honest part of most papers
+and the fastest route to knowing whether it applies to you.</li>
+<li><strong>Check the baselines.</strong> A large improvement over a weak baseline is a weak
+result, and this is where over-claiming hides.</li>
+</ol>
+<p>Twenty minutes per paper on that method covers far more ground than two hours
+of linear reading, and retains more.</p>
+<hr>
+<h2 id="staying-current-without-drowning"><a class="anchor" href="#staying-current-without-drowning">#</a>Staying current without drowning</h2><p>Papers are a poor way to track a fast field — by publication, results are months
+old. More useful:</p>
+<div class="table-scroll"><table><thead><tr><th>Source</th><th>What it is good for</th></tr></thead><tbody><tr><td><strong>Model and API changelogs</strong></td><td>What actually changed in the thing you depend on</td></tr><tr><td><strong>vLLM, llama.cpp, PEFT release notes</strong></td><td>What is now practical, not merely published</td></tr><tr><td><strong>Anthropic / OpenAI engineering docs</strong></td><td>Prompting and tool-use guidance from people with the logs</td></tr><tr><td><strong>Simon Willison&#39;s blog</strong></td><td>The clearest sustained coverage of injection and practical LLM engineering</td></tr><tr><td><strong>BEIR, MTEB, ANN-Benchmarks leaderboards</strong></td><td>Comparable numbers across methods</td></tr><tr><td><strong>Conference proceedings</strong> (NeurIPS, ICML, ACL, EMNLP)</td><td>Depth, once a year, when you have time</td></tr></tbody></table></div><p><strong>A discipline worth adopting:</strong> when a paper or release seems relevant, write
+one line in your own notes saying what you would <em>change</em> because of it. If you
+cannot write that line, you did not need the paper — and this is also the habit
+that turns reading into something you can talk about.</p>
+<hr>
+<h2 id="an-honest-caveat"><a class="anchor" href="#an-honest-caveat">#</a>An honest caveat</h2><p>Citations here are given by title, primary author and year so you can find them.
+<strong>Verify details before quoting a specific number or author list</strong> — venues,
+author orders and reported figures are exactly the kind of detail that is easy
+to get subtly wrong, and being confidently wrong about a paper in an interview
+is worse than not having read it.</p>
+<p>The safe form is: <em>&quot;the LLM.int8 paper showed that above roughly seven billion
+parameters, a small number of activation dimensions become extreme outliers,
+which is why naive INT8 breaks.&quot;</em> That is the mechanism, it is what matters, and
+it does not depend on a number you half-remember.</p>
+</article>
+    <div class="pager-row"><a class="pager previous" href="glossary.html"><span>previous</span>Glossary</a><a class="pager next" href="numbers-to-know.html"><span>next</span>Numbers to know</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#if-you-only-read-ten">If you only read ten</a></li><li class="d2"><a href="#architecture-training">Architecture &amp; training</a></li><li class="d2"><a href="#prompting-reasoning">Prompting &amp; reasoning</a></li><li class="d2"><a href="#retrieval-rag">Retrieval &amp; RAG</a></li><li class="d2"><a href="#evaluation">Evaluation</a></li><li class="d2"><a href="#efficiency-serving">Efficiency &amp; serving</a></li><li class="d2"><a href="#agents-tools-adaptation">Agents, tools &amp; adaptation</a></li><li class="d2"><a href="#how-to-read-one-of-these-efficiently">How to read one of these efficiently</a></li><li class="d2"><a href="#staying-current-without-drowning">Staying current without drowning</a></li><li class="d2"><a href="#an-honest-caveat">An honest caveat</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
