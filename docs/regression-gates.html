@@ -1,0 +1,279 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Regression gates in CI · LLM Handbook</title>
+<meta name="description" content="Turning an eval score into a merge decision, without a gate so tight it gets switched off.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html" class="active">Regression gates in CI</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="regression-gates-in-ci"><a class="anchor" href="#regression-gates-in-ci">#</a>Regression gates in CI</h1><blockquote>
+<p><strong>The one sentence:</strong> an eval nobody gates on is a dashboard, and dashboards
+get ignored within about three weeks.</p>
+</blockquote>
+<p>The gate is what turns quality from an opinion into a reviewed diff. It is also
+the part most likely to be deleted by an irritated colleague at 6pm on a Friday,
+which is a design constraint, not a people problem.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   WHAT A GATE ACTUALLY COMPARES
+
+                    committed baseline           this run
+                    ------------------           --------
+   headline           primary 0.92               primary 0.89
+   per bucket         paraphrase 0.75            paraphrase 0.38   &lt;-- the real story
+   per item           {rag-001: 1, ...}          {rag-001: 0, ...}
+   provenance         corpus b962a80f            corpus b962a80f
+                      dataset 1c640984           dataset 1c640984
+
+          THREE INDEPENDENT CHECKS, because each catches what the others cannot
+
+   floor          primary &gt;= 0.70   ......  stops slow decay, one acceptable step at a time
+   regression     delta  &gt;= -0.06   ......  stops one change giving back too much at once
+   bucket floor   every bucket &gt;= 0.50 ...  stops a small bucket dying inside the noise band
+
+          AND ONE REFUSAL
+
+   if corpus or dataset hash changed -&gt; DO NOT COMPARE.
+   Different measurement. Say so; do not report a &quot;regression&quot;.</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic.</strong> A gate needs a <strong>committed baseline</strong>, a <strong>policy</strong>, and an <strong>exit
+code</strong>. Without the exit code it is a report; without the committed baseline the
+number has nothing to be compared against.</p>
+<p><strong>Intermediate — why three checks and not one.</strong></p>
+<div class="table-scroll"><table><thead><tr><th>Check</th><th>Catches</th><th>Misses on its own</th></tr></thead><tbody><tr><td><strong>Absolute floor</strong></td><td>Slow decay over many PRs, each individually acceptable</td><td>A drop from excellent to merely-above-floor</td></tr><tr><td><strong>Max regression</strong></td><td>A single change giving back a lot</td><td>Death by a thousand cuts, each under the limit</td></tr><tr><td><strong>Per-bucket floor</strong></td><td>A small category collapsing</td><td>Nothing much — this is the highest-value check and the most often missing</td></tr></tbody></table></div><p>The bucket check matters more than people expect. On a 50-item set, a six-item
+bucket going from 1.00 to 0.00 moves the headline by 12 points — which sits
+comfortably inside the ±11-point confidence interval at that sample size. The
+aggregate cannot see it. The bucket check sees nothing else.</p>
+<p><strong>Advanced — the threshold is set by your noise floor, not by ambition.</strong> At
+n=50 and p≈0.9 the 95% interval is roughly ±8 points. A gate set at &quot;no
+regression greater than 2 points&quot; will fail on noise, roughly monthly, for no
+reason. It will then be disabled, and you will have no gate at all.</p>
+<p><strong>Set <code>max_regression</code> above your noise floor and get your precision from paired
+comparison instead.</strong> Same items, both runs, count the flips. Shared variance
+cancels, so a paired comparison detects a real change with far fewer items than
+comparing two aggregates ever could.</p>
+<pre class="code"><code>   n=50, p=0.9   -&gt;  95% CI is about +/- 8 points
+   so:  a 3-point &quot;improvement&quot; is not evidence
+        a gate at 2 points is a noise generator
+        a gate at 6 points is a real guard that survives contact with a team</code></pre><hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><ol>
+<li>A change lands — new prompt, new chunk size, new embedding model, or the
+vendor bumped the model underneath you.</li>
+<li>CI runs the frozen dataset through the runner.</li>
+<li>Scorers produce <strong>per-item</strong> results, aggregated per bucket and overall.</li>
+<li>The gate loads the committed baseline and <strong>checks provenance first</strong> — if
+the corpus or dataset hash moved, it refuses to compare rather than
+reporting a meaningless delta.</li>
+<li>Three checks applied. Any failure fails the build.</li>
+<li>The output names <strong>which items flipped</strong>, because that is the only part a
+reviewer actually reads.</li>
+<li>On a deliberate improvement, someone runs the baseline command and commits
+the new scores — a reviewed diff, not an automatic overwrite.</li>
+</ol>
+<pre class="mermaid">graph TD
+  A[Change lands] --&gt; B[Run frozen dataset]
+  B --&gt; C[Per-item scores + buckets]
+  C --&gt; D{Corpus / dataset hash&lt;br/&gt;same as baseline?}
+  D --&gt;|no| E[Refuse comparison&lt;br/&gt;enforce floors only]
+  D --&gt;|yes| F{Below absolute floor?}
+  F --&gt;|yes| X[FAIL]
+  F --&gt;|no| G{Any bucket below floor?}
+  G --&gt;|yes| X
+  G --&gt;|no| H{Regressed more&lt;br/&gt;than allowance?}
+  H --&gt;|yes| X
+  H --&gt;|no| I[PASS: merge]
+  X --&gt; J[Comment: which items flipped]
+  J --&gt; K[Fix, or accept and re-baseline in a reviewed diff]
+  K --&gt; B</pre><p>Step 7 is deliberately manual. <strong>Accepting a quality change is a decision
+somebody signs off on</strong>, not something that happens silently on a green run.</p>
+<hr>
+<h2 id="4-uml-the-tiers"><a class="anchor" href="#4-uml-the-tiers">#</a>4 · UML — the tiers</h2><p>Gating everything on every push is how you end up gating nothing.</p>
+<pre class="mermaid">graph LR
+  subgraph PR[&quot;Pull request - must be fast and deterministic&quot;]
+    A1[Scorer unit tests]
+    A2[Dataset validation]
+    A3[Deterministic metrics:&lt;br/&gt;retrieval hit rate, schema, exact match]
+  end
+  subgraph Nightly[&quot;Nightly - slow or costly&quot;]
+    B1[LLM judge over the full set]
+    B2[Real model stack]
+    B3[Chaos and failure injection]
+  end
+  subgraph Release[&quot;Release - human in the loop&quot;]
+    C1[Stratified human review]
+    C2[Deliberate re-baseline]
+  end
+  PR --&gt;|blocks merge| Nightly --&gt;|files an issue| Release</pre><p><strong>The PR lane blocks; the nightly lane files an issue.</strong> A slow, timing-sensitive
+or paid check that can block a merge will be deleted. The same check on a
+nightly schedule survives for years.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><p>The gate as pure policy — no I/O, no <code>sys.exit</code>, so it can be unit-tested like
+any other function. This is the shape used in the companion Inferno project.</p>
+<pre class="code"><code class="language-python">from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True)
+class Thresholds:
+    primary_floor: float = 0.70
+    max_regression: float = 0.06   # above the noise floor on purpose
+    bucket_floor: float = 0.50
+
+
+@dataclass
+class GateResult:
+    passed: bool
+    reasons: list[str] = field(default_factory=list)
+    notes: list[str] = field(default_factory=list)
+
+
+def check(report, baseline, t=Thresholds()) -&gt; GateResult:
+    out = GateResult(passed=True)
+    primary = report.metrics[&quot;primary&quot;]
+    low, high = report.interval[&quot;primary&quot;]
+    out.notes.append(f&quot;primary {primary:.4f} (95% CI {low:.2f}-{high:.2f}, n={report.n})&quot;)
+
+    if primary &lt; t.primary_floor:
+        out.passed = False
+        out.reasons.append(f&quot;primary {primary:.4f} below floor {t.primary_floor:.2f}&quot;)
+
+    # Aggregates are blind. A small bucket can collapse entirely while the
+    # headline moves less than the confidence interval.
+    for name, bucket in report.by_bucket.items():
+        if bucket[&quot;primary&quot;] &lt; t.bucket_floor:
+            out.passed = False
+            out.reasons.append(f&quot;bucket {name!r} {bucket[&#39;primary&#39;]:.4f} below floor&quot;)
+
+    if baseline is None:
+        out.notes.append(&quot;no baseline: floors enforced, regression check skipped&quot;)
+        return out
+
+    # A changed corpus or dataset means the two runs measured different things.
+    # Reporting that as a regression would be a lie with a number attached.
+    for label, key in ((&quot;corpus&quot;, &quot;corpus_hash&quot;), (&quot;dataset&quot;, &quot;dataset_hash&quot;)):
+        if baseline.get(key) and baseline[key] != getattr(report, key):
+            out.notes.append(f&quot;{label} changed: comparison skipped, re-baseline deliberately&quot;)
+            return out
+
+    delta = primary - baseline[&quot;metrics&quot;][&quot;primary&quot;]
+    fixed, broken = mcnemar_counts(baseline.get(&quot;per_item&quot;, {}), report.per_item)
+    out.notes.append(f&quot;delta {delta:+.4f} ({fixed} fixed, {broken} broken)&quot;)
+
+    if delta &lt; -t.max_regression:
+        out.passed = False
+        out.reasons.append(f&quot;regressed {delta:+.4f}, beyond -{t.max_regression:.2f}&quot;)
+
+    return out
+
+
+def mcnemar_counts(baseline: dict, candidate: dict) -&gt; tuple[int, int]:
+    &quot;&quot;&quot;Discordant pairs over the SAME items.
+
+    Comparing two aggregate numbers from two runs hides both directions of
+    change. Comparing per-item outcomes cancels the variance the runs share,
+    which is why this detects a real difference on far fewer items.
+    &quot;&quot;&quot;
+    shared = baseline.keys() &amp; candidate.keys()
+    return (
+        sum(1 for i in shared if candidate[i] &gt; baseline[i]),
+        sum(1 for i in shared if candidate[i] &lt; baseline[i]),
+    )</code></pre><p><strong>Worked example:</strong> the <a href="https://github.com/SAGARCHRY0777/inferno">Inferno eval harness</a>
+implements exactly this, gating a 50-item golden set with a committed baseline,
+a Wilson interval on every rate, and per-bucket floors. Its <code>docs/EVALUATION.md</code>
+records the numbers and the three ways they can mislead.</p>
+<hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>A gate that cannot fail is decoration.</strong> Verify it the way you verify a
+failure test: deliberately break the system, confirm the gate goes red, and
+write down what the failure looked like. A gate nobody has watched fail is an
+assumption.</p>
+<p><strong>Goodhart arrives on schedule.</strong> Once a number gates merges, people optimise
+the number. Keep a locked holdout the team does not tune against, and expect the
+gap between dev and holdout to be the honest estimate of how much you have
+overfitted to your own test set.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Gate too tight</strong></td><td>Fails on noise; gets disabled</td><td>Set the allowance above the confidence interval</td></tr><tr><td><strong>Gate too loose</strong></td><td>Never fires; quality drifts down</td><td>Add the per-bucket floor; it fires when aggregates cannot</td></tr><tr><td><strong>Flaky suite</strong></td><td>±5 points with no code change</td><td>temperature 0, pinned model <em>version</em>, frozen corpus, cached embeddings, deterministic tie-breaks</td></tr><tr><td><strong>Silent staleness</strong></td><td>Trend drifts, nobody knows why</td><td>Hash the corpus and dataset into every report; refuse cross-hash comparisons</td></tr><tr><td><strong>Judge on the PR lane</strong></td><td>Cost spikes; team switches it off</td><td>Deterministic checks gate; judge runs nightly</td></tr><tr><td><strong>Baseline auto-updated</strong></td><td>Regressions silently accepted</td><td>Re-baselining is a manual, reviewed commit</td></tr></tbody></table></div><p><strong>Auto-updating the baseline is the subtlest of these and the most damaging.</strong>
+If a green run rewrites the baseline, quality can walk downhill indefinitely,
+one within-tolerance step at a time, and every individual run looks fine. The
+baseline must be a file a human changed in a pull request.</p>
+<p><strong>At scale you stop running everything.</strong> Past a few thousand items, run a
+stratified sample per PR and the full set nightly. Store per-item results as
+rows over time, never as an aggregate — six months later the only question that
+matters is <em>when did this item start failing</em>, and an average cannot answer it.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What the gate looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Invisible, and that is the product: the regression that would have reached them was caught 90 seconds after the commit instead of in their inbox.</td></tr><tr><td><strong>Coder</strong></td><td>A red build with a list of item ids. The useful habit is reading the flipped items before touching the threshold — the gate is usually right and the change usually is the problem.</td></tr><tr><td><strong>Tester</strong></td><td>You own the policy, not just the tests. Choosing the floor, the allowance and the buckets <em>is</em> the testing strategy for a non-deterministic system.</td></tr><tr><td><strong>System designer</strong></td><td>Two lanes with different guarantees: fast deterministic checks that block, slow expensive ones that report. Decide what happens when the eval service is down — skip and mark incomplete, never pass.</td></tr><tr><td><strong>Architect</strong></td><td>The committed baseline is an organisational artefact, not a build artefact. It is the record of what quality the team agreed to, and it belongs in review like any other contract.</td></tr><tr><td><strong>CEO</strong></td><td>This is the mechanism that makes quality a reviewed decision rather than a hope. Two questions worth asking: has the gate ever actually blocked something, and who is allowed to lower it?</td></tr><tr><td><strong>Market</strong></td><td>Every eval vendor sells the runner and the dashboard. Almost none sell the gate, because gating is a policy decision that has to live in your CI. The runner is commodity; the policy is yours.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;How do you stop LLM quality regressing?&quot;</td><td>Whether you have shipped this</td><td>Frozen golden set, committed baseline, three checks — absolute floor, max regression, per-bucket floor — wired to the exit code, with the PR comment naming the flipped items.</td></tr><tr><td>&quot;Why gate per bucket as well as overall?&quot;</td><td>Depth</td><td>Aggregates are blind. A six-item bucket collapsing moves a 50-item headline by 12 points, which is inside the noise band. The bucket check is the only one that sees it.</td></tr><tr><td>&quot;You set the gate at 2 points and it keeps failing.&quot;</td><td>Statistical literacy</td><td>The allowance is under the noise floor. At n=50 the interval is about ±8 points. Raise the allowance above the noise and get precision from paired per-item comparison instead.</td></tr><tr><td>&quot;Should a green run update the baseline automatically?&quot;</td><td>Judgement</td><td>No. Quality would walk downhill one within-tolerance step at a time with every run looking fine. Re-baselining is a manual commit somebody reviews.</td></tr><tr><td>&quot;Someone edited the corpus. What should the gate do?&quot;</td><td>Rigour</td><td>Refuse to compare. The hashes differ, so the runs measured different things; report that and enforce floors only. Calling it a regression would be a confident lie.</td></tr><tr><td>&quot;How do you know your gate works?&quot;</td><td>Seniority</td><td>Break the system on purpose and watch it go red. Same discipline as a chaos test — a gate nobody has seen fail is an assumption, not a control.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>name the three checks and what each catches that the others cannot,</li>
+<li>explain why the allowance must sit above the confidence interval,</li>
+<li>say why re-baselining is manual,</li>
+<li>describe what the gate does when the corpus hash changes, and</li>
+<li>state which lane a judge belongs in, and why.</li>
+</ol>
+</article>
+    <div class="pager-row"><a class="pager previous" href="drift-detection.html"><span>previous</span>Drift detection</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-the-tiers">4 · UML — the tiers</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

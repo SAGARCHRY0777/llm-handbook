@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Drift detection · LLM Handbook</title>
+<meta name="description" content="Detecting that the world moved under a model that did not, and deciding whether it is worth doing anything about.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html" class="active">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="drift-detection"><a class="anchor" href="#drift-detection">#</a>Drift detection</h1><blockquote>
+<p><strong>The one sentence:</strong> a model does not get worse — the world moves, and the
+model stays where it was.</p>
+</blockquote>
+<p>Drift is the only failure mode in this handbook where <strong>nothing breaks</strong>. No
+exception, no alert, no failed test. The system keeps returning confident
+answers at the same latency, and they get quietly less right. That is what makes
+it a monitoring problem rather than a testing one.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   THE THREE THINGS THAT CAN MOVE, AND WHAT EACH ONE MEANS
+
+   P(X)          the inputs                -&gt; DATA / COVARIATE DRIFT
+                 new vocabulary, new customers, a new sensor
+                 model may still be fine
+
+   P(Y|X)        the input-&gt;output rule    -&gt; CONCEPT DRIFT
+                 the same question now has a different right answer
+                 model is now wrong. This is the one that hurts
+
+   P(Y)          the label mix             -&gt; PRIOR / LABEL SHIFT
+                 failures got rarer because you fixed things
+                 thresholds are now miscalibrated
+
+
+   AND THE ONE THAT IS NOT DRIFT AT ALL:
+
+   the vendor silently upgraded the model    -&gt; YOUR SYSTEM MOVED
+                                                not the world.
+                                                Different fix entirely.</code></pre><p><strong>Distinguishing these four is the whole skill.</strong> Every one of them shows up in
+a dashboard as &quot;the numbers changed&quot;, and every one has a different remedy.
+Retraining fixes concept drift. It does nothing for a vendor model swap, and it
+actively wastes money on benign covariate drift.</p>
+<hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic.</strong> A drift detector is a <strong>reference window</strong>, a <strong>current window</strong>, a
+<strong>distance measure</strong>, and a <strong>threshold</strong>. You are asking one question: is what
+I am seeing now plausibly from the same distribution as what I saw then?</p>
+<p><strong>Intermediate.</strong> Which distance you pick depends entirely on what you are
+comparing:</p>
+<div class="table-scroll"><table><thead><tr><th>What you are watching</th><th>Measure</th><th>Why this one</th></tr></thead><tbody><tr><td>A numeric feature</td><td>Kolmogorov–Smirnov, or PSI</td><td>Distribution-free, no assumption of normality</td></tr><tr><td>A categorical feature</td><td>Chi-square, or PSI</td><td>Handles unordered categories</td></tr><tr><td>Embeddings / text</td><td>MMD, or distance-to-centroid</td><td>Works in high dimensions where per-feature tests fall apart</td></tr><tr><td>Model confidence</td><td>KS on the score distribution</td><td>A label-free proxy — see below</td></tr><tr><td>Output length, refusal rate</td><td>Simple rate + control chart</td><td>Cheap and startlingly effective</td></tr></tbody></table></div><p><strong>Population Stability Index</strong> is the one you will meet most in industry
+because it is simple and has conventional bands:</p>
+<div class="table-scroll"><table><thead><tr><th>PSI</th><th>Conventional reading</th></tr></thead><tbody><tr><td>&lt; 0.1</td><td>No meaningful shift</td></tr><tr><td>0.1 – 0.25</td><td>Moderate — investigate</td></tr><tr><td>&gt; 0.25</td><td>Significant — act</td></tr></tbody></table></div><p>Treat those bands as folklore with a useful shape, not as physics. They come
+from credit scoring and they are not calibrated for your data.</p>
+<p><strong>Advanced — the point most people miss.</strong> For an LLM system, per-feature
+statistical drift is usually the <em>wrong instrument</em>. There are no tidy tabular
+features; the input is text. What actually works:</p>
+<ol>
+<li><strong>Embed the inputs and watch the embedding distribution.</strong> Distance from the
+reference centroid, or MMD between windows. Catches &quot;users started asking
+about a product that did not exist last quarter&quot;.</li>
+<li><strong>Watch cheap behavioural proxies.</strong> Refusal rate, retrieval score
+distribution, answer length, tool-call frequency, &quot;no relevant documents
+found&quot; rate. These need no labels, cost nothing, and move before quality does.</li>
+<li><strong>Watch the retrieval layer separately from the model.</strong> In RAG, the most
+common real drift is that the <em>corpus</em> went stale, not that the model did. No
+amount of model monitoring finds that.</li>
+</ol>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><p>What actually happens, in order, and where teams stop too early:</p>
+<ol>
+<li><strong>Freeze a reference window.</strong> Usually the data the current model was
+validated on. Store it, do not recompute it — a rolling reference silently
+normalises away slow drift, which is the drift you most want to catch.</li>
+<li><strong>Compute the same statistics on a current window.</strong> Size it by volume, not
+by time: &quot;1,000 requests&quot; is stable; &quot;one day&quot; is not, when traffic is
+seasonal.</li>
+<li><strong>Compare and score.</strong> Distance measure per monitored signal.</li>
+<li><strong>Alert on persistence, not on a single breach.</strong> Require <em>k</em> consecutive
+windows. One bad window is a Monday, not a trend.</li>
+<li><strong>Triage: which of the four things moved?</strong> This is the step that gets
+skipped, and skipping it is why so many drift alerts end in a pointless
+retrain.</li>
+<li><strong>Decide.</strong> Retrain, re-embed the corpus, adjust a threshold, or do nothing
+and write down why.</li>
+<li><strong>Feed confirmed failures into the golden set.</strong> The eval set only ever
+grows. This is the ratchet that stops the same drift surprising you twice.</li>
+</ol>
+<pre class="mermaid">graph TD
+  A[Frozen reference window] --&gt; C[Compare]
+  B[Current window] --&gt; C
+  C --&gt; D{Distance over threshold&lt;br/&gt;for k consecutive windows?}
+  D --&gt;|no| B
+  D --&gt;|yes| E[Triage: what actually moved?]
+  E --&gt; F[Inputs changed&lt;br/&gt;covariate]
+  E --&gt; G[Right answer changed&lt;br/&gt;concept]
+  E --&gt; H[Corpus went stale]
+  E --&gt; I[Vendor changed the model]
+  F --&gt; J{Quality actually down?}
+  J --&gt;|no| K[Log it. Do nothing]
+  J --&gt;|yes| L[Retrain or expand coverage]
+  G --&gt; L
+  H --&gt; M[Re-index. Re-embed]
+  I --&gt; N[Re-baseline. Re-validate the judge]
+  L --&gt; O[Add failures to the golden set]
+  M --&gt; O
+  N --&gt; O</pre><p><strong>Branch <code>J → K</code> is the mature one.</strong> Covariate drift with no quality impact is
+extremely common and needs no action beyond a note. A team that retrains on
+every drift alert burns money and introduces risk for nothing.</p>
+<hr>
+<h2 id="4-uml-detector-as-a-state-machine"><a class="anchor" href="#4-uml-detector-as-a-state-machine">#</a>4 · UML — detector as a state machine</h2><pre class="mermaid">stateDiagram-v2
+    [*] --&gt; Calibrating: reference window collected
+    Calibrating --&gt; Stable: thresholds set
+    Stable --&gt; Suspect: distance over threshold
+    Suspect --&gt; Stable: recovered before k windows
+    Suspect --&gt; Alerting: k consecutive breaches
+    Alerting --&gt; Triage: human or agent picks it up
+    Triage --&gt; Accepted: benign, thresholds widened
+    Triage --&gt; Remediating: retrain / re-index / re-baseline
+    Accepted --&gt; Stable
+    Remediating --&gt; Calibrating: new reference window
+    note right of Suspect
+      The hysteresis that stops
+      a single noisy window
+      paging someone at 3am
+    end note</pre><p>The <code>Suspect</code> state is what separates a usable detector from one the team mutes
+within a fortnight.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><p>Two detectors: PSI for a numeric signal, and an embedding-centroid detector for
+text, which is the one that matters for LLM inputs.</p>
+<pre class="code"><code class="language-python">import numpy as np
+
+
+def psi(reference: np.ndarray, current: np.ndarray, bins: int = 10) -&gt; float:
+    &quot;&quot;&quot;Population Stability Index between two samples.
+
+    Bin edges come from the REFERENCE only. Re-binning on the current window
+    would move the goalposts with the data and hide the very shift being
+    measured.
+    &quot;&quot;&quot;
+    edges = np.quantile(reference, np.linspace(0, 1, bins + 1))
+    edges[0], edges[-1] = -np.inf, np.inf
+
+    ref_frac = np.histogram(reference, bins=edges)[0] / len(reference)
+    cur_frac = np.histogram(current, bins=edges)[0] / len(current)
+
+    # An empty bin sends the log to infinity; the usual floor keeps one unlucky
+    # bin from dominating a score that is otherwise fine.
+    floor = 1e-4
+    ref_frac = np.clip(ref_frac, floor, None)
+    cur_frac = np.clip(cur_frac, floor, None)
+
+    return float(np.sum((cur_frac - ref_frac) * np.log(cur_frac / ref_frac)))
+
+
+def embedding_drift(reference: np.ndarray, current: np.ndarray) -&gt; dict:
+    &quot;&quot;&quot;Drift in text inputs, measured in embedding space.
+
+    Per-feature tests are the wrong tool on 384 correlated dimensions: with
+    enough features something is always &#39;significant&#39;. Comparing each window to
+    the reference centroid collapses that to one interpretable number.
+    &quot;&quot;&quot;
+    centroid = reference.mean(axis=0)
+    centroid /= np.linalg.norm(centroid)
+
+    def cosines(batch):
+        norms = batch / np.linalg.norm(batch, axis=1, keepdims=True)
+        return norms @ centroid
+
+    ref_sim, cur_sim = cosines(reference), cosines(current)
+    return {
+        # How far the typical input has moved from what we validated on.
+        &quot;centroid_shift&quot;: float(ref_sim.mean() - cur_sim.mean()),
+        # Widening spread means a broader mix of topics, even if the mean holds.
+        &quot;spread_change&quot;: float(cur_sim.std() - ref_sim.std()),
+        &quot;psi_on_similarity&quot;: psi(ref_sim, cur_sim),
+    }</code></pre><p>And the part that keeps it from paging people at 3am:</p>
+<pre class="code"><code class="language-python">class PersistentDetector:
+    &quot;&quot;&quot;Alerts only after k consecutive breaches.
+
+    A single window over threshold is noise: with weekly seasonality and
+    modest volume, some window is always unusual. Requiring persistence trades
+    a little detection latency for an alert people still trust in month three.
+    &quot;&quot;&quot;
+
+    def __init__(self, threshold: float, k: int = 3) -&gt; None:
+        self.threshold, self.k, self.streak = threshold, k, 0
+
+    def observe(self, distance: float) -&gt; str:
+        self.streak = self.streak + 1 if distance &gt; self.threshold else 0
+        if self.streak &gt;= self.k:
+            return &quot;ALERT&quot;
+        return &quot;SUSPECT&quot; if self.streak else &quot;STABLE&quot;</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Delayed labels are the real problem, and in some domains the label never
+arrives.</strong> In predictive maintenance the truth appears when the machine fails —
+or never, because you intervened and prevented it. So you monitor proxies:
+alert dismissal rate, work orders raised, mean time between false alarms.</p>
+<p><strong>Successful intervention destroys its own evidence.</strong> You warned, they fixed
+it, the machine did not fail, and the label reads &quot;no failure&quot; — which looks
+exactly like a false positive. This is a genuine, well-known problem, and naming
+it unprompted is a strong signal in any predictive-maintenance interview. The
+mitigations are both uncomfortable: hold out a control group where alerts are
+logged but not acted on (usually politically impossible), or change the label to
+&quot;inspection confirmed the fault&quot; instead of &quot;machine failed&quot;.</p>
+<p><strong>Drift detection has a false-positive economy.</strong> With 40 monitored features at
+p &lt; 0.05, you expect two significant results per window from pure chance. Teams
+respond by raising thresholds until nothing fires, which is muting with extra
+steps. Better: monitor a <em>small</em> number of signals you would actually act on,
+correct for multiplicity, and require persistence.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>What you see</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Rolling reference</strong></td><td>Slow drift never detected</td><td>Freeze the reference at validation time</td></tr><tr><td><strong>Alert fatigue</strong></td><td>Everything is amber; nobody looks</td><td>Fewer signals, persistence requirement, act-or-widen discipline</td></tr><tr><td><strong>Retrain reflex</strong></td><td>Cost rises, quality does not</td><td>Triage first: no quality impact means no retrain</td></tr><tr><td><strong>Window too small</strong></td><td>Constant false alarms</td><td>Size by volume, not by clock</td></tr><tr><td><strong>Watching the model, not the corpus</strong></td><td>RAG quality falls, all model metrics green</td><td>Monitor index freshness and retrieval scores separately</td></tr><tr><td><strong>Vendor version change read as drift</strong></td><td>Step change on a specific date</td><td>Pin model versions; annotate the trend when you upgrade</td></tr></tbody></table></div><p><strong>At scale, drift is per-segment.</strong> Aggregate stability routinely hides a
+segment falling apart: one language, one customer, one device type. The
+aggregate moves 1%, the segment moves 40%, and the complaints all come from that
+segment. Monitor by segment for the segments you have SLAs on — which is also
+where bias monitoring and drift monitoring turn out to be the same machinery.</p>
+<p><strong>What to actually retrain on.</strong> If you retrain on recent data alone you get
+catastrophic forgetting of the long tail; if you retrain on everything you dilute
+the shift you were trying to capture. The usual answer is a weighted mix, plus a
+holdout from <em>before</em> the drift so you can confirm you did not lose the old
+behaviour while gaining the new.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What drift looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Nothing announces itself. Answers just start feeling slightly off, and they stop trusting it before anyone files a ticket. That silent trust decay is the actual cost.</td></tr><tr><td><strong>Coder</strong></td><td>Log inputs and outputs with a schema version and a model version from day one. You cannot detect drift retroactively without a reference window, and nobody ever wishes they had logged less.</td></tr><tr><td><strong>Tester</strong></td><td>Drift is out of scope for tests and you should say so. Your job is the golden set and the ratchet: every confirmed drift failure becomes a permanent regression case.</td></tr><tr><td><strong>System designer</strong></td><td>It is a batch job over logged traffic, not an inline check. Budget storage for the reference window, decide the retention period, and make the alert route somewhere a human actually reads.</td></tr><tr><td><strong>Architect</strong></td><td>Committing to a model means committing to a retraining pipeline and the data platform under it. If there is no path to retrain, drift monitoring only tells you how bad things are getting.</td></tr><tr><td><strong>CEO</strong></td><td>This is the difference between finding out from a dashboard and finding out from a customer. The cost is storage plus a monitoring job; the thing it protects is renewal. Ask what the trigger-to-remediation time is — a detector nobody acts on is theatre.</td></tr><tr><td><strong>Market</strong></td><td>Heavily tooled: Evidently, Arize, WhyLabs, Fiddler, plus the cloud vendors&#39; built-ins. Buy the detector. The part nobody can sell you is knowing which signal matters in your domain and what to do when it fires.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;How would you detect drift in a live ML system?&quot;</td><td>Structure</td><td>Frozen reference window, current window sized by volume, a distance measure suited to the signal type, persistence before alerting, then triage into covariate / concept / corpus / vendor before acting.</td></tr><tr><td>&quot;Covariate versus concept drift?&quot;</td><td>Vocabulary with meaning</td><td>Covariate is P(X) moving — inputs look different, model may still be right. Concept is P(Y|X) moving — same input, different correct answer, model is now wrong. Only the second necessarily requires retraining.</td></tr><tr><td>&quot;You have no labels. Now what?&quot;</td><td>Realism</td><td>Label-free proxies: model confidence distribution, refusal rate, retrieval scores, output length, embedding distance from the reference centroid. Plus human review on a stratified sample, which is a slow, partial label pipeline.</td></tr><tr><td>&quot;In predictive maintenance, how do you know an alert was right?&quot;</td><td>Domain depth</td><td>Often you cannot — successful intervention erases the evidence. Use &quot;inspection confirmed the fault&quot; as the label, track dismissal rate as a false-positive proxy, and mention the control-group option and why it is rarely allowed.</td></tr><tr><td>&quot;Your drift alarm fires every week and nobody looks.&quot;</td><td>Operational maturity</td><td>That is a design failure, not a discipline failure. Cut the number of monitored signals to those you would act on, require k consecutive breaches, and enforce act-or-widen — every alert either causes a change or moves the threshold.</td></tr><tr><td>&quot;Drift detected. Do you retrain?&quot;</td><td>Judgement</td><td>Not automatically. Triage first: if quality has not moved, log and widen. If the corpus is stale, re-index — retraining fixes nothing. If the vendor changed the model, re-baseline. Retrain only for genuine concept drift, and hold out pre-drift data to confirm you did not forget the old behaviour.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>name the four things that can move and give a different remedy for each,</li>
+<li>explain why the reference window must be frozen,</li>
+<li>give two label-free drift proxies for an LLM system,</li>
+<li>say why aggregate monitoring hides the failure that matters, and</li>
+<li>describe a case where the correct response to a drift alert is to do nothing.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Framing and taxonomy</td><td><em>Learning under Concept Drift: A Review</em> (Lu et al., 2019)</td></tr><tr><td>Practical monitoring</td><td>Evidently AI&#39;s open-source docs — the best free treatment of which test to use when</td></tr><tr><td>Label-free monitoring</td><td>Papers on confidence-based and proxy-metric monitoring; Arize and WhyLabs both publish accessible write-ups</td></tr><tr><td>Statistical care</td><td>Any treatment of multiple-comparison correction — the false-positive economy above is just Bonferroni wearing a hat</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="llm-as-a-judge.html"><span>previous</span>LLM as a judge</a><a class="pager next" href="regression-gates.html"><span>next</span>Regression gates in CI</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-detector-as-a-state-machine">4 · UML — detector as a state machine</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
