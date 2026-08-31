@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corrective &amp; self-RAG · LLM Handbook</title>
+<meta name="description" content="Letting the pipeline notice that retrieval failed, and do something other than answer anyway.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html" class="active">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="corrective-self-rag"><a class="anchor" href="#corrective-self-rag">#</a>Corrective & self-RAG</h1><blockquote>
+<p><strong>The one sentence:</strong> plain RAG always answers, because nothing in it is
+allowed to say &quot;what I found is not good enough&quot;.</p>
+</blockquote>
+<p>A standard pipeline retrieves top-k and generates. If the top-k is irrelevant it
+still generates — fluently, with citations, from passages that do not contain
+the answer. Corrective RAG adds the one thing missing: <strong>a decision point after
+retrieval</strong>.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   PLAIN RAG                          CORRECTIVE RAG
+
+   query                              query
+     |                                  |
+   retrieve top-k                     retrieve top-k
+     |                                  |
+     |                                GRADE each passage: relevant?
+     |                                  |
+     |                     +------------+------------+
+     |                     |            |            |
+     |                  all good    some good      none good
+     |                     |            |            |
+     |                  generate    generate      DO NOT GENERATE
+     |                              from the         |
+     v                              good ones     +--+---------------+
+   generate anyway                     |          |                  |
+   (fluent, cited,                     |      rewrite query      say &quot;I don&#39;t
+    and wrong)                         |      and retry          know&quot; / escalate
+                                       v          |                  |
+                                    answer &lt;------+------------------+
+
+   THE ENTIRE DIFFERENCE IS THE GRADE STEP AND THE &quot;none good&quot; BRANCH.</code></pre><p>The &quot;none good&quot; branch is what people leave out, and it is the branch that
+prevents the confident-fiction failure that gets RAG systems distrusted.</p>
+<hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate.</strong> Three named variants, often conflated. They differ in <em>where</em>
+the check sits:</p>
+<div class="table-scroll"><table><thead><tr><th>Variant</th><th>Checks</th><th>Acts on failure by</th></tr></thead><tbody><tr><td><strong>CRAG</strong> (corrective)</td><td>Retrieved passages, before generating</td><td>Rewriting the query, or falling back to web/broader search</td></tr><tr><td><strong>Self-RAG</strong></td><td>Both retrieval <em>and</em> its own output, via reflection tokens</td><td>Retrieving again, or revising the draft</td></tr><tr><td><strong>Adaptive RAG</strong></td><td>The query itself, before retrieving</td><td>Routing: no retrieval / one hop / multi-hop</td></tr></tbody></table></div><p><strong>The grader is the whole design.</strong> It answers one question per passage — <em>does
+this contain information that helps answer the query?</em> — and it must be cheap,
+because it runs k times per request. Options, in increasing cost:</p>
+<ol>
+<li><strong>Retrieval score threshold.</strong> Free. Crude, and score scales differ per
+model, so the threshold needs calibrating per index.</li>
+<li><strong>Cross-encoder relevance score.</strong> Cheap, fast, already in your stack if you
+rerank. Usually the right answer.</li>
+<li><strong>Small LLM binary classifier.</strong> More accurate on subtle relevance, adds a
+call per passage — batch them into one call.</li>
+</ol>
+<p><strong>Advanced — the trap.</strong> The grader is a classifier, so it has a precision/recall
+trade-off, and the two errors are not symmetric:</p>
+<ul>
+<li><strong>Grader too strict</strong> → discards usable context → the system says &quot;I don&#39;t
+know&quot; when it could have answered. Users experience this as <em>useless</em>.</li>
+<li><strong>Grader too loose</strong> → passes junk through → confident fiction. Users
+experience this as <em>untrustworthy</em>.</li>
+</ul>
+<p><strong>Untrustworthy is far more expensive than useless</strong>, because a user who gets a
+wrong answer they believed stops trusting every answer, including the right
+ones. Bias the grader toward strictness and make the refusal path good.</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Query] --&gt; B[Retrieve top-k]
+  B --&gt; C[Grade each passage]
+  C --&gt; D{How many relevant?}
+  D --&gt;|k relevant| E[Generate from all]
+  D --&gt;|some relevant| F[Generate from the relevant subset only]
+  D --&gt;|none relevant| G{Retries left?}
+  G --&gt;|yes| H[Rewrite the query]
+  H --&gt; B
+  G --&gt;|no| I[Refuse: say what was searched and found nothing]
+  E --&gt; J[Answer with citations]
+  F --&gt; J
+  I --&gt; K[Log as a coverage gap]
+  K --&gt; L[Candidate golden-set item]</pre><p>Two details that matter more than the diagram suggests:</p>
+<p><strong>The retry needs a bound.</strong> A rewrite loop with no cap is an unbounded latency
+and cost multiplier on exactly the queries that are already failing. One retry
+is usually right; two is the most anyone should allow.</p>
+<p><strong><code>K → L</code> is where the value compounds.</strong> A refusal is not a dead end — it is
+the highest-quality signal you will ever get about a gap in your corpus. Every
+refusal should be logged with its query and become a candidate golden-set item
+or a documentation ticket.</p>
+<hr>
+<h2 id="4-uml-the-state-machine"><a class="anchor" href="#4-uml-the-state-machine">#</a>4 · UML — the state machine</h2><pre class="mermaid">stateDiagram-v2
+    [*] --&gt; Retrieving
+    Retrieving --&gt; Grading: candidates returned
+    Grading --&gt; Generating: at least one relevant
+    Grading --&gt; Rewriting: none relevant, retries remain
+    Grading --&gt; Refusing: none relevant, budget exhausted
+    Rewriting --&gt; Retrieving: transformed query
+    Generating --&gt; Verifying: draft produced
+    Verifying --&gt; Done: grounded in the passages
+    Verifying --&gt; Refusing: draft makes unsupported claims
+    Refusing --&gt; Done: honest refusal + logged gap
+    Done --&gt; [*]
+
+    note right of Verifying
+      Self-RAG&#39;s extra step:
+      grade the OUTPUT too, not
+      just the retrieved input
+    end note</pre><p><code>Verifying</code> is what distinguishes self-RAG from corrective RAG. It catches the
+case where the passages <em>were</em> relevant but the model still drifted beyond them
+— which is a different failure from bad retrieval and needs a different fix.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">GRADER = &quot;&quot;&quot;For each numbered passage, decide whether it contains information
+that helps answer the question.
+
+Be strict. &quot;Related topic&quot; is not &quot;helps answer&quot;. If a passage is merely about
+the same subject without addressing the question, mark it false.
+
+Return JSON only: {&quot;verdicts&quot;: [{&quot;i&quot;: 0, &quot;relevant&quot;: true|false}, ...]}&quot;&quot;&quot;
+
+
+def grade_passages(client, query, passages) -&gt; list[bool]:
+    &quot;&quot;&quot;One call for all k passages, not k calls.
+
+    Grading is on the critical path of every request, so per-passage calls
+    would multiply latency by k for no accuracy gain that matters.
+    &quot;&quot;&quot;
+    numbered = &quot;\n\n&quot;.join(f&quot;[{i}] {p}&quot; for i, p in enumerate(passages))
+    raw = complete(client, GRADER, f&quot;Question: {query}\n\n{numbered}&quot;)
+    verdicts = json.loads(raw)[&quot;verdicts&quot;]
+    keep = [False] * len(passages)
+    for v in verdicts:
+        if 0 &lt;= v[&quot;i&quot;] &lt; len(passages):
+            keep[v[&quot;i&quot;]] = bool(v[&quot;relevant&quot;])
+    return keep
+
+
+def corrective_retrieve(client, index, query, k=6, max_retries=1):
+    &quot;&quot;&quot;Retrieve, grade, and rewrite once before refusing.&quot;&quot;&quot;
+    attempts = []
+    current = query
+
+    for attempt in range(max_retries + 1):
+        passages = index.search(current, k)
+        keep = grade_passages(client, query, passages)   # always grade against
+        relevant = [p for p, ok in zip(passages, keep) if ok]  # the ORIGINAL query
+        attempts.append({&quot;query&quot;: current, &quot;kept&quot;: len(relevant)})
+
+        if relevant:
+            return {&quot;status&quot;: &quot;ok&quot;, &quot;passages&quot;: relevant, &quot;attempts&quot;: attempts}
+
+        if attempt &lt; max_retries:
+            current = rewrite_for_retrieval(client, query)
+
+    # Refusing is a real outcome, not an error. It is returned with enough
+    # context for the caller to explain itself and for us to log the gap.
+    return {&quot;status&quot;: &quot;no_relevant_context&quot;, &quot;passages&quot;: [], &quot;attempts&quot;: attempts}</code></pre><p><strong>Grade against the original query, never the rewrite.</strong> The rewrite exists to
+find documents; the user&#39;s actual question is what relevance is defined by. Grade
+against the rewrite and a bad rewrite validates its own bad results.</p>
+<hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Every added stage is added latency on the critical path.</strong> Grading adds a call
+before generation; a retry doubles retrieval and grading. A pipeline with
+transformation, retrieval, grading, a retry and reranking can spend more time
+deciding than answering. Budget it explicitly:</p>
+<pre class="code"><code>   plain RAG          retrieve 40ms  + generate 800ms                 ~ 840ms
+   + grading          retrieve 40ms  + grade 250ms + generate 800ms   ~ 1090ms
+   + one retry        (worst case, on failures only)                  ~ 1380ms</code></pre><p>The retry cost only lands on queries that were already failing, which is the
+right place to spend it — but it does mean <strong>your p99 is set by your failure
+path</strong>, and that is the number people forget to measure.</p>
+<p><strong>Refusal rate is your most important operational metric, in both directions.</strong>
+Rising refusal rate means corpus drift, a broken index, or a change in what users
+are asking. A refusal rate of zero means the grader is not doing anything. Alarm
+on both ends.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Grader too loose</strong></td><td>Confident answers from irrelevant context</td><td>Strictness in the rubric; grade against the original query</td></tr><tr><td><strong>Grader too strict</strong></td><td>Frequent &quot;I don&#39;t know&quot; on answerable questions</td><td>Loosen, and check you are not grading against a rewrite</td></tr><tr><td><strong>Unbounded retries</strong></td><td>Latency spikes on hard queries</td><td>Cap at one, maybe two</td></tr><tr><td><strong>Refusals not logged</strong></td><td>The same gap fails forever</td><td>Every refusal is a candidate golden-set item</td></tr><tr><td><strong>Grading with the big model</strong></td><td>Cost doubles</td><td>Cross-encoder or a small model; batch the passages</td></tr><tr><td><strong>Refusal message is unhelpful</strong></td><td>Users perceive the system as broken</td><td>Say what was searched and suggest a reformulation</td></tr></tbody></table></div><p><strong>Where this stops being worth it.</strong> If your retrieval hit rate is already 0.95,
+grading adds latency and cost to catch 5% of queries — and its own false
+negatives may cost you more than it saves. Corrective RAG earns its place when
+retrieval is genuinely unreliable, when the corpus has real coverage gaps, or
+when a wrong answer is expensive. Measure your hit rate before adding it.</p>
+<p><strong>The honest limitation:</strong> the grader is itself a model with the same failure
+modes as the generator. It can be confidently wrong about relevance. It reduces
+confident fiction; it does not eliminate it, and anyone claiming otherwise has
+not measured their grader&#39;s agreement with humans.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What corrective RAG looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Sometimes it says it does not know — and that is the feature. A system that admits its limits gets trusted on the answers it does give. The refusal must say what it searched, or it reads as broken.</td></tr><tr><td><strong>Coder</strong></td><td>Grade in one batched call against the original query. Cap retries. Return the refusal as a status, not an exception. Log every refusal with the query and both attempts.</td></tr><tr><td><strong>Tester</strong></td><td>You now have two systems to test: the pipeline and the grader. Label a set of (query, passage) pairs and measure grader precision and recall separately, because those two errors have very different costs.</td></tr><tr><td><strong>System designer</strong></td><td>Grading is on the critical path; retries make the failure path the slowest path. Set a total time budget for the whole loop, and degrade to plain RAG under load rather than dropping requests.</td></tr><tr><td><strong>Architect</strong></td><td>This turns a linear pipeline into a state machine with loops — that is a real architectural change. It is where a graph framework starts earning its keep over a chain, and where you need per-stage tracing to debug anything.</td></tr><tr><td><strong>CEO</strong></td><td>This buys trust at the cost of latency and some usable answers withheld. The trade is worth making when a wrong answer is expensive — regulated advice, medical, financial. For low-stakes search it is over-engineering.</td></tr><tr><td><strong>Market</strong></td><td>Shipped as a pattern in LangGraph and LlamaIndex; the papers are public and the implementations are days of work. No moat in the technique. The moat is a corpus good enough that you rarely refuse.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;How do you stop RAG answering from irrelevant context?&quot;</td><td>Whether you know the failure exists</td><td>Grade retrieved passages before generating, generate only from the ones that pass, and refuse when none do. The refusal branch is the point — plain RAG has no way to decline.</td></tr><tr><td>&quot;CRAG vs self-RAG?&quot;</td><td>Precision of vocabulary</td><td>CRAG grades retrieval and corrects before generating. Self-RAG also grades its own output with reflection tokens, catching the case where context was fine but the model drifted beyond it.</td></tr><tr><td>&quot;Your grader is wrong sometimes.&quot;</td><td>Whether you understand the trade-off</td><td>Of course — it is a classifier. The two errors are asymmetric: too loose gives confident fiction, too strict gives unnecessary refusals. Untrustworthy costs more than useless, so bias strict and make refusals informative.</td></tr><tr><td>&quot;How many retries?&quot;</td><td>Cost discipline</td><td>One, maybe two. Unbounded rewriting multiplies latency and spend on the queries already failing, and your p99 becomes your failure path.</td></tr><tr><td>&quot;When would you <em>not</em> add this?&quot;</td><td>Judgement</td><td>When retrieval hit rate is already high — you add latency to catch a few percent, and grader false negatives may cost more than the fiction it prevents. Measure hit rate first.</td></tr><tr><td>&quot;What do you do with a refusal?&quot;</td><td>Operational maturity</td><td>Log it with the query. It is the highest-quality signal you get about a corpus gap: it becomes a golden-set item or a documentation ticket. Refusal rate is monitored in both directions — zero means the grader is inert.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>draw the branch plain RAG is missing,</li>
+<li>explain why the two grader errors are asymmetric and which way to bias,</li>
+<li>justify a retry cap in terms of p99,</li>
+<li>say why grading uses the original query rather than the rewrite, and</li>
+<li>name a case where corrective RAG is not worth adding.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>CRAG</td><td><em>Corrective Retrieval Augmented Generation</em> (Yan et al., 2024)</td></tr><tr><td>Self-RAG</td><td><em>Self-RAG: Learning to Retrieve, Generate and Critique through Self-Reflection</em> (Asai et al., 2023)</td></tr><tr><td>Adaptive RAG</td><td><em>Adaptive-RAG</em> (Jeong et al., 2024) — query-complexity routing</td></tr><tr><td>Implementation</td><td>LangGraph&#39;s CRAG and self-RAG example graphs; the state machine above maps onto them directly</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="query-transformation.html"><span>previous</span>Query transformation & HyDE</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-the-state-machine">4 · UML — the state machine</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
