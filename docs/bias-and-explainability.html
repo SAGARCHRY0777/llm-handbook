@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bias monitoring &amp; explainability · LLM Handbook</title>
+<meta name="description" content="Measuring who the system is worse for, and what &quot;explainable&quot; can honestly mean for a model whose reasoning you cannot inspect.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html" class="active">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="bias-monitoring-explainability"><a class="anchor" href="#bias-monitoring-explainability">#</a>Bias monitoring & explainability</h1><blockquote>
+<p><strong>The one sentence:</strong> an aggregate quality number is an average over people,
+and averages hide exactly the failures that get organisations into trouble.</p>
+</blockquote>
+<p>These two sit together because both are attempts to answer a question the
+headline metric cannot: <em>not how good is it, but good for whom, and on what
+basis.</em></p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   WHY THE AGGREGATE LIES
+
+   overall accuracy 0.91   &lt;- the number in the deck
+
+     segment A (78% of traffic)   0.95
+     segment B (15%)              0.93
+     segment C  (5%)              0.71     &lt;- unusable, invisible in the average
+     segment D  (2%)              0.52     &lt;- actively harmful, moves the mean by 0.008
+
+   The system works. For most people.
+   The people it fails are the ones least able to route around it.
+
+
+   THE TWO QUESTIONS, and what each can actually be answered with
+
+   BIAS          &quot;is it worse for some group?&quot;       -&gt; measurable. Do this.
+   EXPLAINABILITY &quot;why did it produce THIS output?&quot;  -&gt; partially answerable.
+                                                        Be honest about which part.</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — bias is measurement before it is ethics.</strong> The engineering work
+is disaggregation: compute the metrics you already have, per segment, and look
+at the spread rather than the mean.</p>
+<div class="table-scroll"><table><thead><tr><th>Metric</th><th>Question it answers</th></tr></thead><tbody><tr><td><strong>Per-segment quality</strong></td><td>Is accuracy or groundedness worse for some group?</td></tr><tr><td><strong>Refusal rate by segment</strong></td><td>Is it declining more often for some people?</td></tr><tr><td><strong>Equal opportunity gap</strong></td><td>Is the true-positive rate equal across groups?</td></tr><tr><td><strong>Demographic parity gap</strong></td><td>Is the positive-prediction rate equal across groups?</td></tr><tr><td><strong>Counterfactual consistency</strong></td><td>Does the answer change when only a group attribute changes?</td></tr></tbody></table></div><p><strong>Counterfactual testing is the most practical technique for LLMs</strong>, and the
+easiest to automate. Take a real input, change only a name, gender, dialect or
+location, and check whether the decision changes. If &quot;Aisha&quot; and &quot;James&quot; with
+identical CVs get different summaries, you have found something concrete, in a
+test you can run in CI.</p>
+<p><strong>The impossibility result worth knowing.</strong> Demographic parity, equalised odds
+and calibration <strong>cannot all hold simultaneously</strong> unless base rates are equal
+across groups. This is a proven mathematical constraint, not an engineering
+shortfall. So &quot;make it fair&quot; is not a specification — someone has to choose
+<em>which</em> fairness definition applies, and that is a product and legal decision,
+not an engineering one. Saying this clearly is a strong senior signal, and
+pretending all three are achievable is a mistake an interviewer will notice.</p>
+<p><strong>Advanced — what explainability can honestly mean here.</strong> For an LLM, be
+precise about which of four different things is being asked for:</p>
+<div class="table-scroll"><table><thead><tr><th>Claim</th><th>Honest status</th></tr></thead><tbody><tr><td><strong>Provenance</strong> — which documents were used</td><td>✅ Fully achievable. Cite retrieved chunks</td></tr><tr><td><strong>Traceability</strong> — what the system did, step by step</td><td>✅ Achievable. Log the trace: query, retrieval, tools, output</td></tr><tr><td><strong>Faithful reasoning</strong> — why the model produced this token</td><td>❌ Not achievable in production</td></tr><tr><td><strong>Counterfactual</strong> — what would change the outcome</td><td>⚠️ Approximable by perturbation and re-running</td></tr></tbody></table></div><p><strong>Chain-of-thought is not an explanation.</strong> This matters and it is widely
+misunderstood: a model&#39;s stated reasoning is generated text that may or may not
+describe the computation that produced the answer. Models produce plausible
+reasoning for conclusions reached otherwise, and will confidently justify wrong
+answers. It is useful for <em>steering</em> and for <em>catching</em> some errors; it is not
+evidence of process, and presenting it to a regulator as such is a
+misrepresentation.</p>
+<p><strong>What to give instead:</strong> citations, retrieval traces, confidence signals, and
+perturbation-based counterfactuals. Those are real, checkable, and enough for
+most governance requirements.</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Define segments that matter] --&gt; B{Do you have the attributes?}
+  B --&gt;|no| C[Proxy segments: language, region,&lt;br/&gt;channel, query length]
+  B --&gt;|yes| D[Direct segmentation]
+  C --&gt; E[Disaggregate every existing metric]
+  D --&gt; E
+  E --&gt; F[Compute per-segment gaps]
+  F --&gt; G{Gap beyond tolerance?}
+  G --&gt;|no| H[Record and continue monitoring]
+  G --&gt;|yes| I[Counterfactual test:&lt;br/&gt;change only the attribute]
+  I --&gt; J{Outcome changes?}
+  J --&gt;|yes| K[Causal: the attribute is driving the decision]
+  J --&gt;|no| L[Distributional: coverage or data gap]
+  K --&gt; M[Fix: prompt, guardrail, or training data]
+  L --&gt; N[Fix: expand corpus and eval coverage]
+  M --&gt; O[Add the case to the golden set permanently]
+  N --&gt; O</pre><p><strong>Branch <code>J</code> is the one that turns a finding into an action.</strong> A gap alone does
+not tell you whether the system is <em>reacting to</em> the attribute or simply has
+worse coverage for that group. Those need completely different fixes, and
+conflating them wastes months.</p>
+<p><strong>Node <code>C</code> is the practical reality.</strong> You usually cannot collect demographic
+attributes — and often should not. Proxy segments (language, region, device,
+query characteristics) are imperfect and are what most teams actually have. Say
+so honestly rather than claiming a rigour you do not have.</p>
+<hr>
+<h2 id="4-uml-the-trace-that-makes-a-decision-explainable"><a class="anchor" href="#4-uml-the-trace-that-makes-a-decision-explainable">#</a>4 · UML — the trace that makes a decision explainable</h2><pre class="mermaid">sequenceDiagram
+    participant U as User
+    participant S as System
+    participant R as Retriever
+    participant M as Model
+    participant L as Trace log
+
+    U-&gt;&gt;S: request
+    S-&gt;&gt;L: record input + segment attributes
+    S-&gt;&gt;R: query
+    R--&gt;&gt;S: chunks + scores
+    S-&gt;&gt;L: record chunk ids + scores  &lt;-- provenance
+    S-&gt;&gt;M: prompt (pinned version)
+    M--&gt;&gt;S: output + citations
+    S-&gt;&gt;L: record model version, citations, confidence
+    S--&gt;&gt;U: answer WITH citations
+    Note over L: This trace answers &quot;what did it use&quot;&lt;br/&gt;and &quot;what did it do&quot;.&lt;br/&gt;It does not answer &quot;why that token&quot;,&lt;br/&gt;and should not claim to.</pre><hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">def disaggregate(results: list[dict], segment_key: str, metric_key: str) -&gt; dict:
+    &quot;&quot;&quot;Per-segment metrics, with the small-sample caveat made explicit.
+
+    The whole point is to surface what the mean conceals -- so this reports the
+    worst segment and the gap, not just the average. Segments below a size
+    threshold are flagged rather than dropped: &#39;too small to judge&#39; is useful
+    information, and silently excluding them recreates the original problem.
+    &quot;&quot;&quot;
+    buckets: dict[str, list[float]] = {}
+    for row in results:
+        buckets.setdefault(row[segment_key], []).append(row[metric_key])
+
+    per_segment = {
+        name: {
+            &quot;n&quot;: len(vals),
+            &quot;mean&quot;: round(sum(vals) / len(vals), 4),
+            &quot;reliable&quot;: len(vals) &gt;= 30,
+        }
+        for name, vals in buckets.items()
+    }
+    reliable = {k: v for k, v in per_segment.items() if v[&quot;reliable&quot;]}
+    overall = sum(r[metric_key] for r in results) / len(results)
+
+    return {
+        &quot;overall&quot;: round(overall, 4),
+        &quot;segments&quot;: dict(sorted(per_segment.items(), key=lambda kv: kv[1][&quot;mean&quot;])),
+        &quot;worst_reliable&quot;: min(reliable, key=lambda k: reliable[k][&quot;mean&quot;]) if reliable else None,
+        &quot;gap&quot;: round(
+            max(v[&quot;mean&quot;] for v in reliable.values()) - min(v[&quot;mean&quot;] for v in reliable.values()), 4
+        ) if len(reliable) &gt; 1 else None,
+    }
+
+
+def counterfactual_test(system, template: str, variants: dict[str, list[str]]) -&gt; list[dict]:
+    &quot;&quot;&quot;Vary one attribute, hold everything else fixed, compare the outputs.
+
+    This is the strongest bias evidence available without demographic data,
+    because it is causal by construction: nothing but the attribute changed, so
+    any difference in outcome is attributable to it.
+    &quot;&quot;&quot;
+    findings = []
+    for attribute, values in variants.items():
+        outputs = {v: system(template.format(**{attribute: v})) for v in values}
+        distinct = {normalise_decision(o) for o in outputs.values()}
+        if len(distinct) &gt; 1:
+            findings.append({
+                &quot;attribute&quot;: attribute,
+                &quot;outputs&quot;: outputs,
+                &quot;severity&quot;: &quot;decision changed on a protected attribute alone&quot;,
+            })
+    return findings</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Small segments are where the harm concentrates and where statistics are
+weakest.</strong> A 40-item segment gives a ±15-point confidence interval, so you
+cannot distinguish a real problem from noise — but that segment is often exactly
+the underserved group you are trying to protect. Options, none free:</p>
+<ol>
+<li><strong>Oversample</strong> that segment in the eval set. Cheap, and the honest first move.</li>
+<li><strong>Aggregate over a longer window.</strong> Trades detection latency for confidence.</li>
+<li><strong>Use counterfactual tests</strong>, which are causal and need far fewer samples.</li>
+<li><strong>Report the interval honestly</strong> and say the segment is under-measured.</li>
+</ol>
+<p>Silently dropping small segments because &quot;n is too low&quot; recreates the original
+problem with statistical cover.</p>
+<p><strong>Bias enters at four points, and only one of them is the model.</strong> Training data,
+retrieval corpus, prompt, and the evaluation set itself. The last is the one
+teams miss: if your golden set was written by one person from one background,
+your fairness measurement inherits that perspective and will report everything
+is fine.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Aggregate-only reporting</strong></td><td>&quot;It works&quot; while a segment fails</td><td>Disaggregate everything; gate per segment</td></tr><tr><td><strong>Dropping small segments</strong></td><td>The vulnerable groups vanish from the report</td><td>Oversample, or report with intervals</td></tr><tr><td><strong>CoT presented as explanation</strong></td><td>Governance built on unfaithful text</td><td>Provide citations and traces; state CoT&#39;s status</td></tr><tr><td><strong>Biased eval set</strong></td><td>Fairness checks pass, users disagree</td><td>Diversify who writes and reviews the golden set</td></tr><tr><td><strong>Fairness as a single number</strong></td><td>Endless argument about the metric</td><td>Choose the definition explicitly with legal and product</td></tr><tr><td><strong>Proxy segments treated as ground truth</strong></td><td>Overclaimed rigour</td><td>State that they are proxies and what they miss</td></tr></tbody></table></div><p><strong>The regulatory direction is towards traceability rather than interpretability</strong>,
+and that is fortunate, because traceability is achievable. The EU AI Act&#39;s
+high-risk obligations centre on logging, documentation, human oversight and data
+governance — not on explaining a specific token. Build the trace log, record
+model versions, keep the eval history, document the limitations. That is both
+good engineering and most of the compliance surface.</p>
+<p><strong>The honest limit, stated plainly.</strong> For a system built on a hosted model, you
+cannot inspect the weights, cannot reproduce the computation, and cannot
+guarantee the same output twice. Anyone promising true interpretability on top of
+that is selling something. What you <em>can</em> promise — full provenance, a complete
+trace, versioned behaviour, measured per-segment performance, and documented
+limitations — is a lot, and it is what should be offered.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What this looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Whether it works for people like them, and whether they can see why it answered as it did. Citations are the most valuable explainability feature you can ship, by a distance.</td></tr><tr><td><strong>Coder</strong></td><td>Log the segment attribute and the full trace on every request. You cannot disaggregate retroactively without it, and nobody has ever regretted logging the retrieval trace.</td></tr><tr><td><strong>Tester</strong></td><td>Add counterfactual tests to CI — vary one attribute, assert the decision is stable. They are cheap, causal, and catch what aggregate metrics never will. Gate per segment, not just overall.</td></tr><tr><td><strong>System designer</strong></td><td>Traces are storage and a retention policy; segment attributes are a privacy question. Design the trace schema early, because retrofitting it means losing the history you most want.</td></tr><tr><td><strong>Architect</strong></td><td>Traceability is an architectural property: pinned versions, immutable logs, reproducible retrieval. It is also most of what regulation asks for, so building it is not overhead.</td></tr><tr><td><strong>CEO</strong></td><td>This is reputational and legal risk management. The question to ask is not &quot;are we fair&quot; but &quot;which fairness definition did we choose, who signed it off, and what is the worst segment&#39;s number&quot;. A single fairness metric is a sign nobody has thought about it.</td></tr><tr><td><strong>Market</strong></td><td>Tooling exists — Fairlearn, AIF360, the observability vendors — and is easy to adopt. The differentiator is having chosen a definition and being able to show measurements over time. In regulated sectors that documentation is a sales asset, not a cost.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;How would you check an LLM system for bias?&quot;</td><td>Method</td><td>Disaggregate every metric by segment and look at the spread, not the mean. Add counterfactual tests varying one attribute. Gate per segment in CI. Where demographic attributes are unavailable, use proxies and say they are proxies.</td></tr><tr><td>&quot;Can you make it fair?&quot;</td><td>Whether you know the constraint</td><td>Not in all senses at once — demographic parity, equalised odds and calibration cannot all hold unless base rates match. So &quot;fair&quot; needs a chosen definition, and that choice is a product and legal decision, not an engineering one.</td></tr><tr><td>&quot;Is chain-of-thought an explanation?&quot;</td><td>The misconception that matters</td><td>No. It is generated text that may not describe the computation. Models produce plausible reasoning for conclusions reached otherwise. Useful for steering; not evidence of process, and not something to present to a regulator as such.</td></tr><tr><td>&quot;What can you actually explain?&quot;</td><td>Honesty</td><td>Provenance — which documents were used. Traceability — what the system did. Counterfactuals by perturbation. Not why a specific token was chosen, especially on a hosted model.</td></tr><tr><td>&quot;A segment has 40 samples and looks bad.&quot;</td><td>Statistical care</td><td>±15 points at that size, so it is not yet distinguishable from noise. Oversample it in the eval set, aggregate over a longer window, or use counterfactual tests, which are causal and need fewer samples. Do not drop it.</td></tr><tr><td>&quot;Where does bias enter?&quot;</td><td>Breadth</td><td>Training data, retrieval corpus, prompt, and the eval set itself. The last is the one people miss: a golden set written by one person measures fairness from one perspective and reports everything is fine.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>explain why an aggregate metric conceals the failures that matter,</li>
+<li>state the fairness impossibility result and its consequence,</li>
+<li>separate the four things &quot;explainability&quot; might mean and which are achievable,</li>
+<li>say why chain-of-thought is not an explanation, and</li>
+<li>describe what to do about a segment too small to measure reliably.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Impossibility</td><td>Kleinberg, Mullainathan &amp; Raghavan (2016); Chouldechova (2017)</td></tr><tr><td>Unfaithful reasoning</td><td><em>Language Models Don&#39;t Always Say What They Think</em> (Turpin et al., 2023)</td></tr><tr><td>Disaggregated evaluation</td><td><em>Model Cards for Model Reporting</em> (Mitchell et al., 2019)</td></tr><tr><td>Practical tooling</td><td>Fairlearn&#39;s user guide — the clearest treatment of choosing between metrics</td></tr><tr><td>Regulation</td><td>EU AI Act high-risk obligations; note how much is logging and documentation rather than interpretability</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="regression-gates.html"><span>previous</span>Regression gates in CI</a><a class="pager next" href="query-transformation.html"><span>next</span>Query transformation & HyDE</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-the-trace-that-makes-a-decision-explainable">4 · UML — the trace that makes a decision explainable</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
