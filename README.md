@@ -101,15 +101,15 @@ All modules written. Nothing is padded to look finished.
 
 | Module | Pages |
 |---|---|
-| **LLM foundations** | Transformers & attention · Tokenization · Decoding & sampling · LLM APIs & model selection · Prompt engineering · Multimodal & vision-language · Long context |
-| **Retrieval & advanced RAG** | Chunking & ingestion · Embeddings & vector databases · Reranking · Query transformation & HyDE · Corrective & self-RAG |
+| **LLM foundations** | Transformers · Tokenization · Decoding · Model selection · Prompt engineering · Multimodal · Long context · Reasoning models |
+| **Retrieval & advanced RAG** | Chunking · Embeddings & vector databases · Reranking · Query transformation & HyDE · Corrective & self-RAG · Text2SQL · GraphRAG |
 | **Evaluation & judging** | LLM as a judge · Drift detection · Regression gates · Bias & explainability |
 | **Inference optimization** | Quantization · Distillation & pruning |
 | **Orchestration frameworks** | LangChain, LlamaIndex, DSPy |
 | **Agents & safety** | Agents & tool use · Guardrails & security |
-| **Training & adaptation** | Fine-tuning & adaptation |
-| **Deployment & operations** | Serving & operations |
+| **Training & adaptation** | Fine-tuning · Synthetic data generation |
+| **Deployment & operations** | Serving & operations · Caching strategies |
 | **Market & business** | Unit economics, build vs buy, where the moat is not |
-| **Practice & interviews** | System design walkthroughs · Interview question bank |
+| **Practice & interviews** | System design walkthroughs · Interview question bank · Learning paths |
 | **Reference** | Glossary · Research papers · Numbers to know · Anti-patterns |
 

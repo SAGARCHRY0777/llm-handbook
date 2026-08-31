@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning paths · LLM Handbook</title>
+<meta name="description" content="Ordered routes through the handbook for four different starting points, with the build tasks that make it stick.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li><li><a href="reasoning-models.html">Reasoning models & test-time compute</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="text2sql.html">Text2SQL & structured data</a></li><li><a href="graphrag.html">GraphRAG & knowledge graphs</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li><li><a href="synthetic-data.html">Synthetic data generation</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li><li><a href="caching.html">Caching strategies</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li><li><a href="learning-paths.html" class="active">Learning paths</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="learning-paths"><a class="anchor" href="#learning-paths">#</a>Learning paths</h1><p>Thirty-five pages is not a reading order. This page gives four, depending on
+why you are here — plus the build tasks that turn reading into something you
+can defend.</p>
+<blockquote>
+<p><strong>The premise of every path below:</strong> you do not learn this by reading. You
+learn it by building a small thing and measuring it. Each path is roughly
+half reading and half building, and the building half is the part that
+survives into an interview.</p>
+</blockquote>
+<hr>
+<h2 id="path-1-interview-in-two-weeks"><a class="anchor" href="#path-1-interview-in-two-weeks">#</a>Path 1 · Interview in two weeks</h2><p>You have limited time and a specific goal. Read for gaps, not for completeness.</p>
+<h3 id="days-12-find-out-what-you-cannot-answer"><a class="anchor" href="#days-12-find-out-what-you-cannot-answer">#</a>Days 1–2 · Find out what you cannot answer</h3><p>Open the <a href="interview-questions.html">question bank</a> and answer the ⭐ questions
+out loud, cold, without reading the pages first. Mark every one you cannot
+finish in ninety seconds. <strong>That list is your curriculum</strong> — not the table of
+contents.</p>
+<h3 id="days-37-close-the-gaps"><a class="anchor" href="#days-37-close-the-gaps">#</a>Days 3–7 · Close the gaps</h3><p>Read only the pages behind your marked questions. For most people the gaps
+cluster in:</p>
+<div class="table-scroll"><table><thead><tr><th>Likely gap</th><th>Page</th></tr></thead><tbody><tr><td>&quot;How did you evaluate it?&quot;</td><td><a href="llm-as-a-judge.html">LLM as a judge</a>, <a href="regression-gates.html">Regression gates</a></td></tr><tr><td>Why quantization is faster</td><td><a href="quantization.html">Quantization</a></td></tr><tr><td>Why agents fail</td><td><a href="agents.html">Agents</a></td></tr><tr><td>Prompt injection</td><td><a href="guardrails-and-security.html">Guardrails</a></td></tr><tr><td>RAG vs fine-tuning</td><td><a href="fine-tuning.html">Fine-tuning</a></td></tr></tbody></table></div><h3 id="days-810-rehearse-the-system-design-round"><a class="anchor" href="#days-810-rehearse-the-system-design-round">#</a>Days 8–10 · Rehearse the system design round</h3><p>Work the five <a href="system-design-walkthroughs.html">system design walkthroughs</a> —
+out loud, with a whiteboard, doing the arithmetic. Then do
+<a href="numbers-to-know.html">numbers to know</a> until the five key calculations are
+automatic.</p>
+<h3 id="days-1114-consolidate"><a class="anchor" href="#days-1114-consolidate">#</a>Days 11–14 · Consolidate</h3><ul>
+<li>Re-do the ⭐ questions. They should now take sixty seconds each.</li>
+<li>Read <a href="anti-patterns.html">anti-patterns</a> once — it is a fast way to catch
+yourself about to give a confidently wrong answer.</li>
+<li>Prepare <strong>one story</strong> per area from work you actually did. A real story beats
+any amount of theory, and interviewers can tell the difference immediately.</li>
+</ul>
+<p><strong>What to skip entirely:</strong> papers, market and business (unless the role is
+senior), GraphRAG, multimodal (unless relevant to the role). Coverage is not the
+goal in two weeks.</p>
+<hr>
+<h2 id="path-2-building-your-first-rag-system"><a class="anchor" href="#path-2-building-your-first-rag-system">#</a>Path 2 · Building your first RAG system</h2><p>You have a corpus and a requirement. This is the order that avoids the usual
+month of wasted work.</p>
+<pre class="mermaid">graph TD
+  A[1. Evaluation FIRST] --&gt; B[2. Chunking + ingestion]
+  B --&gt; C[3. Embeddings + index]
+  C --&gt; D[4. Reranking]
+  D --&gt; E[5. Measure. Find the ceiling]
+  E --&gt; F{Where is the loss?}
+  F --&gt;|answer not in any chunk| B
+  F --&gt;|not in top-k| C
+  F --&gt;|retrieved but buried| D
+  F --&gt;|good context, bad answer| G[6. Prompting]
+  G --&gt; H[7. Corrective RAG if refusal matters]
+  H --&gt; I[8. Caching + serving]</pre><p><strong>Evaluation genuinely comes first</strong>, before you have a system to evaluate. Fifty
+questions with known answers takes an afternoon — <a href="synthetic-data.html">synthetic
+data</a> shows how to bootstrap them — and without it every
+subsequent decision is a guess.</p>
+<p><strong>The build task:</strong> a working pipeline with a golden set, a committed baseline,
+and a gate that fails your build. Not a notebook — a repository with CI. That
+artefact answers more interview questions than any amount of reading.</p>
+<p><strong>Reading order:</strong> <a href="chunking.html">Chunking</a> → <a href="embeddings-and-vector-databases.html">Embeddings</a>
+→ <a href="reranking.html">Reranking</a> → <a href="llm-as-a-judge.html">LLM as a judge</a> →
+<a href="regression-gates.html">Regression gates</a> → <a href="query-transformation.html">Query transformation</a>
+→ <a href="corrective-rag.html">Corrective RAG</a> → <a href="caching.html">Caching</a> →
+<a href="serving-and-operations.html">Serving</a>.</p>
+<hr>
+<h2 id="path-3-coming-from-classical-ml-or-computer-vision"><a class="anchor" href="#path-3-coming-from-classical-ml-or-computer-vision">#</a>Path 3 · Coming from classical ML or computer vision</h2><p>You already understand training, evaluation, deployment and drift. What is
+genuinely new is smaller than it looks — and some of your instincts transfer
+better than the field&#39;s own conventional wisdom.</p>
+<div class="table-scroll"><table><thead><tr><th>You already know</th><th>The LLM version</th></tr></thead><tbody><tr><td>Train/val/test splits</td><td>Golden sets and holdouts — same discipline, fewer labels</td></tr><tr><td>Precision/recall trade-offs</td><td>Retrieval recall vs reranking precision</td></tr><tr><td>Model drift</td><td><a href="drift-detection.html">Drift detection</a> — same taxonomy, worse labels</td></tr><tr><td>Quantization and pruning</td><td><a href="quantization.html">Quantization</a> — same ideas, the outlier problem is new</td></tr><tr><td>Distillation</td><td><a href="distillation-and-pruning.html">Distillation</a> — familiar, plus a licence problem</td></tr><tr><td>Feature engineering</td><td>Prompting and retrieval, which is where the leverage moved</td></tr></tbody></table></div><p><strong>What is genuinely new:</strong></p>
+<ol>
+<li><strong>Non-determinism as a first-class problem</strong> — you cannot assert equality,
+so you score. <a href="regression-gates.html">Regression gates</a>.</li>
+<li><strong>Token economics</strong> — inference cost scales with usage in a way classical ML
+deployment does not. <a href="numbers-to-know.html">Numbers to know</a>.</li>
+<li><strong>Prompt injection</strong> — a security class with no equivalent in a classifier.
+<a href="guardrails-and-security.html">Guardrails</a>.</li>
+<li><strong>Retrieval as the main quality lever</strong> — most quality work is data
+plumbing, not modelling. <a href="chunking.html">Chunking</a>.</li>
+</ol>
+<p><strong>Your advantage, and it is real:</strong> you are already comfortable saying &quot;that
+improvement is inside the confidence interval.&quot; Much of this field is not, and
+saying it in an interview separates you immediately.</p>
+<p><strong>Reading order:</strong> <a href="transformers.html">Transformers</a> →
+<a href="tokenization.html">Tokenization</a> → <a href="chunking.html">Chunking</a> →
+<a href="embeddings-and-vector-databases.html">Embeddings</a> →
+<a href="llm-as-a-judge.html">LLM as a judge</a> → <a href="guardrails-and-security.html">Guardrails</a>
+→ <a href="serving-and-operations.html">Serving</a>. Skip quantization and distillation
+theory; read only their LLM-specific sections.</p>
+<hr>
+<h2 id="path-4-teaching-this-to-someone-else"><a class="anchor" href="#path-4-teaching-this-to-someone-else">#</a>Path 4 · Teaching this to someone else</h2><p>The order that works for a learner with no background, and it is <em>not</em> the order
+of the sidebar.</p>
+<h3 id="block-1-what-is-actually-happening-3-hours"><a class="anchor" href="#block-1-what-is-actually-happening-3-hours">#</a>Block 1 · What is actually happening (3 hours)</h3><p><a href="tokenization.html">Tokenization</a> → <a href="transformers.html">Transformers</a> →
+<a href="decoding.html">Decoding</a></p>
+<p>Start with tokenization, not transformers. It is concrete, it immediately
+explains famous failures like counting letters, and it earns attention before
+anything abstract arrives.</p>
+<p><strong>Exercise:</strong> tokenize the same sentence in three languages. Count the tokens.
+The multilingual cost difference makes the abstraction real in five minutes.</p>
+<h3 id="block-2-making-it-useful-4-hours"><a class="anchor" href="#block-2-making-it-useful-4-hours">#</a>Block 2 · Making it useful (4 hours)</h3><p><a href="prompt-engineering.html">Prompt engineering</a> →
+<a href="model-selection.html">Model selection</a> → <a href="chunking.html">Chunking</a> →
+<a href="embeddings-and-vector-databases.html">Embeddings</a></p>
+<p><strong>Exercise:</strong> build a RAG pipeline over ten documents in plain code — no
+framework. Roughly 100 lines. Every abstraction they meet later will make sense
+because they have seen what it wraps.</p>
+<h3 id="block-3-knowing-whether-it-works-4-hours"><a class="anchor" href="#block-3-knowing-whether-it-works-4-hours">#</a>Block 3 · Knowing whether it works (4 hours)</h3><p><a href="llm-as-a-judge.html">LLM as a judge</a> → <a href="regression-gates.html">Regression gates</a>
+→ <a href="numbers-to-know.html">Numbers to know</a></p>
+<p><strong>Exercise:</strong> write twenty golden questions for their pipeline and measure it.
+Then change the chunk size and measure again. The moment they see a change move
+the number less than the confidence interval is the moment evaluation stops
+being abstract.</p>
+<h3 id="block-4-making-it-real-4-hours"><a class="anchor" href="#block-4-making-it-real-4-hours">#</a>Block 4 · Making it real (4 hours)</h3><p><a href="serving-and-operations.html">Serving</a> → <a href="caching.html">Caching</a> →
+<a href="guardrails-and-security.html">Guardrails</a> →
+<a href="market-and-business.html">Market &amp; business</a></p>
+<p><strong>Exercise:</strong> cost their pipeline at a million requests a month. Then halve it.</p>
+<h3 id="block-5-depth-chosen-by-interest"><a class="anchor" href="#block-5-depth-chosen-by-interest">#</a>Block 5 · Depth, chosen by interest</h3><p>Agents, fine-tuning, quantization, GraphRAG, multimodal — as needed. By this
+point they can read any page unaided.</p>
+<hr>
+<h2 id="the-build-tasks-ranked"><a class="anchor" href="#the-build-tasks-ranked">#</a>The build tasks, ranked</h2><p>If you do nothing else from this handbook, do these. Each is a day or less and
+each answers a family of interview questions with evidence rather than theory.</p>
+<div class="table-scroll"><table><thead><tr><th>#</th><th>Task</th><th>What it proves</th></tr></thead><tbody><tr><td>1</td><td><strong>A golden set and a gate that fails CI</strong></td><td>You can evaluate a non-deterministic system</td></tr><tr><td>2</td><td><strong>A RAG pipeline in plain code</strong>, no framework</td><td>You know what the abstractions hide</td></tr><tr><td>3</td><td><strong>Measure your retrieval ceiling</strong></td><td>You diagnose before optimising</td></tr><tr><td>4</td><td><strong>A failure-injection test</strong> — kill a worker, prove recovery</td><td>You test distributed systems properly</td></tr><tr><td>5</td><td><strong>An LLM judge validated against your own labels</strong></td><td>You do not trust unmeasured instruments</td></tr><tr><td>6</td><td><strong>Cost your system at 10× volume</strong></td><td>You think about the business</td></tr></tbody></table></div><p><strong>Number 1 is the highest-value single thing in this handbook.</strong> It is the direct
+answer to <em>&quot;how did you evaluate it?&quot;</em>, which is the question most candidates
+answer with &quot;manual review and monitoring&quot; — and that answer loses the round.</p>
+<hr>
+<h2 id="how-to-know-you-are-done"><a class="anchor" href="#how-to-know-you-are-done">#</a>How to know you are done</h2><p>Not &quot;I have read everything&quot;. The honest tests:</p>
+<ul>
+<li>You can answer the twelve ⭐ questions in sixty seconds each, out loud, cold.</li>
+<li>You can do the five whiteboard calculations without notes.</li>
+<li>You have <strong>built</strong> at least tasks 1 and 3, and can talk through the numbers
+they produced.</li>
+<li>When someone proposes something from <a href="anti-patterns.html">anti-patterns</a>, you
+notice.</li>
+<li>You can say &quot;I do not know, here is how I would find out&quot; without discomfort —
+which is, in the end, the most senior thing on this page.</li>
+</ul>
+</article>
+    <div class="pager-row"><a class="pager previous" href="interview-questions.html"><span>previous</span>Interview question bank</a><a class="pager next" href="glossary.html"><span>next</span>Glossary</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#path-1-interview-in-two-weeks">Path 1 · Interview in two weeks</a></li><li class="d3"><a href="#days-12-find-out-what-you-cannot-answer">Days 1–2 · Find out what you cannot answer</a></li><li class="d3"><a href="#days-37-close-the-gaps">Days 3–7 · Close the gaps</a></li><li class="d3"><a href="#days-810-rehearse-the-system-design-round">Days 8–10 · Rehearse the system design round</a></li><li class="d3"><a href="#days-1114-consolidate">Days 11–14 · Consolidate</a></li><li class="d2"><a href="#path-2-building-your-first-rag-system">Path 2 · Building your first RAG system</a></li><li class="d2"><a href="#path-3-coming-from-classical-ml-or-computer-vision">Path 3 · Coming from classical ML or computer vision</a></li><li class="d2"><a href="#path-4-teaching-this-to-someone-else">Path 4 · Teaching this to someone else</a></li><li class="d3"><a href="#block-1-what-is-actually-happening-3-hours">Block 1 · What is actually happening (3 hours)</a></li><li class="d3"><a href="#block-2-making-it-useful-4-hours">Block 2 · Making it useful (4 hours)</a></li><li class="d3"><a href="#block-3-knowing-whether-it-works-4-hours">Block 3 · Knowing whether it works (4 hours)</a></li><li class="d3"><a href="#block-4-making-it-real-4-hours">Block 4 · Making it real (4 hours)</a></li><li class="d3"><a href="#block-5-depth-chosen-by-interest">Block 5 · Depth, chosen by interest</a></li><li class="d2"><a href="#the-build-tasks-ranked">The build tasks, ranked</a></li><li class="d2"><a href="#how-to-know-you-are-done">How to know you are done</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

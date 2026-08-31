@@ -1,0 +1,275 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GraphRAG &amp; knowledge graphs · LLM Handbook</title>
+<meta name="description" content="Retrieval over a graph instead of a pile of chunks — what it unlocks, and why it is usually not worth it.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li><li><a href="reasoning-models.html">Reasoning models & test-time compute</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="text2sql.html">Text2SQL & structured data</a></li><li><a href="graphrag.html" class="active">GraphRAG & knowledge graphs</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li><li><a href="synthetic-data.html">Synthetic data generation</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li><li><a href="caching.html">Caching strategies</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li><li><a href="learning-paths.html">Learning paths</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="graphrag-knowledge-graphs"><a class="anchor" href="#graphrag-knowledge-graphs">#</a>GraphRAG & knowledge graphs</h1><blockquote>
+<p><strong>The one sentence:</strong> vector RAG retrieves passages that <em>resemble</em> the query;
+graph RAG retrieves entities and the relationships <em>between</em> them — which is
+the only way to answer questions whose answer is not written down in any single
+passage.</p>
+</blockquote>
+<p>It is genuinely more capable on a narrow class of question and considerably more
+expensive on everything. Knowing which class is the entire decision.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   THE QUESTION VECTOR RAG CANNOT ANSWER
+
+   &quot;which of our suppliers are affected by the Kaohsiung plant closure?&quot;
+
+   VECTOR RAG                            GRAPH RAG
+   ──────────                            ─────────
+   embeds the question                   resolves entities: [Kaohsiung plant]
+   finds passages about                  traverses:
+   Kaohsiung, and passages                 plant --supplies--&gt; component
+   about suppliers                         component --used_by--&gt; supplier
+                                           supplier --serves--&gt; us
+   returns them                          returns the CONNECTED SET
+        │                                      │
+        ▼                                      ▼
+   the model must infer the             the relationship was retrieved,
+   connection -- if the chain is        not inferred
+   spread over 4 documents,
+   it cannot
+
+
+   THE RULE OF THUMB
+
+   answer IS in a passage        -&gt; vector RAG. Cheaper, simpler, better
+   answer is BETWEEN passages    -&gt; graph RAG
+   &quot;summarise the whole corpus&quot;  -&gt; graph RAG (community summaries)</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>The pipeline</strong>, and note how much of it is offline work:</p>
+<div class="table-scroll"><table><thead><tr><th>Stage</th><th>What happens</th><th>Cost</th></tr></thead><tbody><tr><td><strong>Entity extraction</strong></td><td>An LLM reads each chunk, extracts entities and relations</td><td>One LLM call <strong>per chunk</strong>. This dominates</td></tr><tr><td><strong>Entity resolution</strong></td><td>&quot;IBM&quot;, &quot;I.B.M.&quot;, &quot;International Business Machines&quot; → one node</td><td>Hard; the usual failure point</td></tr><tr><td><strong>Graph construction</strong></td><td>Nodes and typed edges, with source chunk provenance</td><td>Cheap once resolved</td></tr><tr><td><strong>Community detection</strong></td><td>Cluster the graph (Leiden or similar)</td><td>Cheap</td></tr><tr><td><strong>Community summaries</strong></td><td>An LLM summarises each cluster</td><td>Another pass of LLM calls</td></tr><tr><td><strong>Query time</strong></td><td>Resolve entities in the question, traverse, assemble context</td><td>Comparable to vector RAG</td></tr></tbody></table></div><p><strong>The indexing cost is the honest headline.</strong> Building a graph over a corpus is
+one or more LLM calls per chunk. On 100,000 chunks that is a real bill and hours
+of wall clock, and it must be redone as the corpus grows. Vector indexing is an
+embedding call per chunk — roughly two orders of magnitude cheaper.</p>
+<p><strong>Two query modes, and they solve different problems:</strong></p>
+<ul>
+<li><strong>Local search</strong> — start from entities mentioned in the question, traverse a
+hop or two, gather their neighbourhood. Good for &quot;how are X and Y connected?&quot;</li>
+<li><strong>Global search</strong> — use the community summaries to answer questions about the
+corpus <em>as a whole</em>: &quot;what are the main themes?&quot;, &quot;what changed this year?&quot;</li>
+</ul>
+<p><strong>Global search is the capability vector RAG genuinely cannot match.</strong> No top-k
+retrieval answers &quot;what are the recurring themes across these 10,000 documents&quot;,
+because the answer is in the aggregate rather than in any passage. That is the
+strongest argument for building a graph.</p>
+<hr>
+<h2 id="3-flow-should-you-build-one"><a class="anchor" href="#3-flow-should-you-build-one">#</a>3 · Flow — should you build one?</h2><pre class="mermaid">graph TD
+  A[Question types you must serve] --&gt; B{Are answers contained&lt;br/&gt;in single passages?}
+  B --&gt;|mostly yes| C[Vector RAG.&lt;br/&gt;Cheaper, simpler, easier to debug]
+  B --&gt;|no| D{Multi-hop over ENTITIES,&lt;br/&gt;or corpus-level synthesis?}
+  D --&gt;|neither| C
+  D --&gt;|multi-hop| E{Does a structured source&lt;br/&gt;already exist?}
+  E --&gt;|yes: a database, a CMDB,&lt;br/&gt;a product catalogue| F[Query it directly.&lt;br/&gt;Do not extract a graph&lt;br/&gt;from prose about it]
+  E --&gt;|no| G[Graph RAG: local search]
+  D --&gt;|corpus synthesis| H[Graph RAG: community summaries]
+  G --&gt; I[Budget: 1 LLM call per chunk,&lt;br/&gt;re-run as the corpus grows]
+  H --&gt; I
+  I --&gt; J[Hybrid: vector for most queries,&lt;br/&gt;graph for the ones that need it]</pre><p><strong>Node <code>F</code> is the branch most often missed.</strong> If the relationships already exist
+in a database — suppliers, parts, org charts, dependencies — extracting them
+from prose with an LLM is strictly worse than querying the system of record.
+Build the graph from structured data where you have it, and use the LLM only for
+what is genuinely unstructured.</p>
+<p><strong>Node <code>J</code> is the answer in practice.</strong> Almost nobody should run graph RAG alone.
+Route: most questions go to vector retrieval, and the small number that are
+multi-hop or corpus-level go to the graph.</p>
+<hr>
+<h2 id="4-uml-indexing-versus-query"><a class="anchor" href="#4-uml-indexing-versus-query">#</a>4 · UML — indexing versus query</h2><pre class="mermaid">sequenceDiagram
+    participant C as Corpus
+    participant L as LLM extractor
+    participant R as Entity resolver
+    participant G as Graph store
+    participant Q as Query
+
+    rect rgb(240, 240, 245)
+    Note over C,G: OFFLINE - expensive, one call per chunk
+    loop each chunk
+        C-&gt;&gt;L: extract entities and relations
+        L--&gt;&gt;R: (entity, relation, entity) + source chunk id
+    end
+    R-&gt;&gt;R: merge aliases into canonical nodes
+    R-&gt;&gt;G: write nodes and typed edges
+    G-&gt;&gt;L: summarise each detected community
+    L--&gt;&gt;G: community summaries
+    end
+
+    rect rgb(240, 245, 240)
+    Note over Q,G: ONLINE - comparable in cost to vector RAG
+    Q-&gt;&gt;G: resolve question entities
+    G-&gt;&gt;G: traverse 1-2 hops
+    G--&gt;&gt;Q: subgraph + source chunks
+    end</pre><p><strong>Every edge carries its source chunk id</strong>, and that matters: it is what lets you
+cite, and what lets you debug an extraction that went wrong. A graph without
+provenance is unauditable.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">EXTRACT = &quot;&quot;&quot;Extract entities and relationships from the passage.
+
+Return JSON:
+{&quot;entities&quot;: [{&quot;name&quot;: &quot;...&quot;, &quot;type&quot;: &quot;...&quot;}],
+ &quot;relations&quot;: [{&quot;source&quot;: &quot;...&quot;, &quot;relation&quot;: &quot;...&quot;, &quot;target&quot;: &quot;...&quot;}]}
+
+Use these entity types only: PERSON, ORG, PRODUCT, LOCATION, COMPONENT, EVENT.
+Use a controlled relation vocabulary: SUPPLIES, USES, LOCATED_IN, OWNS,
+REPORTS_TO, CAUSED_BY, PART_OF.
+
+Do not invent relationships that are not stated. If the passage implies but
+does not state a relationship, omit it.&quot;&quot;&quot;</code></pre><p><strong>The controlled vocabulary is the difference between a graph and a mess.</strong>
+Free-form extraction produces <code>supplies</code>, <code>provides</code>, <code>is_supplier_of</code> and
+<code>delivers_to</code> as four distinct edge types meaning one thing, and traversal then
+misses paths. Constrain the schema up front.</p>
+<pre class="code"><code class="language-python">def resolve_entities(extracted, embed, threshold=0.92):
+    &quot;&quot;&quot;Merge aliases into canonical nodes.
+
+    This is the step that decides whether the graph is usable. &#39;IBM&#39;,
+    &#39;I.B.M.&#39; and &#39;International Business Machines&#39; must become one node, or
+    traversal fragments and multi-hop queries silently return nothing.
+
+    Embedding similarity plus a type check catches most of it; a curated alias
+    table handles the domain-specific rest, and you will need one.
+    &quot;&quot;&quot;
+    canonical, vectors = {}, {}
+    for entity in extracted:
+        v = embed(entity[&quot;name&quot;])
+        match = None
+        for name, seen in vectors.items():
+            if canonical[name][&quot;type&quot;] == entity[&quot;type&quot;] and cosine(v, seen) &gt; threshold:
+                match = name
+                break
+        if match:
+            canonical[match][&quot;aliases&quot;].add(entity[&quot;name&quot;])
+        else:
+            canonical[entity[&quot;name&quot;]] = {**entity, &quot;aliases&quot;: {entity[&quot;name&quot;]}}
+            vectors[entity[&quot;name&quot;]] = v
+    return canonical
+
+
+def local_search(graph, question, embed, hops=2, max_nodes=40):
+    &quot;&quot;&quot;Traverse from the question&#39;s entities, bounded.
+
+    The bound matters: in a well-connected graph, two hops from a hub node can
+    reach most of the corpus, which fills the context with noise and costs a
+    fortune. Cap the frontier and prefer higher-weight edges.
+    &quot;&quot;&quot;
+    seeds = graph.resolve_mentions(question, embed)
+    seen, frontier = set(seeds), list(seeds)
+
+    for _ in range(hops):
+        next_frontier = []
+        for node in frontier:
+            for neighbour in graph.neighbours(node, order_by=&quot;weight&quot;, limit=8):
+                if neighbour not in seen and len(seen) &lt; max_nodes:
+                    seen.add(neighbour)
+                    next_frontier.append(neighbour)
+        frontier = next_frontier
+
+    # Return the source chunks, not just the graph -- the model needs the prose
+    # to answer from, and the citations come from here.
+    return graph.subgraph(seen), graph.source_chunks(seen)</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Extraction errors compound through traversal.</strong> A wrong edge in vector RAG is
+one bad chunk among five. A wrong edge in a graph is a false path that multi-hop
+queries will follow confidently to a fabricated conclusion. Precision of
+extraction matters much more than recall — it is better to miss a relationship
+than to invent one.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Free-form relation vocabulary</strong></td><td>Four edge types meaning one thing; traversal misses paths</td><td>Controlled schema in the prompt</td></tr><tr><td><strong>Poor entity resolution</strong></td><td>Fragmented graph; multi-hop returns nothing</td><td>Embedding merge + curated alias table</td></tr><tr><td><strong>Unbounded traversal</strong></td><td>Context filled with the whole corpus</td><td>Cap hops and frontier size</td></tr><tr><td><strong>No provenance on edges</strong></td><td>Cannot cite or debug</td><td>Store the source chunk id on every edge</td></tr><tr><td><strong>Extracting from prose about structured data</strong></td><td>Worse than the database you already have</td><td>Build from the system of record</td></tr><tr><td><strong>Graph-only retrieval</strong></td><td>Expensive and worse on ordinary questions</td><td>Route; vector for most, graph for the few</td></tr><tr><td><strong>Re-indexing cost ignored</strong></td><td>Graph goes stale, or the bill surprises</td><td>Budget incremental extraction</td></tr></tbody></table></div><p><strong>Evaluate it against vector RAG, per question type.</strong> The honest comparison is
+bucketed: single-hop factual, multi-hop, corpus-level synthesis. Graph RAG
+usually loses on the first — more context, more noise, more cost — and wins
+decisively on the last two. An aggregate comparison hides both effects and leads
+to the wrong conclusion in either direction.</p>
+<p><strong>The cheaper alternative worth trying first.</strong> Before building a graph, try
+<strong>metadata-filtered vector retrieval plus multi-hop query decomposition</strong>: break
+the question into sub-questions, retrieve for each, and combine. It handles a
+good share of multi-hop questions at a fraction of the indexing cost. If that
+fails on your question set, you have a real argument for the graph — and now you
+have evidence rather than enthusiasm.</p>
+<p><strong>Where graph RAG is clearly right</strong>, stated so this reads as a judgement rather
+than a dismissal: corpora where the <em>relationships are the content</em>. Legal and
+regulatory documents with cross-references, incident and root-cause analysis,
+supply chains, biomedical literature, org and dependency structures. In those
+domains, questions are naturally about connections, and the graph is not an
+optimisation — it is the correct data model.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What graph RAG looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Answers to questions that previously returned &quot;I could not find that&quot; — because the answer was never in one document.</td></tr><tr><td><strong>Coder</strong></td><td>Controlled relation vocabulary. Provenance on every edge. Bounded traversal. Resolve entities properly; that step decides whether any of it works.</td></tr><tr><td><strong>Tester</strong></td><td>Evaluate bucketed by hop count against a vector baseline. Test entity resolution directly — a fragmented graph fails silently by returning nothing.</td></tr><tr><td><strong>System designer</strong></td><td>Indexing is an expensive batch pipeline that must handle incremental updates. Query time is fine; build time is the engineering problem.</td></tr><tr><td><strong>Architect</strong></td><td>A second index with its own build pipeline, staleness and cost. Justify it against the cheaper decomposition approach before committing to maintaining it.</td></tr><tr><td><strong>CEO</strong></td><td>Substantially more expensive to build than vector RAG, and it answers questions vector RAG cannot. Ask which questions those are and how many people actually ask them.</td></tr><tr><td><strong>Market</strong></td><td>Microsoft&#39;s GraphRAG made it visible and the implementations are open. The moat is not the technique — it is having a corpus where relationships carry the value.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>⭐ &quot;When does vector RAG fail?&quot;</td><td>Whether you know its limits</td><td>When the answer is not in any single passage — multi-hop over entities, or corpus-level synthesis like &quot;what are the main themes&quot;. Top-k retrieval cannot aggregate across ten thousand documents.</td></tr><tr><td>&quot;What does graph RAG cost?&quot;</td><td>Cost realism</td><td>An LLM call per chunk to extract, plus entity resolution, plus community summarisation — roughly two orders of magnitude more than embedding, and it must be re-run as the corpus grows.</td></tr><tr><td>⭐ &quot;What is the hardest part?&quot;</td><td>Depth</td><td>Entity resolution. If &quot;IBM&quot; and &quot;International Business Machines&quot; stay separate nodes the graph fragments and multi-hop queries silently return nothing — a failure that looks like the technique not working.</td></tr><tr><td>&quot;Would you try anything cheaper first?&quot;</td><td>Judgement</td><td>Yes — query decomposition into sub-questions with vector retrieval per sub-question handles many multi-hop cases at a fraction of the indexing cost. If that fails on the question set, you have evidence for the graph.</td></tr><tr><td>&quot;How would you evaluate it?&quot;</td><td>Method</td><td>Bucketed by hop count against a vector baseline. Graph usually loses on single-hop factual and wins on multi-hop and synthesis; an aggregate comparison hides both.</td></tr><tr><td>&quot;Relationships already exist in a database.&quot;</td><td>The trap</td><td>Then query the database. Extracting relationships from prose about structured data is strictly worse than the system of record. Build the graph from structured sources where they exist.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>give the question type vector RAG cannot answer and why,</li>
+<li>state the indexing cost honestly,</li>
+<li>name entity resolution as the hard part and say what failure looks like,</li>
+<li>give the cheaper alternative to try first, and</li>
+<li>name a domain where the graph is the correct data model.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>The method</td><td>Microsoft&#39;s <em>From Local to Global: A Graph RAG Approach to Query-Focused Summarization</em> (Edge et al., 2024)</td></tr><tr><td>Community detection</td><td>The Leiden algorithm paper (Traag et al., 2019)</td></tr><tr><td>Entity resolution</td><td>The record-linkage literature; this problem long predates LLMs and is well studied</td></tr><tr><td>Implementations</td><td>Microsoft GraphRAG, LlamaIndex property-graph index, Neo4j&#39;s LLM integrations</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="text2sql.html"><span>previous</span>Text2SQL & structured data</a><a class="pager next" href="query-transformation.html"><span>next</span>Query transformation & HyDE</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow-should-you-build-one">3 · Flow — should you build one?</a></li><li class="d2"><a href="#4-uml-indexing-versus-query">4 · UML — indexing versus query</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
