@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tokenization · LLM Handbook</title>
+<meta name="description" content="The layer nobody thinks about until it causes a bug, a bill, or a fairness problem.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html" class="active">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="tokenization"><a class="anchor" href="#tokenization">#</a>Tokenization</h1><blockquote>
+<p><strong>The one sentence:</strong> the model never sees your text — it sees integers from a
+fixed vocabulary, and almost every strange LLM behaviour that looks like
+stupidity is an artefact of that translation.</p>
+</blockquote>
+<p>This is the least glamorous page in the handbook and the one that explains the
+most otherwise-inexplicable bugs.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   WHAT THE MODEL ACTUALLY RECEIVES
+
+   &quot;The immune system fights viruses.&quot;
+            │
+            ▼   BPE tokenizer
+   [&quot;The&quot;, &quot; immune&quot;, &quot; system&quot;, &quot; fights&quot;, &quot; virus&quot;, &quot;es&quot;, &quot;.&quot;]
+   [ 791,   30248,     1887,      28533,     16989,   288,  13 ]
+            │
+            ▼
+   the model sees ONLY those integers.
+   It has no access to letters, spelling, or characters.
+
+
+   WHY THAT EXPLAINS THE FAMOUS FAILURES
+
+   &quot;how many r&#39;s in strawberry?&quot;
+     -&gt; [&quot;str&quot;, &quot;aw&quot;, &quot;berry&quot;]  the model never sees individual letters
+        it is being asked to count something it cannot perceive
+
+   arithmetic on long numbers
+     -&gt; &quot;1234567&quot; may split as [&quot;123&quot;, &quot;45&quot;, &quot;67&quot;]
+        digit alignment is destroyed before computation begins
+
+   reversing a string
+     -&gt; operates on token boundaries, not characters</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic — what a tokenizer is.</strong> A fixed vocabulary (typically 32k–200k entries)
+mapping text fragments to integers, plus rules for splitting arbitrary text into
+those fragments. Common words are one token; rare words break into pieces; the
+vocabulary is learned from a training corpus.</p>
+<p><strong>Byte-pair encoding (BPE)</strong>, the dominant algorithm, is trained by starting
+from individual bytes and repeatedly merging the most frequent adjacent pair
+until the vocabulary reaches its target size. Frequent sequences become single
+tokens; rare ones stay fragmented. That frequency dependence is the source of
+almost everything on this page.</p>
+<div class="table-scroll"><table><thead><tr><th>Scheme</th><th>Used by</th><th>Note</th></tr></thead><tbody><tr><td><strong>BPE / byte-level BPE</strong></td><td>GPT, Llama, most modern models</td><td>Never fails on unseen input — worst case falls back to bytes</td></tr><tr><td><strong>WordPiece</strong></td><td>BERT</td><td>Similar; likelihood-based merge criterion</td></tr><tr><td><strong>SentencePiece / Unigram</strong></td><td>T5, many multilingual models</td><td>Language-agnostic, treats space as a character</td></tr></tbody></table></div><p><strong>Intermediate — the rules of thumb worth memorising.</strong></p>
+<pre class="code"><code>   English prose        ~ 1 token ≈ 4 characters ≈ 0.75 words
+   Code                 ~ more tokens per character (punctuation, indentation)
+   Numbers              ~ inconsistent; digits group unpredictably
+   Non-Latin scripts    ~ often 2-4x more tokens for the SAME meaning
+   Whitespace           ~ leading space is usually part of the token</code></pre><p>That last one causes real bugs: <code>&quot;hello&quot;</code> and <code>&quot; hello&quot;</code> are <strong>different
+tokens</strong>. A prompt template that accidentally strips or adds a leading space
+produces different tokenization, and occasionally different behaviour.</p>
+<p><strong>Advanced — the fairness and cost problem nobody planned.</strong> Because vocabularies
+are learned from corpora dominated by English, the same sentence in another
+language costs substantially more tokens. Measured across languages, some
+require 2–4× the tokens of English for equivalent content, and some low-resource
+scripts far more.</p>
+<p>The consequences compound:</p>
+<ol>
+<li><strong>Users pay more</strong> for the same task in their language, since billing is
+per token.</li>
+<li><strong>They hit context limits sooner</strong> — the effective window is smaller.</li>
+<li><strong>Quality is lower</strong>, because heavily fragmented text is harder to model.</li>
+</ol>
+<p>This is a genuine equity issue baked into the pricing layer, and it is worth
+raising unprompted in any discussion of multilingual deployment. It is also
+measurable in about ten lines of code, which makes it a concrete point rather
+than a talking point.</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Raw text] --&gt; B[Normalise: unicode, sometimes case]
+  B --&gt; C[Pre-tokenize: split on whitespace/punctuation]
+  C --&gt; D[Apply learned BPE merges]
+  D --&gt; E[Map fragments to integer ids]
+  E --&gt; F[Add special tokens: BOS, EOS, chat roles]
+  F --&gt; G[Model]
+  G --&gt; H[Output token ids]
+  H --&gt; I[Detokenize back to text]
+  I --&gt; J{Streaming?}
+  J --&gt;|yes| K[Buffer: a token may be a PARTIAL character]
+  K --&gt; I</pre><p><strong>Node <code>K</code> is a real bug source.</strong> In byte-level BPE a single token can be part
+of a multi-byte UTF-8 character. Decoding token-by-token during streaming
+produces mojibake — replacement characters mid-word — unless you buffer until
+the bytes form valid characters. Most SDKs handle it; hand-rolled streaming
+frequently does not, and the bug only appears for emoji and non-Latin text.</p>
+<hr>
+<h2 id="4-uml-where-tokenization-touches-the-system"><a class="anchor" href="#4-uml-where-tokenization-touches-the-system">#</a>4 · UML — where tokenization touches the system</h2><pre class="mermaid">graph LR
+  A[User input] --&gt; B[Tokenizer]
+  B --&gt; C{Length check}
+  C --&gt;|over limit| D[Truncate or reject&lt;br/&gt;BEFORE the API call]
+  C --&gt;|ok| E[Model]
+  E --&gt; F[Output tokens]
+  F --&gt; G[Cost accounting]
+  F --&gt; H[Streaming decoder&lt;br/&gt;with byte buffer]
+  B --&gt; I[Cost estimate&lt;br/&gt;before spending]
+  H --&gt; J[User]</pre><p><strong>Count tokens client-side before calling.</strong> It is the difference between
+rejecting an over-long request in a millisecond for free, and discovering the
+limit after paying for the prefill.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">def analyse(tokenizer, texts: dict[str, str]) -&gt; None:
+    &quot;&quot;&quot;Show the cost of the same meaning across languages.
+
+    The vocabulary is learned from a corpus dominated by English, so the same
+    content in other scripts fragments into more pieces. Users are billed per
+    token, so this is a price difference for identical work.
+    &quot;&quot;&quot;
+    baseline = None
+    for language, text in texts.items():
+        n = len(tokenizer.encode(text))
+        ratio = &quot;&quot; if baseline is None else f&quot;  {n / baseline:.1f}x English&quot;
+        baseline = baseline or n
+        print(f&quot;{language:&lt;12} {n:&gt;4} tokens  ({len(text)/n:.1f} chars/token){ratio}&quot;)
+
+
+analyse(tok, {
+    &quot;English&quot;:  &quot;The immune system defends the body against disease.&quot;,
+    &quot;Hindi&quot;:    &quot;प्रतिरक्षा प्रणाली शरीर को रोगों से बचाती है।&quot;,
+    &quot;Japanese&quot;: &quot;免疫系は病気から体を守ります。&quot;,
+    &quot;Tamil&quot;:    &quot;நோய் எதிர்ப்பு அமைப்பு உடலை நோய்களிலிருந்து பாதுகாக்கிறது.&quot;,
+})</code></pre><p>Typical output shape (exact numbers depend on the tokenizer):</p>
+<pre class="code"><code>English        11 tokens  (4.6 chars/token)
+Hindi          29 tokens  (1.5 chars/token)   2.6x English
+Japanese       18 tokens  (0.9 chars/token)   1.6x English
+Tamil          47 tokens  (1.2 chars/token)   4.3x English</code></pre><p><strong>A budget guard that avoids paying to discover a limit:</strong></p>
+<pre class="code"><code class="language-python">def fits(tokenizer, system: str, context: list[str], question: str,
+         limit: int, reserve_for_output: int = 1000) -&gt; tuple[bool, int]:
+    &quot;&quot;&quot;Check length locally before spending anything on prefill.
+
+    Reserving output space is the part people forget: the limit covers input
+    AND output together, so a prompt that just fits leaves no room to answer
+    and fails after you have already paid for it.
+    &quot;&quot;&quot;
+    used = len(tokenizer.encode(system)) + len(tokenizer.encode(question))
+    used += sum(len(tokenizer.encode(c)) for c in context)
+    return used + reserve_for_output &lt;= limit, used
+
+
+def trim_to_budget(tokenizer, chunks: list[str], budget: int) -&gt; list[str]:
+    &quot;&quot;&quot;Drop whole chunks from the end rather than truncating mid-chunk.
+
+    Cutting inside a passage leaves a fragment that reads as a complete
+    statement while missing its qualifier -- which is how a truncation bug
+    becomes a factual error rather than an obvious one.
+    &quot;&quot;&quot;
+    kept, used = [], 0
+    for chunk in chunks:
+        n = len(tokenizer.encode(chunk))
+        if used + n &gt; budget:
+            break
+        kept.append(chunk)
+        used += n
+    return kept</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Never truncate in the middle of a semantic unit.</strong> Cutting a passage at a token
+boundary can leave &quot;The dosage is safe below&quot; without &quot;500mg&quot;. The result reads
+as a complete claim and is wrong. Drop whole chunks, or truncate from the middle
+of the <em>list</em> rather than the middle of a <em>passage</em>.</p>
+<p><strong>Tokenizers are coupled to models and are not interchangeable.</strong> Counting tokens
+with one model&#39;s tokenizer and calling another gives wrong estimates — sometimes
+by 20% or more. If you support multiple providers, count with each provider&#39;s own
+tokenizer, or accept that your budget guard is approximate and reserve headroom.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Wrong tokenizer for the model</strong></td><td>Budget guard off by 20%</td><td>Use the model&#39;s own tokenizer</td></tr><tr><td><strong>Mid-passage truncation</strong></td><td>Confident, wrong answers</td><td>Drop whole chunks</td></tr><tr><td><strong>No output reservation</strong></td><td>Fails after prefill is paid for</td><td>Reserve output space in the check</td></tr><tr><td><strong>Streaming decode per token</strong></td><td>Mojibake on emoji and non-Latin</td><td>Buffer until bytes form valid characters</td></tr><tr><td><strong>Leading-space mismatch</strong></td><td>Subtle behaviour change from a template edit</td><td>Be consistent; test the assembled prompt</td></tr><tr><td><strong>Assuming words ≈ tokens</strong></td><td>Estimates wrong for code and other languages</td><td>Measure on your actual data</td></tr></tbody></table></div><p><strong>Glitch tokens are a genuine curiosity with a real lesson.</strong> Some vocabularies
+contain tokens that appeared during vocabulary construction but were effectively
+absent from training data — famously <code>SolidGoldMagikarp</code> in GPT-2/3 vocabularies.
+Prompting with them produced bizarre, sometimes evasive behaviour. The general
+lesson: a token the model has barely seen has an essentially arbitrary embedding,
+and the model&#39;s behaviour on it is undefined rather than merely poor.</p>
+<p><strong>Why not character-level or byte-level throughout?</strong> It has been tried. Sequences
+become 4–5× longer, attention is quadratic in length, and both training and
+inference get much more expensive. Tokenization is a compression scheme that
+trades a class of failures — counting letters, arithmetic alignment — for a large
+efficiency gain. Recent byte-level architectures revisit this trade, and it is
+worth watching, but the compression argument is why subword tokenization has
+persisted.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What tokenization means from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>An invisible tax if they write in a non-English script: fewer words fit, more is charged, quality is lower. They will never know why.</td></tr><tr><td><strong>Coder</strong></td><td>Count tokens with the <em>model&#39;s own</em> tokenizer, before the call. Reserve output space. Buffer streaming bytes. Never truncate inside a passage.</td></tr><tr><td><strong>Tester</strong></td><td>Test with non-Latin scripts, emoji and code — not just English prose. Boundary tests belong at the token limit, including the case where input fits but leaves no room for output.</td></tr><tr><td><strong>System designer</strong></td><td>Token counting is a cheap local guard that prevents expensive remote failures. Put it at the edge, before the queue.</td></tr><tr><td><strong>Architect</strong></td><td>Tokenizers are model-coupled, so multi-provider support means multiple counters and non-portable budgets. Factor that into any abstraction over providers.</td></tr><tr><td><strong>CEO</strong></td><td>Non-English users cost more to serve for identical work. That is a pricing and equity question, and it is measurable rather than theoretical.</td></tr><tr><td><strong>Market</strong></td><td>Tokenizer efficiency is a real differentiator for multilingual products — a model with a better vocabulary for your users&#39; languages is cheaper <em>and</em> better for them, independent of benchmark scores.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;Why can&#39;t the model count letters in a word?&quot;</td><td>Whether you know the mechanism</td><td>It never sees letters. Text is split into subword tokens and the model receives integers; &quot;strawberry&quot; may be three tokens, and character-level structure is not accessible from that representation.</td></tr><tr><td>&quot;Why is non-English text more expensive?&quot;</td><td>Depth and awareness</td><td>Vocabularies are learned from English-dominated corpora, so other scripts fragment into more tokens for the same meaning — often 2–4×. Users pay more, hit context limits sooner, and get lower quality.</td></tr><tr><td>&quot;How would you truncate a long prompt?&quot;</td><td>Practical care</td><td>Drop whole chunks from lowest relevance, never cut inside a passage — a truncated passage reads complete and can be wrong. And reserve output space, since the limit covers both directions.</td></tr><tr><td>&quot;Your token count doesn&#39;t match the bill.&quot;</td><td>Debugging instinct</td><td>Probably counting with a different tokenizer than the model uses, or forgetting special and chat-template tokens, or counting input only when output is billed separately and higher.</td></tr><tr><td>&quot;What are glitch tokens?&quot;</td><td>Curiosity and rigour</td><td>Vocabulary entries barely present in training data, so their embeddings are essentially arbitrary and behaviour on them is undefined. The general point is that rare tokens are not merely weak — they are unpredictable.</td></tr><tr><td>&quot;Why not just use characters?&quot;</td><td>Trade-off reasoning</td><td>Sequences get 4–5× longer and attention is quadratic in length, so it is far more expensive. Tokenization trades a specific class of failures for a large efficiency gain.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>explain the strawberry problem in terms of representation,</li>
+<li>quote the chars-per-token rules of thumb and where they break,</li>
+<li>describe the multilingual cost and fairness consequence,</li>
+<li>say why truncating mid-passage is dangerous, and</li>
+<li>explain why character-level models are not the obvious answer.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>BPE</td><td>Sennrich et al. (2015), <em>Neural Machine Translation of Rare Words with Subword Units</em></td></tr><tr><td>Build one</td><td>Karpathy&#39;s <code>minbpe</code> and his tokenizer video — two hours that remove all the mystery</td></tr><tr><td>Multilingual cost</td><td><em>Language Model Tokenizers Introduce Unfairness Between Languages</em> (Petrov et al., 2023)</td></tr><tr><td>Glitch tokens</td><td>The <code>SolidGoldMagikarp</code> investigation — an unusually entertaining piece of empirical work</td></tr><tr><td>Byte-level alternatives</td><td>Recent byte-latent and tokenizer-free architectures; the trade-off is still being argued</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="transformers.html"><span>previous</span>Transformers & attention</a><a class="pager next" href="decoding.html"><span>next</span>Decoding & sampling</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-where-tokenization-touches-the-system">4 · UML — where tokenization touches the system</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

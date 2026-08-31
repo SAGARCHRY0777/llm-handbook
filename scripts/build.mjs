@@ -23,8 +23,11 @@ const MODULES = [
   { id: "evaluation", title: "Evaluation & judging" },
   { id: "optimization", title: "Inference optimization" },
   { id: "orchestration", title: "Orchestration frameworks" },
+  { id: "agents", title: "Agents & safety" },
+  { id: "training", title: "Training & adaptation" },
   { id: "operations", title: "Deployment & operations" },
   { id: "business", title: "Market & business" },
+  { id: "reference", title: "Reference" },
 ];
 
 /* ------------------------------------------------------------------ parse */

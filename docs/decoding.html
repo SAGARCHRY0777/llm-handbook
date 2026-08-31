@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Decoding &amp; sampling · LLM Handbook</title>
+<meta name="description" content="How a probability distribution becomes one token, and why temperature 0 is not the same as deterministic.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html" class="active">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="decoding-sampling"><a class="anchor" href="#decoding-sampling">#</a>Decoding & sampling</h1><blockquote>
+<p><strong>The one sentence:</strong> the model does not produce text — it produces a
+probability distribution over the vocabulary, once per token, and decoding is
+the policy you apply to turn that into a choice.</p>
+</blockquote>
+<p>Two systems with the same model and the same prompt can behave completely
+differently because of settings most people copy from a tutorial without reading.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   ONE STEP OF GENERATION
+
+   logits over the full vocabulary (~100k numbers)
+        │
+        ├── temperature ──► sharpen (T&lt;1) or flatten (T&gt;1) the distribution
+        │
+        ├── top-k ────────► keep only the k most likely
+        │
+        ├── top-p ────────► keep the smallest set summing to p  (nucleus)
+        │
+        ├── penalties ────► push down tokens already used
+        │
+        ▼
+   renormalise ──► sample one token ──► append ──► repeat
+
+
+   THE SHAPE OF THE CHOICE
+
+   greedy (T=0)         always the top token. Repetitive, but reproducible-ish
+   low T (0.1-0.3)      focused. Extraction, classification, code
+   mid T (0.7-1.0)      natural. Chat, general use
+   high T (&gt;1.2)        erratic. Rarely what you want</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic — the parameters and what each actually does.</strong></p>
+<div class="table-scroll"><table><thead><tr><th>Parameter</th><th>Effect</th><th>Sensible default</th></tr></thead><tbody><tr><td><strong>temperature</strong></td><td>Divides logits before softmax. Lower = sharper</td><td>0 for extraction, 0.7 for chat</td></tr><tr><td><strong>top_k</strong></td><td>Keep the k highest-probability tokens</td><td>40, or off</td></tr><tr><td><strong>top_p</strong></td><td>Keep the smallest set whose mass reaches p</td><td>0.9–0.95</td></tr><tr><td><strong>frequency_penalty</strong></td><td>Reduce tokens by how often they have appeared</td><td>0 unless looping</td></tr><tr><td><strong>presence_penalty</strong></td><td>Reduce tokens that appeared at all</td><td>0 unless repetitive</td></tr><tr><td><strong>max_tokens</strong></td><td>Hard stop</td><td><strong>Always set it</strong></td></tr><tr><td><strong>stop</strong></td><td>Sequences that end generation</td><td>Structure-dependent</td></tr></tbody></table></div><p><strong>Top-p beats top-k</strong>, and the reason is worth internalising. Top-k always keeps
+exactly k candidates regardless of how confident the model is. When it is
+certain — the next token is obviously <code>&quot;(&quot;</code> — top-k still admits 39 wrong
+alternatives. When it is genuinely uncertain across 200 plausible continuations,
+top-k truncates to 40 and discards good options. Top-p adapts: it keeps few
+candidates when confident and many when not, which is the behaviour you actually
+want. Use top-p; leave top-k off unless you have a specific reason.</p>
+<p><strong>Intermediate — beam search, and why chat models do not use it.</strong> Beam search
+keeps the <em>b</em> highest-probability partial sequences and returns the most likely
+complete one. It genuinely helps where a single correct output exists —
+translation, structured extraction. For open-ended generation it produces bland,
+repetitive text, because the highest-probability sequence is the least
+surprising one. Human-sounding text is not maximum-likelihood text, which is a
+genuinely interesting finding and the reason sampling won for chat.</p>
+<p><strong>Advanced — temperature 0 is not determinism, and this matters more than it
+sounds.</strong> Even at temperature 0 you can get different outputs from identical
+inputs. Causes:</p>
+<ol>
+<li><strong>Floating-point non-associativity</strong> — GPU reductions sum in nondeterministic
+order, so near-ties in logits can flip.</li>
+<li><strong>Batch composition</strong> — kernels select different code paths by batch shape,
+changing rounding.</li>
+<li><strong>Mixture-of-experts routing</strong> — expert assignment can depend on other
+sequences in the batch.</li>
+<li><strong>Silent infrastructure changes</strong> — different GPU generation, different kernel
+version.</li>
+</ol>
+<p>So &quot;temperature 0 for reproducibility&quot; is a reduction in variance, not a
+guarantee. Any test asserting exact string equality on model output is a flaky
+test waiting to happen — which is precisely why the evaluation module scores
+rather than asserts.</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Task] --&gt; B{One correct answer,&lt;br/&gt;or many acceptable ones?}
+  B --&gt;|one| C[temperature 0&lt;br/&gt;extraction, classification, code]
+  B --&gt;|many| D[temperature 0.7-1.0 + top_p 0.95&lt;br/&gt;chat, drafting, ideation]
+  C --&gt; E{Output must be structured?}
+  E --&gt;|yes| F[Add constrained decoding&lt;br/&gt;or schema-enforced tools]
+  E --&gt;|no| G[Set stop sequences]
+  D --&gt; H{Repetitive output?}
+  H --&gt;|yes| I[Raise presence penalty&lt;br/&gt;before raising temperature]
+  H --&gt;|no| G
+  F --&gt; J[Always set max_tokens]
+  G --&gt; J
+  I --&gt; J</pre><p><strong><code>I</code> is a common misdiagnosis.</strong> Repetition loops are usually better fixed with
+a presence or frequency penalty than by raising temperature — raising temperature
+fixes the loop by making <em>everything</em> less predictable, including the parts that
+were fine.</p>
+<hr>
+<h2 id="4-uml-where-sampling-sits-in-the-loop"><a class="anchor" href="#4-uml-where-sampling-sits-in-the-loop">#</a>4 · UML — where sampling sits in the loop</h2><pre class="mermaid">sequenceDiagram
+    participant M as Model
+    participant S as Sampler
+    participant G as Grammar (optional)
+    participant O as Output
+
+    loop each token
+        M--&gt;&gt;S: logits over vocabulary
+        opt constrained decoding
+            G--&gt;&gt;S: mask invalid tokens to -inf
+            Note over G,S: This is why constrained output&lt;br/&gt;cannot produce invalid JSON:&lt;br/&gt;invalid tokens are unsamplable
+        end
+        S-&gt;&gt;S: temperature, top-p, penalties
+        S-&gt;&gt;S: renormalise, sample
+        S--&gt;&gt;O: token
+        O--&gt;&gt;M: append and continue
+    end</pre><p>Constrained decoding is a <strong>mask applied to the logits</strong>, not a validation step
+afterwards. That is why its guarantee is absolute rather than probabilistic.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">import numpy as np
+
+
+def sample(logits, temperature=1.0, top_p=0.95, penalties=None):
+    &quot;&quot;&quot;One decoding step, in the order the operations must happen.
+
+    Penalties are applied to raw logits BEFORE temperature: applying them after
+    scaling makes their strength depend on the temperature, so tuning one
+    silently changes the other.
+    &quot;&quot;&quot;
+    logits = logits.astype(np.float64).copy()
+
+    if penalties:
+        for token_id, count in penalties.items():
+            logits[token_id] -= count       # frequency-style: proportional to use
+
+    if temperature &lt;= 0:
+        return int(np.argmax(logits))       # greedy; no sampling at all
+
+    logits /= temperature
+    probs = np.exp(logits - logits.max())
+    probs /= probs.sum()
+
+    if top_p &lt; 1.0:
+        order = np.argsort(probs)[::-1]
+        cumulative = np.cumsum(probs[order])
+        # Keep everything up to and INCLUDING the token that crosses p, so the
+        # nucleus is never empty when one token already exceeds p on its own.
+        cutoff = int(np.searchsorted(cumulative, top_p) + 1)
+        keep = order[:cutoff]
+        filtered = np.zeros_like(probs)
+        filtered[keep] = probs[keep]
+        probs = filtered / filtered.sum()
+
+    return int(np.random.choice(len(probs), p=probs))</code></pre><p><strong>Settings by task, as a table you can act on:</strong></p>
+<pre class="code"><code class="language-python">PRESETS = {
+    # One right answer: remove variance entirely.
+    &quot;extraction&quot;:     {&quot;temperature&quot;: 0.0, &quot;max_tokens&quot;: 500},
+    &quot;classification&quot;: {&quot;temperature&quot;: 0.0, &quot;max_tokens&quot;: 10},
+    &quot;code&quot;:           {&quot;temperature&quot;: 0.2, &quot;top_p&quot;: 0.95, &quot;max_tokens&quot;: 2000},
+
+    # Many acceptable answers: sample.
+    &quot;chat&quot;:           {&quot;temperature&quot;: 0.7, &quot;top_p&quot;: 0.95, &quot;max_tokens&quot;: 1000},
+    &quot;brainstorm&quot;:     {&quot;temperature&quot;: 1.0, &quot;top_p&quot;: 0.98, &quot;max_tokens&quot;: 800},
+
+    # Judges must be as reproducible as possible -- a ruler that varies run to
+    # run cannot measure a change.
+    &quot;judge&quot;:          {&quot;temperature&quot;: 0.0, &quot;max_tokens&quot;: 200},
+}</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Structured output and sampling interact, and the interaction is easy to get
+wrong.</strong> High temperature raises the chance of a malformed JSON token. But
+clamping to temperature 0 <em>and</em> a tight grammar can hurt reasoning quality,
+because the model cannot express intermediate thinking. The pattern that works:
+low temperature, a free-text reasoning field first, then constrained fields —
+<code>{&quot;reasoning&quot;: &quot;...&quot;, &quot;answer&quot;: &quot;...&quot;}</code> in that order.</p>
+<p><strong>Penalties are blunt instruments applied to token ids, not meanings.</strong> A
+frequency penalty suppresses a token regardless of whether repeating it is
+correct. In code generation this is actively harmful — <code>return</code>, <code>self</code> and <code>def</code>
+are <em>supposed</em> to repeat. Penalties on code, or on structured output, cause
+subtle corruption. Default to 0 and reach for them only for a demonstrated
+repetition loop.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>No <code>max_tokens</code></strong></td><td>One request consumes a huge budget</td><td>Always set it; it is a capacity control</td></tr><tr><td><strong>Penalties on code</strong></td><td>Broken syntax, missing keywords</td><td>Penalties 0 for structured output</td></tr><tr><td><strong>top_k instead of top_p</strong></td><td>Bland when uncertain, wrong when confident</td><td>Use top_p</td></tr><tr><td><strong>Temperature to fix repetition</strong></td><td>Everything gets less reliable</td><td>Presence penalty instead</td></tr><tr><td><strong>Asserting exact output in tests</strong></td><td>Flaky suite</td><td>Score, do not assert equality</td></tr><tr><td><strong>High temperature with a schema</strong></td><td>Occasional invalid JSON</td><td>Low temperature plus constrained decoding</td></tr></tbody></table></div><p><strong>Speculative decoding</strong> deserves a mention here because it is a decoding-time
+optimisation that changes nothing about the output distribution. A small draft
+model proposes several tokens; the large model verifies them in one forward pass
+and accepts the longest correct prefix. Because verification is parallel and
+decode is bandwidth-bound, this is often a two-to-three-times speedup with
+<strong>mathematically identical</strong> output. That last property is what makes it safe to
+deploy without re-running your evals — worth saying explicitly, because it is
+unusual among optimisations.</p>
+<p><strong>Logprobs are underused.</strong> Most APIs can return per-token log-probabilities,
+which give you a free confidence signal: low mean logprob on a generated answer
+correlates with the model being unsure. It is not calibrated and should not be
+presented to users as a probability, but as a routing signal — escalate low
+confidence to a larger model or to a human — it costs nothing and works.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What decoding means from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Why the same question gives different answers, which reads as unreliability unless the product explains it. For anything users expect to be stable, use temperature 0 and say so.</td></tr><tr><td><strong>Coder</strong></td><td>Always set <code>max_tokens</code>. Default penalties to 0. Use top_p, not top_k. Never assert exact string equality on output in a test.</td></tr><tr><td><strong>Tester</strong></td><td>Temperature 0 reduces variance but does not guarantee determinism — floating-point order and batch composition still flip near-ties. Score outputs; do not compare strings.</td></tr><tr><td><strong>System designer</strong></td><td><code>max_tokens</code> is a capacity control: unbounded output length means one request can consume the throughput of many. Speculative decoding is a free speedup with identical output.</td></tr><tr><td><strong>Architect</strong></td><td>Decoding settings are part of the model contract and belong in version control with the prompt. A settings change is a behaviour change and deserves the same review.</td></tr><tr><td><strong>CEO</strong></td><td>Output tokens are the expensive half of the bill, and <code>max_tokens</code> is the direct control on it. &quot;Why is the bill high&quot; is often &quot;nobody capped output&quot;.</td></tr><tr><td><strong>Market</strong></td><td>Fully commoditised — every provider exposes the same knobs. The only differentiator is knowing which to use, which is why this is a page and not a product.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;Temperature 0 versus 0.7?&quot;</td><td>Whether you can justify a default</td><td>0 where one answer is correct — extraction, classification, judging. 0.7 where many are acceptable — chat, drafting. The question is whether variance is a feature or a defect for this task.</td></tr><tr><td>&quot;top_k or top_p?&quot;</td><td>Depth</td><td>top_p. It adapts to the model&#39;s confidence: few candidates when certain, many when not. top_k keeps a fixed number regardless, which is wrong in both directions.</td></tr><tr><td>&quot;Is temperature 0 deterministic?&quot;</td><td>The misconception that matters</td><td>No. Floating-point non-associativity in GPU reductions, batch composition and expert routing can all flip near-ties. It reduces variance; it does not eliminate it — which is why tests score rather than assert equality.</td></tr><tr><td>&quot;Why don&#39;t chat models use beam search?&quot;</td><td>Understanding, not recall</td><td>Beam search maximises sequence likelihood, and the most likely text is the least surprising — bland and repetitive. Human-sounding text is not maximum-likelihood text. Beam still wins where one correct output exists, like translation.</td></tr><tr><td>&quot;The output repeats itself.&quot;</td><td>Diagnosis</td><td>Presence or frequency penalty first, not temperature — raising temperature fixes the loop by making everything less predictable. And check the prompt is not inviting repetition.</td></tr><tr><td>&quot;What is speculative decoding?&quot;</td><td>Currency</td><td>A draft model proposes several tokens; the large model verifies them in one pass and accepts the longest correct prefix. Two to three times faster with mathematically identical output — so it needs no re-evaluation, unlike quantization.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>explain temperature, top-k and top-p and why top-p is preferred,</li>
+<li>say why temperature 0 is not determinism and name a cause,</li>
+<li>explain why beam search lost for chat but not for translation,</li>
+<li>give the right settings for extraction, chat and judging, and</li>
+<li>describe speculative decoding and why it needs no re-evaluation.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Nucleus sampling</td><td><em>The Curious Case of Neural Text Degeneration</em> (Holtzman et al., 2019) — the paper that established top-p</td></tr><tr><td>Speculative decoding</td><td>Leviathan et al. (2022); Chen et al. (2023)</td></tr><tr><td>Constrained generation</td><td>The Outlines library; vLLM guided decoding</td></tr><tr><td>Determinism</td><td>Any write-up on GPU floating-point reproducibility — the problem is not LLM-specific</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="tokenization.html"><span>previous</span>Tokenization</a><a class="pager next" href="model-selection.html"><span>next</span>LLM APIs & model selection</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-where-sampling-sits-in-the-loop">4 · UML — where sampling sits in the loop</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
