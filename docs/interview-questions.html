@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interview question bank · LLM Handbook</title>
+<meta name="description" content="Every question from the handbook in one place, grouped by round, with the ones that most often separate candidates marked.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html" class="active">Interview question bank</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="interview-question-bank"><a class="anchor" href="#interview-question-bank">#</a>Interview question bank</h1><p>Every question from across the handbook, consolidated. Each links back to the
+page that answers it properly.</p>
+<p>⭐ marks the questions that most reliably separate candidates — usually because
+the obvious answer is wrong, or because most people stop one level short.</p>
+<hr>
+<h2 id="how-to-drill-this"><a class="anchor" href="#how-to-drill-this">#</a>How to drill this</h2><p>Do not read the answers. Cover them, answer out loud, then check.</p>
+<p>The failure mode of a question bank is recognition without recall: you read the
+answer, it feels familiar, you conclude you know it, and then you cannot produce
+it under pressure. <strong>Say it out loud</strong> — the gap between &quot;I know this&quot; and &quot;I can
+say this in sixty seconds&quot; is where interviews are lost.</p>
+<p>Time-box to <strong>two minutes per question</strong>. Most answers should take sixty to
+ninety seconds. If you cannot finish in two minutes you are including material
+that is not earning its place.</p>
+<hr>
+<h2 id="round-1-foundations"><a class="anchor" href="#round-1-foundations">#</a>Round 1 · Foundations</h2><p><em>Asked to check you understand the machine, not just the API.</em></p>
+<div class="table-scroll"><table><thead><tr><th>Question</th><th>Page</th></tr></thead><tbody><tr><td>Explain attention.</td><td><a href="transformers.html">Transformers</a></td></tr><tr><td>⭐ Why is decode memory-bound but prefill compute-bound?</td><td><a href="transformers.html">Transformers</a></td></tr><tr><td>What is the KV cache and why does it matter?</td><td><a href="transformers.html">Transformers</a></td></tr><tr><td>Why decoder-only for generation?</td><td><a href="transformers.html">Transformers</a></td></tr><tr><td>What does FlashAttention change?</td><td><a href="transformers.html">Transformers</a></td></tr><tr><td>⭐ Why can&#39;t the model count the letters in a word?</td><td><a href="tokenization.html">Tokenization</a></td></tr><tr><td>Why is non-English text more expensive?</td><td><a href="tokenization.html">Tokenization</a></td></tr><tr><td>Temperature 0 versus 0.7 — when each?</td><td><a href="decoding.html">Decoding</a></td></tr><tr><td>⭐ Is temperature 0 deterministic?</td><td><a href="decoding.html">Decoding</a></td></tr><tr><td>top_k or top_p, and why?</td><td><a href="decoding.html">Decoding</a></td></tr><tr><td>Why don&#39;t chat models use beam search?</td><td><a href="decoding.html">Decoding</a></td></tr><tr><td>What is speculative decoding?</td><td><a href="decoding.html">Decoding</a></td></tr></tbody></table></div><hr>
+<h2 id="round-2-rag-and-retrieval"><a class="anchor" href="#round-2-rag-and-retrieval">#</a>Round 2 · RAG and retrieval</h2><p><em>The largest section, because it is the most-asked area.</em></p>
+<div class="table-scroll"><table><thead><tr><th>Question</th><th>Page</th></tr></thead><tbody><tr><td>How would you chunk a technical manual?</td><td><a href="chunking.html">Chunking</a></td></tr><tr><td>⭐ RAG quality is poor. Where do you look first?</td><td><a href="chunking.html">Chunking</a></td></tr><tr><td>What is small-to-big retrieval?</td><td><a href="chunking.html">Chunking</a></td></tr><tr><td>⭐ How do you handle permissions in RAG?</td><td><a href="chunking.html">Chunking</a></td></tr><tr><td>You are changing embedding model. What is involved?</td><td><a href="chunking.html">Chunking</a></td></tr><tr><td>How does HNSW work?</td><td><a href="embeddings-and-vector-databases.html">Embeddings &amp; vector DBs</a></td></tr><tr><td>⭐ What recall does your ANN index actually get?</td><td><a href="embeddings-and-vector-databases.html">Embeddings &amp; vector DBs</a></td></tr><tr><td>Is 0.82 cosine similarity good?</td><td><a href="embeddings-and-vector-databases.html">Embeddings &amp; vector DBs</a></td></tr><tr><td>Which vector database, and why?</td><td><a href="embeddings-and-vector-databases.html">Embeddings &amp; vector DBs</a></td></tr><tr><td>⭐ Why two retrieval stages instead of one?</td><td><a href="reranking.html">Reranking</a></td></tr><tr><td>How deep should the shortlist be?</td><td><a href="reranking.html">Reranking</a></td></tr><tr><td>When does a reranker <em>not</em> help?</td><td><a href="reranking.html">Reranking</a></td></tr><tr><td>⭐ What is HyDE and why does it work?</td><td><a href="query-transformation.html">Query transformation</a></td></tr><tr><td>HyDE hallucinates. Isn&#39;t that a problem?</td><td><a href="query-transformation.html">Query transformation</a></td></tr><tr><td>Multi-query or reranking — which fixes what?</td><td><a href="query-transformation.html">Query transformation</a></td></tr><tr><td>How do you fuse results from several queries?</td><td><a href="query-transformation.html">Query transformation</a></td></tr><tr><td>How do you stop RAG answering from irrelevant context?</td><td><a href="corrective-rag.html">Corrective RAG</a></td></tr><tr><td>CRAG versus self-RAG?</td><td><a href="corrective-rag.html">Corrective RAG</a></td></tr><tr><td>⭐ Your relevance grader is sometimes wrong. Is that a problem?</td><td><a href="corrective-rag.html">Corrective RAG</a></td></tr></tbody></table></div><hr>
+<h2 id="round-3-evaluation"><a class="anchor" href="#round-3-evaluation">#</a>Round 3 · Evaluation</h2><p><em>Where most candidates are weakest, and where a good answer is most noticeable.</em></p>
+<div class="table-scroll"><table><thead><tr><th>Question</th><th>Page</th></tr></thead><tbody><tr><td>⭐ How do you know your LLM judge is any good?</td><td><a href="llm-as-a-judge.html">LLM as a judge</a></td></tr><tr><td>Pointwise or pairwise judging?</td><td><a href="llm-as-a-judge.html">LLM as a judge</a></td></tr><tr><td>⭐ The score went up 4 points on 50 items. Ship it?</td><td><a href="llm-as-a-judge.html">LLM as a judge</a></td></tr><tr><td>The vendor updated the judge model. What now?</td><td><a href="llm-as-a-judge.html">LLM as a judge</a></td></tr><tr><td>When would you <em>not</em> use an LLM judge?</td><td><a href="llm-as-a-judge.html">LLM as a judge</a></td></tr><tr><td>How do you stop LLM quality regressing?</td><td><a href="regression-gates.html">Regression gates</a></td></tr><tr><td>⭐ Why gate per bucket as well as overall?</td><td><a href="regression-gates.html">Regression gates</a></td></tr><tr><td>Should a green run update the baseline?</td><td><a href="regression-gates.html">Regression gates</a></td></tr><tr><td>Someone edited the corpus. What should the gate do?</td><td><a href="regression-gates.html">Regression gates</a></td></tr><tr><td>How do you know your gate works?</td><td><a href="regression-gates.html">Regression gates</a></td></tr><tr><td>How would you detect drift in a live system?</td><td><a href="drift-detection.html">Drift detection</a></td></tr><tr><td>Covariate versus concept drift?</td><td><a href="drift-detection.html">Drift detection</a></td></tr><tr><td>⭐ You have no labels. How do you monitor quality?</td><td><a href="drift-detection.html">Drift detection</a></td></tr><tr><td>⭐ Drift detected. Do you retrain?</td><td><a href="drift-detection.html">Drift detection</a></td></tr><tr><td>In predictive maintenance, how do you know an alert was right?</td><td><a href="drift-detection.html">Drift detection</a></td></tr><tr><td>How would you check an LLM system for bias?</td><td><a href="bias-and-explainability.html">Bias &amp; explainability</a></td></tr><tr><td>⭐ Can you make it fair?</td><td><a href="bias-and-explainability.html">Bias &amp; explainability</a></td></tr><tr><td>⭐ Is chain-of-thought an explanation?</td><td><a href="bias-and-explainability.html">Bias &amp; explainability</a></td></tr><tr><td>A segment has 40 samples and looks bad.</td><td><a href="bias-and-explainability.html">Bias &amp; explainability</a></td></tr></tbody></table></div><hr>
+<h2 id="round-4-systems-serving-and-optimization"><a class="anchor" href="#round-4-systems-serving-and-optimization">#</a>Round 4 · Systems, serving and optimization</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>Page</th></tr></thead><tbody><tr><td>⭐ Why does quantization make inference faster?</td><td><a href="quantization.html">Quantization</a></td></tr><tr><td>INT8 or INT4?</td><td><a href="quantization.html">Quantization</a></td></tr><tr><td>⭐ What breaks first when you quantize?</td><td><a href="quantization.html">Quantization</a></td></tr><tr><td>Why do large models quantize worse than small ones?</td><td><a href="quantization.html">Quantization</a></td></tr><tr><td>You got 1.2× not 4×. Why?</td><td><a href="quantization.html">Quantization</a></td></tr><tr><td>Quantization, pruning or distillation — which first?</td><td><a href="distillation-and-pruning.html">Distillation &amp; pruning</a></td></tr><tr><td>⭐ You pruned to 90% sparsity and it is not faster.</td><td><a href="distillation-and-pruning.html">Distillation &amp; pruning</a></td></tr><tr><td>Why do soft labels beat hard labels?</td><td><a href="distillation-and-pruning.html">Distillation &amp; pruning</a></td></tr><tr><td>What is the risk in distilling from a commercial API?</td><td><a href="distillation-and-pruning.html">Distillation &amp; pruning</a></td></tr><tr><td>What is continuous batching?</td><td><a href="serving-and-operations.html">Serving</a></td></tr><tr><td>⭐ Your p95 latency doubled. Debug it.</td><td><a href="serving-and-operations.html">Serving</a></td></tr><tr><td>⭐ How do you handle overload?</td><td><a href="serving-and-operations.html">Serving</a></td></tr><tr><td>How would you cut the bill in half?</td><td><a href="serving-and-operations.html">Serving</a></td></tr><tr><td>Why is <code>max_tokens</code> a capacity control?</td><td><a href="serving-and-operations.html">Serving</a></td></tr></tbody></table></div><hr>
+<h2 id="round-5-agents-safety-and-adaptation"><a class="anchor" href="#round-5-agents-safety-and-adaptation">#</a>Round 5 · Agents, safety and adaptation</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>Page</th></tr></thead><tbody><tr><td>What is an agent?</td><td><a href="agents.html">Agents</a></td></tr><tr><td>⭐ Why do long agent chains fail?</td><td><a href="agents.html">Agents</a></td></tr><tr><td>How do you stop an agent running forever?</td><td><a href="agents.html">Agents</a></td></tr><tr><td>⭐ How do you design tools?</td><td><a href="agents.html">Agents</a></td></tr><tr><td>When is multi-agent worth it?</td><td><a href="agents.html">Agents</a></td></tr><tr><td>How would you evaluate an agent?</td><td><a href="agents.html">Agents</a></td></tr><tr><td>⭐ How do you prevent prompt injection?</td><td><a href="guardrails-and-security.html">Guardrails</a></td></tr><tr><td>Direct versus indirect injection?</td><td><a href="guardrails-and-security.html">Guardrails</a></td></tr><tr><td>Where do you enforce permissions?</td><td><a href="guardrails-and-security.html">Guardrails</a></td></tr><tr><td>What is the dual-LLM pattern?</td><td><a href="guardrails-and-security.html">Guardrails</a></td></tr><tr><td>⭐ RAG or fine-tuning?</td><td><a href="fine-tuning.html">Fine-tuning</a></td></tr><tr><td>What is LoRA, mechanically?</td><td><a href="fine-tuning.html">Fine-tuning</a></td></tr><tr><td>How much training data?</td><td><a href="fine-tuning.html">Fine-tuning</a></td></tr><tr><td>⭐ When would you <em>not</em> fine-tune?</td><td><a href="fine-tuning.html">Fine-tuning</a></td></tr><tr><td>What actually improves a prompt?</td><td><a href="prompt-engineering.html">Prompt engineering</a></td></tr><tr><td>How do you get reliable JSON?</td><td><a href="prompt-engineering.html">Prompt engineering</a></td></tr><tr><td>You have changed the prompt 15 times and it still fails.</td><td><a href="prompt-engineering.html">Prompt engineering</a></td></tr></tbody></table></div><hr>
+<h2 id="round-6-judgement-product-and-business"><a class="anchor" href="#round-6-judgement-product-and-business">#</a>Round 6 · Judgement, product and business</h2><p><em>Asked at senior level, and where technical candidates most often stumble.</em></p>
+<div class="table-scroll"><table><thead><tr><th>Question</th><th>Page</th></tr></thead><tbody><tr><td>⭐ How would you choose a model?</td><td><a href="model-selection.html">Model selection</a></td></tr><tr><td>Hosted or self-hosted?</td><td><a href="model-selection.html">Model selection</a></td></tr><tr><td>What licence questions matter?</td><td><a href="model-selection.html">Model selection</a></td></tr><tr><td>Your context window is 200k. Use it?</td><td><a href="model-selection.html">Model selection</a></td></tr><tr><td>LangChain or LlamaIndex?</td><td><a href="orchestration-frameworks.html">Orchestration</a></td></tr><tr><td>What is DSPy actually doing?</td><td><a href="orchestration-frameworks.html">Orchestration</a></td></tr><tr><td>⭐ Would you use a framework at all?</td><td><a href="orchestration-frameworks.html">Orchestration</a></td></tr><tr><td>⭐ Should we build or buy?</td><td><a href="market-and-business.html">Market &amp; business</a></td></tr><tr><td>How would you price this?</td><td><a href="market-and-business.html">Market &amp; business</a></td></tr><tr><td>⭐ What is our moat?</td><td><a href="market-and-business.html">Market &amp; business</a></td></tr><tr><td>The demo works. Why isn&#39;t it shipped?</td><td><a href="market-and-business.html">Market &amp; business</a></td></tr><tr><td>⭐ When should we <em>not</em> use an LLM?</td><td><a href="market-and-business.html">Market &amp; business</a></td></tr></tbody></table></div><hr>
+<h2 id="the-twelve-that-matter-most"><a class="anchor" href="#the-twelve-that-matter-most">#</a>The twelve that matter most</h2><p>If you have one evening, drill these. They cover the widest ground and each has
+a counter-intuitive core that most candidates miss.</p>
+<ol>
+<li><strong>Why does quantization make inference faster?</strong> — bandwidth, not arithmetic</li>
+<li><strong>The score went up 4 points on 50 items. Ship it?</strong> — no; ±11 point interval</li>
+<li><strong>How do you know your judge is any good?</strong> — kappa against human labels</li>
+<li><strong>How do you prevent prompt injection?</strong> — you don&#39;t; you bound the blast radius</li>
+<li><strong>Why do long agent chains fail?</strong> — reliability compounds multiplicatively</li>
+<li><strong>RAG or fine-tuning?</strong> — knowledge versus behaviour</li>
+<li><strong>RAG quality is poor. Where first?</strong> — the retrieval ceiling</li>
+<li><strong>Is chain-of-thought an explanation?</strong> — no, and saying why is the signal</li>
+<li><strong>You pruned to 90% and it&#39;s not faster.</strong> — unstructured sparsity does nothing</li>
+<li><strong>Can you make it fair?</strong> — not in all senses at once; it&#39;s a proven result</li>
+<li><strong>What&#39;s our moat?</strong> — not the prompt, model or pipeline</li>
+<li><strong>When should we not use an LLM?</strong> — when a deterministic solution exists</li>
+</ol>
+<hr>
+<h2 id="answering-well-mechanically"><a class="anchor" href="#answering-well-mechanically">#</a>Answering well, mechanically</h2><p><strong>Lead with the answer, then justify.</strong> &quot;No — at n=50 the interval is ±11 points&quot;
+beats three sentences of preamble arriving at the same place.</p>
+<p><strong>Name the trade-off.</strong> Almost every question here has one. Naming it
+unprompted is most of what &quot;senior&quot; sounds like.</p>
+<p><strong>Say what you would measure.</strong> The strongest ending to any answer is how you
+would know you were right.</p>
+<p><strong>Admit the limit.</strong> &quot;I would need to check the current pricing&quot; is stronger
+than a confident wrong number. Interviewers are calibrating whether they can
+trust what you say — a single fabricated detail costs more than the answer gains.</p>
+<p><strong>Use your own work.</strong> You have an eval harness with a golden set, a gate, and a
+failure-injection test you watched go red. Nearly every question in Rounds 3 and
+4 can be answered with &quot;here is what I actually did&quot; — which beats any
+theoretical answer available to anyone else in the pipeline.</p>
+</article>
+    <div class="pager-row"><a class="pager previous" href="system-design-walkthroughs.html"><span>previous</span>System design walkthroughs</a><a class="pager next" href="glossary.html"><span>next</span>Glossary</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#how-to-drill-this">How to drill this</a></li><li class="d2"><a href="#round-1-foundations">Round 1 · Foundations</a></li><li class="d2"><a href="#round-2-rag-and-retrieval">Round 2 · RAG and retrieval</a></li><li class="d2"><a href="#round-3-evaluation">Round 3 · Evaluation</a></li><li class="d2"><a href="#round-4-systems-serving-and-optimization">Round 4 · Systems, serving and optimization</a></li><li class="d2"><a href="#round-5-agents-safety-and-adaptation">Round 5 · Agents, safety and adaptation</a></li><li class="d2"><a href="#round-6-judgement-product-and-business">Round 6 · Judgement, product and business</a></li><li class="d2"><a href="#the-twelve-that-matter-most">The twelve that matter most</a></li><li class="d2"><a href="#answering-well-mechanically">Answering well, mechanically</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

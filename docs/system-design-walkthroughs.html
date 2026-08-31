@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System design walkthroughs · LLM Handbook</title>
+<meta name="description" content="Five LLM system design questions worked end to end, with the numbers, the trade-offs, and what the interviewer is listening for.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html" class="active">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="system-design-walkthroughs"><a class="anchor" href="#system-design-walkthroughs">#</a>System design walkthroughs</h1><p>An LLM system design round is a normal system design round with three extra
+axes: <strong>non-determinism, token cost, and unbounded latency</strong>. Everything else —
+capacity, failure modes, degradation — is the ordinary discipline.</p>
+<p>These five are worked the way you should work one out loud: requirements first,
+numbers second, design third, failures fourth.</p>
+<hr>
+<h2 id="the-structure-to-use-every-time"><a class="anchor" href="#the-structure-to-use-every-time">#</a>The structure to use, every time</h2><pre class="code"><code>   1. CLARIFY        scale, latency budget, accuracy bar, data sensitivity
+   2. NUMBERS        QPS, tokens, memory, cost. Do the arithmetic out loud
+   3. HAPPY PATH     the simplest design that meets the requirements
+   4. BOTTLENECK     find it, name it, fix it
+   5. FAILURES       what breaks, what degrades, what the user sees
+   6. EVALUATION     how you know it works, and how you know it still does</code></pre><p><strong>Step 6 is where most candidates stop short and where senior signal lives.</strong> If
+you finish a design without saying how you would measure it, you have described
+a demo.</p>
+<hr>
+<h2 id="1-a-rag-assistant-over-10-million-internal-documents"><a class="anchor" href="#1-a-rag-assistant-over-10-million-internal-documents">#</a>1 · A RAG assistant over 10 million internal documents</h2><h3 id="clarify"><a class="anchor" href="#clarify">#</a>Clarify</h3><p>Ask these before drawing anything:</p>
+<ul>
+<li><strong>Users and QPS?</strong> Say 5,000 employees, ~2 QPS average, 20 QPS peak.</li>
+<li><strong>Latency budget?</strong> Interactive — 2s to first token.</li>
+<li><strong>Accuracy bar?</strong> Wrong answers are costly; refusal is acceptable.</li>
+<li><strong>Access control?</strong> Yes — documents have per-team permissions. <em>This one
+changes the architecture, so ask it early.</em></li>
+<li><strong>Freshness?</strong> Minutes for new documents, not seconds.</li>
+</ul>
+<h3 id="numbers"><a class="anchor" href="#numbers">#</a>Numbers</h3><pre class="code"><code>   10M documents × ~8 chunks each        = 80M chunks
+   80M × 768 dims × 4 bytes              = 246 GB of vectors
+   + HNSW graph (M=16)                   ≈ 20 GB
+                                         -&gt; ~270 GB. Does NOT fit one machine.
+
+   Options: shard, or reduce dimensions.
+     768 -&gt; 384 via Matryoshka           = 123 GB + graph. Fits one large node.
+
+   Query cost: 2,500 in + 400 out at mid tier
+     = (2500 × 1 + 400 × 4) / 1e6        ≈ $0.004
+   At 2 QPS sustained: ~5.2M requests/month ≈ $21k/month
+     -&gt; routing and caching are not optional at this volume</code></pre><p>Saying &quot;246 gigabytes, so it does not fit on one box, so either shard or halve
+the dimensions&quot; is the moment the interview turns in your favour.</p>
+<h3 id="design"><a class="anchor" href="#design">#</a>Design</h3><pre class="mermaid">graph TD
+  A[Query] --&gt; B[Gateway: auth, rate limit]
+  B --&gt; C{Exact cache hit?}
+  C --&gt;|yes| Z[Return]
+  C --&gt;|no| D[Resolve user&#39;s permitted ACLs]
+  D --&gt; E[Hybrid retrieve: BM25 + dense,&lt;br/&gt;FILTERED by ACL]
+  E --&gt; F[RRF fuse]
+  F --&gt; G[Dedupe]
+  G --&gt; H[Cross-encoder rerank top-50]
+  H --&gt; I{Top score above threshold?}
+  I --&gt;|no| Y[Refuse. Log as coverage gap]
+  I --&gt;|yes| J[Assemble context, stable prefix first]
+  J --&gt; K[LLM, streaming]
+  K --&gt; Z</pre><p><strong>Decisions worth defending:</strong></p>
+<div class="table-scroll"><table><thead><tr><th>Decision</th><th>Why</th></tr></thead><tbody><tr><td>Hybrid, not dense-only</td><td>Internal docs are full of part numbers and acronyms — BM25 territory</td></tr><tr><td>ACL filter <em>at retrieval</em></td><td>Post-filtering leaks; the model has already read it</td></tr><tr><td>Rerank 50 → 5</td><td>Retrieval optimises recall, reranking precision</td></tr><tr><td>Refusal branch</td><td>Wrong answers are costly here; that was a stated requirement</td></tr><tr><td>Stable prefix first</td><td>Prompt caching cuts the dominant cost</td></tr></tbody></table></div><h3 id="bottleneck"><a class="anchor" href="#bottleneck">#</a>Bottleneck</h3><p>Index memory. Sharding by team also aligns with the ACL filter — a query only
+touches shards the user can see, which makes the security control a performance
+win.</p>
+<h3 id="failures"><a class="anchor" href="#failures">#</a>Failures</h3><div class="table-scroll"><table><thead><tr><th>Failure</th><th>Behaviour</th></tr></thead><tbody><tr><td>Vector store down</td><td>Fall back to BM25 only, flag degraded results</td></tr><tr><td>LLM provider 5xx</td><td>Capped retry, then fallback model, then honest error</td></tr><tr><td>Overload</td><td>429 with <code>Retry-After</code> above high-water mark</td></tr><tr><td>Ingestion lag</td><td>Show index freshness in the UI</td></tr></tbody></table></div><h3 id="evaluation"><a class="anchor" href="#evaluation">#</a>Evaluation</h3><p>Golden set of 200 questions from real logs, bucketed by department. Gate on
+hit@5 and groundedness with a per-bucket floor. Refusal rate monitored in both
+directions. Every confirmed miss becomes a golden item.</p>
+<hr>
+<h2 id="2-a-customer-support-agent-that-can-act"><a class="anchor" href="#2-a-customer-support-agent-that-can-act">#</a>2 · A customer support agent that can act</h2><h3 id="clarify"><a class="anchor" href="#clarify">#</a>Clarify</h3><p>The critical question: <strong>what can it actually do?</strong> Read-only lookup is a
+different system from one that issues refunds.</p>
+<p>Assume: look up orders, check policy, draft replies, and issue refunds <strong>under
+£50</strong>.</p>
+<h3 id="the-design-decision-that-dominates"><a class="anchor" href="#the-design-decision-that-dominates">#</a>The design decision that dominates</h3><pre class="code"><code>   REVERSIBLE actions        -&gt; automate freely
+   IRREVERSIBLE, low value   -&gt; automate with logging and a reversal path
+   IRREVERSIBLE, high value  -&gt; HUMAN APPROVAL, always
+
+   The refund tool is capped at £50 IN THE TOOL, not in the prompt.
+   A prompt is a request. A policy check is a control.</code></pre><h3 id="numbers"><a class="anchor" href="#numbers">#</a>Numbers</h3><pre class="code"><code>   Reliability compounds. At 95% per step:
+     3 steps  -&gt; 86%      viable with review
+     8 steps  -&gt; 66%      not viable unattended
+
+   So: cap at ~5 steps, decompose anything longer into
+   separate bounded runs with a checkpoint between them.</code></pre><h3 id="design"><a class="anchor" href="#design">#</a>Design</h3><pre class="mermaid">sequenceDiagram
+    participant U as Customer
+    participant A as Agent runtime
+    participant P as Policy engine
+    participant T as Tools
+    participant H as Human queue
+
+    U-&gt;&gt;A: &quot;my order never arrived&quot;
+    loop bounded: 5 steps, 30s, $0.20
+        A-&gt;&gt;T: lookup_order(id)
+        T--&gt;&gt;A: status: delivered, £38
+        A-&gt;&gt;P: refund(£38)?
+        alt within policy
+            P--&gt;&gt;A: permitted
+            A-&gt;&gt;T: issue_refund
+        else outside policy
+            P--&gt;&gt;H: escalate with full trace
+            H--&gt;&gt;U: human handles it
+        end
+    end
+    A--&gt;&gt;U: reply + what was done</pre><h3 id="what-the-interviewer-is-listening-for"><a class="anchor" href="#what-the-interviewer-is-listening-for">#</a>What the interviewer is listening for</h3><ul>
+<li><strong>Tool-level policy</strong>, not prompt-level. Say it explicitly.</li>
+<li><strong>Reversibility as the gating criterion</strong>, not model confidence.</li>
+<li><strong>Injection awareness</strong>: a customer message is untrusted input, and this agent
+has a refund tool. That is the exploit.</li>
+<li><strong>Bounded loop</strong> with all four budgets.</li>
+<li><strong>Full trace</strong> on every action, because this one will be audited.</li>
+</ul>
+<hr>
+<h2 id="3-serving-a-70b-model-on-your-own-hardware"><a class="anchor" href="#3-serving-a-70b-model-on-your-own-hardware">#</a>3 · Serving a 70B model on your own hardware</h2><h3 id="clarify"><a class="anchor" href="#clarify">#</a>Clarify</h3><ul>
+<li>Why self-host? <em>Data residency</em> is a good reason; <em>cost</em> usually is not below
+serious volume.</li>
+<li>Throughput target? Say 50 concurrent users, 30 tokens/sec each.</li>
+<li>Acceptable quality loss from quantization?</li>
+</ul>
+<h3 id="numbers"><a class="anchor" href="#numbers">#</a>Numbers</h3><pre class="code"><code>   70B @ FP16    = 140 GB    -&gt; 2× A100-80 minimum, no room for KV cache
+   70B @ INT8    =  70 GB    -&gt; fits one H100-80, tight
+   70B @ INT4    =  35 GB    -&gt; comfortable on one 80 GB card
+
+   KV cache, 8k context, batch 50, GQA shape:
+     ≈ 2 × 80 layers × 8 kv_heads × 128 × 8000 × 50 × 2 bytes ≈ 131 GB
+
+   -&gt; the CACHE exceeds the quantized weights.
+      Batch size is limited by cache, not by the model.
+
+   Throughput needed: 50 × 30 = 1500 tokens/sec aggregate.
+   Single-stream decode at INT4 ≈ 200-400 tok/s, so you need
+   continuous batching to reach it -- not more GPUs.</code></pre><p><strong>That last line is the answer to the question they are really asking.</strong> The
+instinct is &quot;add GPUs&quot;; the correct move is better batching.</p>
+<h3 id="design"><a class="anchor" href="#design">#</a>Design</h3><p>vLLM with continuous batching and PagedAttention, INT4 (AWQ) weights, INT8 KV
+cache, tensor parallel across two cards if the cache demands it. Gateway in
+front with a bounded queue and load shedding.</p>
+<h3 id="failures"><a class="anchor" href="#failures">#</a>Failures</h3><div class="table-scroll"><table><thead><tr><th>Failure</th><th>Response</th></tr></thead><tbody><tr><td>OOM under load</td><td>Cache-driven — cap batch and context, shed above the mark</td></tr><tr><td>GPU dies</td><td>Second node, or degrade to a hosted API</td></tr><tr><td>Model quality regression after quantization</td><td>Eval gate before rollout, not after</td></tr></tbody></table></div><hr>
+<h2 id="4-real-time-content-moderation-at-50k-requestssecond"><a class="anchor" href="#4-real-time-content-moderation-at-50k-requestssecond">#</a>4 · Real-time content moderation at 50k requests/second</h2><h3 id="clarify"><a class="anchor" href="#clarify">#</a>Clarify</h3><p>50k/s is far too much for an LLM on every request. The design is a <strong>cascade</strong>,
+and recognising that immediately is most of the answer.</p>
+<h3 id="numbers"><a class="anchor" href="#numbers">#</a>Numbers</h3><pre class="code"><code>   50,000 QPS through a frontier model is not a system, it is a bankruptcy.
+   Assume 99% of content is obviously fine.
+
+   TIER 1  hash/regex blocklist        50,000/s   ~0.01ms   $0
+   TIER 2  small fine-tuned classifier  5,000/s   ~5ms      cheap
+   TIER 3  LLM judgement                  100/s   ~500ms    expensive
+   TIER 4  human review                     5/s   minutes   expensive
+
+   Each tier passes ~10% upward. The LLM sees 0.2% of traffic.</code></pre><h3 id="design"><a class="anchor" href="#design">#</a>Design</h3><pre class="mermaid">graph LR
+  A[Content] --&gt; B[Tier 1: blocklist, hashes]
+  B --&gt;|clear| Z[Publish]
+  B --&gt;|uncertain| C[Tier 2: fine-tuned classifier]
+  C --&gt;|confident clear| Z
+  C --&gt;|confident block| Y[Block]
+  C --&gt;|uncertain| D[Tier 3: LLM with policy]
+  D --&gt;|clear| Z
+  D --&gt;|block| Y
+  D --&gt;|borderline| E[Tier 4: human queue]
+  E --&gt; Y
+  E --&gt; Z</pre><p><strong>The senior points here:</strong></p>
+<ul>
+<li><strong>Asymmetric errors.</strong> False negatives (harmful content published) and false
+positives (legitimate content blocked) have different costs, and the
+thresholds should reflect which one your product can survive.</li>
+<li><strong>Latency budget differs by tier.</strong> Tier 1 must be inline; tier 3 can be
+asynchronous with optimistic publish and retraction.</li>
+<li><strong>This is where a fine-tuned small model clearly beats an LLM</strong> — high volume,
+narrow task, better <em>and</em> cheaper by two orders of magnitude.</li>
+<li><strong>Drift is guaranteed.</strong> Adversaries adapt deliberately. Monitor tier-3
+escalation rate as the leading indicator.</li>
+</ul>
+<hr>
+<h2 id="5-evaluating-a-rag-system-nobody-has-evaluated"><a class="anchor" href="#5-evaluating-a-rag-system-nobody-has-evaluated">#</a>5 · Evaluating a RAG system nobody has evaluated</h2><p>This one comes up as &quot;we have a RAG system, how would you know if it works?&quot;</p>
+<h3 id="the-order-that-matters"><a class="anchor" href="#the-order-that-matters">#</a>The order that matters</h3><pre class="code"><code>   1. RETRIEVAL CEILING     is the answer in ANY chunk?     &lt;- do this first
+   2. RETRIEVAL QUALITY     is it in the top-k?
+   3. GENERATION            given good context, is the answer right?
+   4. END TO END            the number the business cares about</code></pre><p><strong>Diagnose top-down, because each stage caps the ones below it.</strong> A team that
+starts at 3 will tune prompts for a month against a retrieval ceiling of 0.7.</p>
+<h3 id="design"><a class="anchor" href="#design">#</a>Design</h3><ul>
+<li>50–200 questions from <strong>real logs</strong>, not imagination, bucketed by type
+including an unanswerable bucket.</li>
+<li>Deterministic scorers first: hit@k, recall@k, groundedness against a verbatim
+answer span. Cheap, and they gate on every PR.</li>
+<li>An LLM judge only for what deterministic scoring cannot reach — and validate
+it against human labels before trusting it.</li>
+<li>Committed baseline, three-check gate, per-bucket floors.</li>
+<li>Tiered CI: deterministic on the PR lane, judge nightly.</li>
+</ul>
+<h3 id="the-line-that-lands"><a class="anchor" href="#the-line-that-lands">#</a>The line that lands</h3><blockquote>
+<p><em>&quot;Before optimising anything I would measure how often the answer is in the
+index at all. That number is the ceiling on everything downstream, it takes
+ten minutes, and it regularly redirects a month of work.&quot;</em></p>
+</blockquote>
+<hr>
+<h2 id="what-separates-a-good-answer-from-a-great-one"><a class="anchor" href="#what-separates-a-good-answer-from-a-great-one">#</a>What separates a good answer from a great one</h2><div class="table-scroll"><table><thead><tr><th>Good</th><th>Great</th></tr></thead><tbody><tr><td>Draws the architecture</td><td>Does the arithmetic before drawing</td></tr><tr><td>Names components</td><td>Names the bottleneck and why</td></tr><tr><td>&quot;We&#39;d add caching&quot;</td><td>&quot;The stable prefix is 80% of input tokens, so prefix caching cuts the bill roughly in half&quot;</td></tr><tr><td>&quot;We&#39;d evaluate it&quot;</td><td>Names the metric, the gate, the buckets and the noise floor</td></tr><tr><td>Handles the happy path</td><td>States what degrades, in what order, and what the user sees</td></tr><tr><td>Answers the question</td><td>Asks what the accuracy bar and data sensitivity are first</td></tr></tbody></table></div><p><strong>And the one habit worth more than any of them:</strong> say what you would measure to
+know your choice was right. Every design decision above is defensible because it
+is falsifiable.</p>
+</article>
+    <div class="pager-row"><a class="pager previous" href="market-and-business.html"><span>previous</span>Market & business of LLMs</a><a class="pager next" href="interview-questions.html"><span>next</span>Interview question bank</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#the-structure-to-use-every-time">The structure to use, every time</a></li><li class="d2"><a href="#1-a-rag-assistant-over-10-million-internal-documents">1 · A RAG assistant over 10 million internal documents</a></li><li class="d3"><a href="#clarify">Clarify</a></li><li class="d3"><a href="#numbers">Numbers</a></li><li class="d3"><a href="#design">Design</a></li><li class="d3"><a href="#bottleneck">Bottleneck</a></li><li class="d3"><a href="#failures">Failures</a></li><li class="d3"><a href="#evaluation">Evaluation</a></li><li class="d2"><a href="#2-a-customer-support-agent-that-can-act">2 · A customer support agent that can act</a></li><li class="d3"><a href="#clarify">Clarify</a></li><li class="d3"><a href="#the-design-decision-that-dominates">The design decision that dominates</a></li><li class="d3"><a href="#numbers">Numbers</a></li><li class="d3"><a href="#design">Design</a></li><li class="d3"><a href="#what-the-interviewer-is-listening-for">What the interviewer is listening for</a></li><li class="d2"><a href="#3-serving-a-70b-model-on-your-own-hardware">3 · Serving a 70B model on your own hardware</a></li><li class="d3"><a href="#clarify">Clarify</a></li><li class="d3"><a href="#numbers">Numbers</a></li><li class="d3"><a href="#design">Design</a></li><li class="d3"><a href="#failures">Failures</a></li><li class="d2"><a href="#4-real-time-content-moderation-at-50k-requestssecond">4 · Real-time content moderation at 50k requests/second</a></li><li class="d3"><a href="#clarify">Clarify</a></li><li class="d3"><a href="#numbers">Numbers</a></li><li class="d3"><a href="#design">Design</a></li><li class="d2"><a href="#5-evaluating-a-rag-system-nobody-has-evaluated">5 · Evaluating a RAG system nobody has evaluated</a></li><li class="d3"><a href="#the-order-that-matters">The order that matters</a></li><li class="d3"><a href="#design">Design</a></li><li class="d3"><a href="#the-line-that-lands">The line that lands</a></li><li class="d2"><a href="#what-separates-a-good-answer-from-a-great-one">What separates a good answer from a great one</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

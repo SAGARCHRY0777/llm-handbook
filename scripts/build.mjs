@@ -27,6 +27,7 @@ const MODULES = [
   { id: "training", title: "Training & adaptation" },
   { id: "operations", title: "Deployment & operations" },
   { id: "business", title: "Market & business" },
+  { id: "practice", title: "Practice & interviews" },
   { id: "reference", title: "Reference" },
 ];
 
