@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM APIs &amp; model selection · LLM Handbook</title>
+<meta name="description" content="Choosing a model, reading a licence properly, and the API mechanics that decide your latency and bill.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="model-selection.html" class="active">LLM APIs & model selection</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="llm-apis-model-selection"><a class="anchor" href="#llm-apis-model-selection">#</a>LLM APIs & model selection</h1><blockquote>
+<p><strong>The one sentence:</strong> model choice is a procurement decision wearing an
+engineering costume — the benchmark number is the least important input.</p>
+</blockquote>
+<p>Teams pick a model from a leaderboard, then spend a year discovering that
+latency, rate limits, licence terms and version stability were what actually
+mattered.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   WHAT ACTUALLY DECIDES THE CHOICE, in the order it bites
+
+   1. CAN IT DO THE TASK?        your eval set, not a leaderboard
+   2. LATENCY                    p95 under YOUR prompt length, not the marketing figure
+   3. COST AT YOUR VOLUME        input and output priced differently. Output is dearer
+   4. LICENCE / DATA TERMS       where does the data go, may you train on outputs
+   5. RATE LIMITS                the ceiling on your growth, not on your demo
+   6. VERSION STABILITY          can the model change under you without warning
+   7. BENCHMARK SCORE            the number everyone leads with. It is seventh
+
+
+   HOSTED API                              SELF-HOSTED OPEN WEIGHTS
+   ----------                              ------------------------
+   per-token cost, no ops                  fixed GPU cost, all the ops
+   best frontier quality                   full control of version + data
+   rate limits, vendor roadmap             you own uptime, scaling, upgrades
+   data leaves your boundary               data stays put
+   scales to zero                          idle GPUs still bill
+
+   CROSSOVER: roughly when sustained load keeps a GPU busy.
+   Below that, hosted wins on cost as well as effort.</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic — the mechanics you are actually buying.</strong> Every hosted API exposes
+roughly the same surface, and the differences matter more than the model:</p>
+<div class="table-scroll"><table><thead><tr><th>Feature</th><th>Why it decides things</th></tr></thead><tbody><tr><td><strong>Streaming</strong></td><td>Changes <em>perceived</em> latency more than any model swap. Time-to-first-token is the number users feel</td></tr><tr><td><strong>Structured output</strong></td><td>Native JSON-schema enforcement beats parsing and retrying</td></tr><tr><td><strong>Tool calling</strong></td><td>Quality here varies far more between models than chat quality does</td></tr><tr><td><strong>Context window</strong></td><td>Advertised length is not usable length — recall degrades well before the limit</td></tr><tr><td><strong>Prompt caching</strong></td><td>Large repeated prefixes get much cheaper; can dominate your bill</td></tr><tr><td><strong>Batch API</strong></td><td>Roughly half price for work that tolerates hours of delay</td></tr></tbody></table></div><p><strong>Intermediate — the cost model people get wrong.</strong> Output tokens usually cost
+several times input tokens. A summariser (long input, short output) and a
+generator (short input, long output) at the same total token count have very
+different bills. Estimate them separately:</p>
+<pre class="code"><code>   monthly cost = requests
+                × (input_tokens × input_price + output_tokens × output_price)</code></pre><p>Then apply the two multipliers that actually move it: <strong>prompt caching</strong> on a
+repeated system prompt or corpus prefix, and <strong>batch pricing</strong> for anything
+asynchronous.</p>
+<p><strong>Advanced — the licence is the part with teeth.</strong> &quot;Open source&quot; is doing a lot
+of work in most announcements:</p>
+<div class="table-scroll"><table><thead><tr><th>Category</th><th>Example terms</th><th>What it means for you</th></tr></thead><tbody><tr><td><strong>True open source</strong></td><td>Apache 2.0, MIT</td><td>Commercial use, modification, redistribution. No conditions worth worrying about</td></tr><tr><td><strong>Open weights, restricted</strong></td><td>Llama Community License</td><td>Commercial use permitted below a user threshold; naming and use-policy conditions attached</td></tr><tr><td><strong>Non-commercial</strong></td><td>CC-BY-NC, many research releases</td><td>Research only. Not for your product, whatever the benchmark says</td></tr><tr><td><strong>Hosted, terms of service</strong></td><td>Commercial APIs</td><td>Usually prohibits training a competing model on outputs; check data-retention terms</td></tr></tbody></table></div><p><strong>Two clauses to read before any architecture discussion:</strong> may you use outputs
+to train another model, and is your data retained or used for training. Both
+have defaults that surprise people, and both are procurement questions an
+engineer is expected to raise.</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Task defined] --&gt; B[Build the eval set FIRST]
+  B --&gt; C[Shortlist 3-4 candidates&lt;br/&gt;across price tiers]
+  C --&gt; D[Run YOUR eval on each]
+  D --&gt; E{Any meet quality?}
+  E --&gt;|no| F[Task needs decomposition,&lt;br/&gt;better retrieval, or fine-tuning]
+  E --&gt;|yes| G[Measure p95 latency&lt;br/&gt;at your real prompt length]
+  G --&gt; H[Model cost at projected volume]
+  H --&gt; I{Licence and data terms&lt;br/&gt;acceptable?}
+  I --&gt;|no| J[Eliminate, regardless of score]
+  I --&gt;|yes| K[Check rate limits against&lt;br/&gt;peak, not average]
+  K --&gt; L[Pick the CHEAPEST that passes]
+  L --&gt; M[Pin the exact version]
+  M --&gt; N[Re-run the eval on every&lt;br/&gt;version change]</pre><p><strong><code>L</code> is the discipline that saves the most money.</strong> The goal is not the best
+model; it is the cheapest model that passes your bar. Teams routinely serve a
+frontier model for a task a mid-tier model handles identically, because they
+never ran the comparison on their own data.</p>
+<p><strong><code>M</code> is the discipline that saves the most debugging.</strong> Pin the dated version,
+never the floating alias. An alias that silently moves under you turns every
+quality investigation into archaeology.</p>
+<hr>
+<h2 id="4-uml-the-request-path-and-where-time-goes"><a class="anchor" href="#4-uml-the-request-path-and-where-time-goes">#</a>4 · UML — the request path and where time goes</h2><pre class="mermaid">sequenceDiagram
+    participant C as Client
+    participant G as Your gateway
+    participant Ch as Prompt cache
+    participant P as Provider
+    participant M as Model
+
+    C-&gt;&gt;G: request
+    G-&gt;&gt;G: assemble prompt (system + context + user)
+    G-&gt;&gt;P: streaming call, pinned model version
+    P-&gt;&gt;Ch: prefix hit?
+    Ch--&gt;&gt;P: cached KV for the shared prefix
+    Note over Ch,P: A large stable prefix is the single&lt;br/&gt;biggest cost lever on most workloads
+    P-&gt;&gt;M: prefill (compute-bound)
+    M--&gt;&gt;C: first token  &lt;-- the latency users actually judge
+    loop decode
+        M--&gt;&gt;C: token (bandwidth-bound)
+    end
+    Note over G: log: model version, token counts,&lt;br/&gt;latency, cache hit. Without these you&lt;br/&gt;cannot attribute cost or explain a regression</pre><hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">PRICING = {                      # USD per 1M tokens; verify before relying on it
+    &quot;frontier&quot;:  {&quot;in&quot;: 3.00,  &quot;out&quot;: 15.00},
+    &quot;mid&quot;:       {&quot;in&quot;: 0.80,  &quot;out&quot;: 4.00},
+    &quot;small&quot;:     {&quot;in&quot;: 0.25,  &quot;out&quot;: 1.25},
+}
+
+
+def monthly_cost(tier, requests, in_tok, out_tok, cached_frac=0.0, batch=False):
+    &quot;&quot;&quot;Cost at volume, with the two levers that actually move it.
+
+    Input and output are priced differently -- often 4-5x apart -- so a
+    summariser and a generator with identical total tokens have very different
+    bills. Estimating with a blended rate is the usual mistake.
+    &quot;&quot;&quot;
+    p = PRICING[tier]
+    # A cached prefix is charged at a large discount; on a long stable system
+    # prompt this frequently halves the bill on its own.
+    effective_in = in_tok * (1 - cached_frac) + in_tok * cached_frac * 0.1
+    cost = requests * (effective_in * p[&quot;in&quot;] + out_tok * p[&quot;out&quot;]) / 1_000_000
+    return cost * (0.5 if batch else 1.0)
+
+
+def crossover_requests_per_month(tier, in_tok, out_tok, gpu_monthly=1_500):
+    &quot;&quot;&quot;Roughly where self-hosting stops being more expensive.
+
+    Deliberately generous to the hosted side: it ignores the engineering time
+    to build and run serving, which is usually the larger number and the one
+    that does not appear on any invoice.
+    &quot;&quot;&quot;
+    per_request = monthly_cost(tier, 1, in_tok, out_tok)
+    return int(gpu_monthly / per_request) if per_request else 0
+
+
+for tier in PRICING:
+    n = crossover_requests_per_month(tier, in_tok=2_000, out_tok=400)
+    print(f&quot;{tier:&lt;9} break-even vs one GPU: ~{n:,} requests/month&quot;)</code></pre><pre class="code"><code>frontier  break-even vs one GPU: ~125,000 requests/month
+mid       break-even vs one GPU: ~468,750 requests/month
+small     break-even vs one GPU: ~1,714,285 requests/month</code></pre><p><strong>Read that table honestly.</strong> Below roughly a hundred thousand requests a month
+on a frontier model, self-hosting is not a cost decision — it is a control,
+latency or data-residency decision, and it should be argued on those grounds.</p>
+<hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Benchmark scores are the weakest signal you will be given.</strong> Contamination is
+widespread, benchmarks measure averages over distributions unlike yours, and a
+two-point MMLU difference predicts nothing about your task. A 50-item eval set
+built from your own traffic outperforms every leaderboard for this decision.
+That is also why the evaluation module comes first in this handbook.</p>
+<p><strong>Advertised context length is not usable context length.</strong> Recall degrades well
+before the stated limit, and it degrades unevenly — material in the middle of a
+long context is recovered far less reliably than material at either end. If you
+plan to use 100k tokens, test retrieval at 100k tokens on your data before
+designing around it.</p>
+<p><strong>Rate limits shape architecture more than model choice does.</strong> Limits are
+usually per-minute on both requests and tokens, and they bind at peak, not
+average. A workload with a 10× daily peak needs headroom for the peak. Design a
+queue with backpressure from the start; discovering the limit in production
+means discovering it as a user-visible outage.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>Floating alias</strong></td><td>Quality shifts with no deploy</td><td>Pin the dated version; re-baseline deliberately</td></tr><tr><td><strong>Chose on benchmarks</strong></td><td>Great scores, poor product</td><td>Choose on your eval set</td></tr><tr><td><strong>Blended token pricing</strong></td><td>Bill several times the estimate</td><td>Model input and output separately</td></tr><tr><td><strong>No prompt caching</strong></td><td>Paying full price for a fixed prefix</td><td>Restructure so the stable part is a cacheable prefix</td></tr><tr><td><strong>Rate limits at peak</strong></td><td>429s in the busiest hour</td><td>Queue with backpressure; request higher limits early</td></tr><tr><td><strong>Licence unchecked</strong></td><td>Legal exposure found late</td><td>Read the two clauses before the design review</td></tr><tr><td><strong>One provider, no abstraction</strong></td><td>An outage is your outage</td><td>Thin interface; a tested fallback model</td></tr></tbody></table></div><p><strong>Multi-provider is worth less than it sounds and more than nothing.</strong> A thin
+interface plus a tested fallback is cheap insurance against an outage. But
+prompts do not transfer cleanly between model families, so a true hot-swap needs
+its own eval run per provider. Budget for that rather than assuming portability.</p>
+<p><strong>Self-hosting&#39;s real cost is not the GPU.</strong> It is serving expertise, on-call,
+capacity planning, upgrades, and a quantization pipeline. Those costs are
+invisible on a spreadsheet and dominant in practice. Self-host for control, data
+residency, or genuinely high sustained volume — not because the per-token
+arithmetic looked good.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What model selection looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Time-to-first-token, and whether the answer is right. Streaming a mid-tier model usually feels better than waiting for a frontier one.</td></tr><tr><td><strong>Coder</strong></td><td>Pin versions. Log model version, token counts and cache hits on every call. Wrap the SDK behind a thin interface. Handle 429 and 529 with backoff from day one, not after the first incident.</td></tr><tr><td><strong>Tester</strong></td><td>Model choice is an eval-suite question. Keep per-model baselines so a switch is a measured diff. Treat a provider version bump as a change requiring a full re-run.</td></tr><tr><td><strong>System designer</strong></td><td>Rate limits and p95 latency drive the architecture: queueing, backpressure, timeouts, fallbacks. The model is one component with a published SLA — design for it being slow or absent.</td></tr><tr><td><strong>Architect</strong></td><td>Hosted versus self-hosted is a three-year commitment about data boundaries and operational scope. The licence clauses on output use and data retention belong in that decision, not after it.</td></tr><tr><td><strong>CEO</strong></td><td>Cost scales with usage, so success raises the bill — model it at 10× before celebrating growth. The right question is not &quot;which model is best&quot; but &quot;what is the cheapest thing that passes our bar&quot;, and whether anyone has actually measured that.</td></tr><tr><td><strong>Market</strong></td><td>Capability is converging and prices fall in steps. Anything built on being on today&#39;s best model is not a moat. Assume the model is a commodity that improves and cheapens; build the parts that do not — data, evals, distribution, workflow.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;How would you choose a model?&quot;</td><td>Whether you lead with benchmarks</td><td>Eval set first, then a shortlist across price tiers scored on my data, then p95 latency at real prompt length, cost at projected volume, licence and data terms, and rate limits at peak. Pick the cheapest that passes. Benchmarks barely feature.</td></tr><tr><td>&quot;Hosted or self-hosted?&quot;</td><td>Cost realism</td><td>Hosted below sustained high volume — the break-even against one GPU is around a hundred thousand requests a month on a frontier model, and that ignores serving engineering, which is the larger cost. Self-host for control, data residency or genuine scale.</td></tr><tr><td>&quot;How do you control cost?&quot;</td><td>Practical levers</td><td>Route easy requests to a smaller model, cache the stable prefix, use batch pricing where latency allows, cap output tokens, and estimate input and output separately since output is several times dearer.</td></tr><tr><td>&quot;The provider updated the model and quality changed.&quot;</td><td>Operational maturity</td><td>That is why versions are pinned rather than aliased. Re-run the eval suite, compare per-item against the baseline, and re-baseline deliberately as a reviewed change with the date annotated on the trend.</td></tr><tr><td>&quot;What licence questions matter?&quot;</td><td>Commercial awareness</td><td>Whether outputs may train another model, and whether your data is retained or trained on. Also whether &quot;open&quot; means Apache-style or a community licence with conditions. These eliminate candidates regardless of score.</td></tr><tr><td>&quot;Your context window is 200k. Use it?&quot;</td><td>Depth</td><td>Not without testing. Usable recall degrades well before the advertised limit and is worst in the middle. Retrieval over a smaller, better-chosen context usually beats stuffing the window, and costs less.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>list the seven selection criteria and explain why benchmarks come last,</li>
+<li>do the hosted-versus-self-hosted break-even arithmetic,</li>
+<li>name the two licence clauses that matter and why,</li>
+<li>explain why output tokens dominate a generation workload&#39;s bill, and</li>
+<li>say what pinning a version protects you from.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Context degradation</td><td><em>Lost in the Middle: How Language Models Use Long Contexts</em> (Liu et al., 2023)</td></tr><tr><td>Licensing</td><td>Read the Llama Community License and one commercial ToS end to end. It is an hour, and it is the hour most engineers skip</td></tr><tr><td>Pricing mechanics</td><td>Provider docs on prompt caching and batch APIs — the two largest cost levers, and both are documented</td></tr><tr><td>Contamination</td><td>Any recent survey on benchmark contamination; it explains why leaderboards over-promise</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="index.html"><span>previous</span>Start here</a><a class="pager next" href="llm-as-a-judge.html"><span>next</span>LLM as a judge</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-the-request-path-and-where-time-goes">4 · UML — the request path and where time goes</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
