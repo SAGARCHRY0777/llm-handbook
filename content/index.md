@@ -92,20 +92,24 @@ is also the single most common gap in an LLM engineer's interview answers.
 
 ## Status
 
-This handbook is written gap-first rather than front-to-back, because the
-material it exists to replace is the material that is missing. Pages marked
-**draft** in the sidebar are outlined but not yet written; nothing is padded
-with filler to look finished.
+Written gap-first rather than front-to-back, because the material this exists to
+replace is the material that was missing. Every module below is written; nothing
+is padded with filler to look finished.
 
-| Module | Covers | State |
-|---|---|---|
-| Evaluation & judging | LLM-as-a-judge, regression gates, drift, bias, explainability | In progress |
-| Retrieval & advanced RAG | HyDE, query transformation, corrective RAG, retrieval finetuning | Planned |
-| Inference optimization | Quantization, distillation, pruning, serving maths | Planned |
-| Orchestration frameworks | LangChain primitives, LlamaIndex, DSPy | Planned |
-| LLM foundations | LLM APIs, open-source model selection, licensing, prompt engineering | Planned |
-| Deployment & operations | Serving, monitoring, cost control | Planned |
-| Market & business | Build vs buy, unit economics, vendor landscape | Planned |
+| Module | Pages |
+|---|---|
+| **Evaluation & judging** | LLM as a judge · Drift detection · Regression gates · Bias & explainability |
+| **Retrieval & advanced RAG** | Query transformation & HyDE · Corrective & self-RAG |
+| **Inference optimization** | Quantization · Distillation & pruning |
+| **Orchestration frameworks** | LangChain, LlamaIndex, DSPy |
+| **LLM foundations** | LLM APIs & model selection · Prompt engineering & structured output |
+| **Deployment & operations** | Serving & operations |
+| **Market & business** | Unit economics, build vs buy, where the moat is not |
+
+Subjects already covered well in the companion study notes -- transformers and
+the KV cache, RAG end to end, chunking, embeddings and vector indexes,
+reranking, agents and ReAct, LangGraph, MCP, Text2SQL, guardrails -- are
+deliberately not repeated here.
 
 ---
 

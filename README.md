@@ -97,16 +97,18 @@ the published site would quietly drift from the source.
 
 ## Status
 
-Written gap-first, so the sidebar shows what exists and what is still outlined.
-Pages marked **draft** are planned but unwritten; nothing is padded to look
-finished.
+All seven modules are written. Nothing is padded to look finished.
 
-| Module | State |
+| Module | Pages |
 |---|---|
-| Evaluation & judging | In progress — LLM-as-a-judge written |
-| Retrieval & advanced RAG | Planned |
-| Inference optimization | Planned |
-| Orchestration frameworks | Planned |
-| LLM foundations | Planned |
-| Deployment & operations | Planned |
-| Market & business | Planned |
+| Evaluation & judging | LLM as a judge · Drift detection · Regression gates · Bias & explainability |
+| Retrieval & advanced RAG | Query transformation & HyDE · Corrective & self-RAG |
+| Inference optimization | Quantization · Distillation & pruning |
+| Orchestration frameworks | LangChain, LlamaIndex, DSPy |
+| LLM foundations | LLM APIs & model selection · Prompt engineering & structured output |
+| Deployment & operations | Serving & operations |
+| Market & business | Unit economics, build vs buy, where the moat is not |
+
+Subjects already covered well in the companion study notes — transformers and
+the KV cache, RAG end to end, chunking, embeddings, reranking, agents, LangGraph,
+MCP, Text2SQL, guardrails — are deliberately not repeated.

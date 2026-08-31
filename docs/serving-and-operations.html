@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Serving &amp; operations · LLM Handbook</title>
+<meta name="description" content="Running an LLM application in production — the latency budget, the batching maths, and what to monitor.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html" class="active">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="serving-operations"><a class="anchor" href="#serving-operations">#</a>Serving & operations</h1><blockquote>
+<p><strong>The one sentence:</strong> an LLM endpoint is a slow, expensive, occasionally
+unavailable dependency with unbounded output, and everything in production
+follows from taking that seriously.</p>
+</blockquote>
+<p>Most LLM outages are not model failures. They are missing timeouts, unbounded
+retries, no backpressure, and a queue that grew until memory ran out — ordinary
+distributed-systems failures wearing a new hat.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   THE LATENCY BUDGET, and where it actually goes
+
+   user presses enter
+     |
+     |-- 5ms     auth, validation
+     |-- 40ms    retrieval (embed + ANN + rerank)
+     |-- 200ms   PREFILL: read the whole prompt        &lt;- grows with context length
+     |
+     +-- TIME TO FIRST TOKEN ~ 250ms   &lt;-- the number users judge you on
+     |
+     |-- 15ms/token DECODE                             &lt;- grows with output length
+     |               400 tokens = 6s
+     |
+     +-- TOTAL ~ 6.3s     but it FELT fast, because streaming started at 250ms
+
+
+   THE TWO NUMBERS, and why they are not the same problem
+
+   TTFT   set by prompt length + queueing     -&gt; fix with caching, shorter context
+   TPOT   set by memory bandwidth + batch     -&gt; fix with quantization, better batching
+
+   Optimising total latency without separating these two is how teams
+   spend a quarter making the wrong thing faster.</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — continuous batching is the single biggest serving win</strong>, and
+worth being able to explain precisely.</p>
+<p>Naive (static) batching groups N requests, runs them together, and waits for
+<em>all</em> of them to finish. One request generating 500 tokens holds the whole batch
+hostage while others that finished at 20 tokens sit idle.</p>
+<p><strong>Continuous batching</strong> — also called iteration-level scheduling — schedules at
+each token step instead. A finished sequence leaves the batch immediately and a
+waiting request takes its slot. Throughput improvements of several times over
+static batching are routine, which is why vLLM and TensorRT-LLM are built around
+it.</p>
+<p><strong>PagedAttention</strong> is the memory counterpart. The KV cache is the dominant
+memory consumer at long context, and reserving a contiguous block per sequence
+wastes most of it. Paging it like virtual memory — fixed blocks, allocated on
+demand — cuts waste dramatically and lets you run far larger batches in the same
+VRAM.</p>
+<div class="table-scroll"><table><thead><tr><th>Technique</th><th>Improves</th><th>Where</th></tr></thead><tbody><tr><td><strong>Continuous batching</strong></td><td>Throughput</td><td>vLLM, TGI, TensorRT-LLM</td></tr><tr><td><strong>PagedAttention</strong></td><td>Memory efficiency → batch size</td><td>vLLM</td></tr><tr><td><strong>Prefix caching</strong></td><td>TTFT and cost on shared prefixes</td><td>Most serving stacks, and hosted APIs</td></tr><tr><td><strong>Speculative decoding</strong></td><td>TPOT, without changing output</td><td>Needs a draft model</td></tr><tr><td><strong>Quantization</strong></td><td>Memory and TPOT</td><td>See the optimization module</td></tr></tbody></table></div><p><strong>Advanced — the queue is the actual control surface.</strong> When demand exceeds
+capacity you have exactly three options, and choosing not to decide means
+choosing the worst one:</p>
+<ol>
+<li><strong>Queue</strong> — latency grows, unboundedly if you let it</li>
+<li><strong>Shed</strong> — return 429 with <code>Retry-After</code>, keeping accepted work fast</li>
+<li><strong>Degrade</strong> — smaller model, shorter context, cached answer</li>
+</ol>
+<p>Unbounded queueing is the default and the worst outcome: everyone waits, nobody
+is served, and the timeouts cascade upstream. <strong>Bounded queue plus load shedding
+with hysteresis</strong> — a high-water mark to start shedding, a lower one to resume —
+is the pattern that survives contact with real traffic. The hysteresis gap stops
+the system flapping around a single threshold.</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Request] --&gt; B{Queue depth&lt;br/&gt;above high-water mark?}
+  B --&gt;|yes| C[429 + Retry-After]
+  B --&gt;|no| D{Result cache hit?}
+  D --&gt;|yes| E[Return cached]
+  D --&gt;|no| F{Semantic cache hit?}
+  F --&gt;|yes| E
+  F --&gt;|no| G[Route by difficulty]
+  G --&gt; H[Small model]
+  G --&gt; I[Large model]
+  H --&gt; J[Stream tokens]
+  I --&gt; J
+  J --&gt; K{Timeout or error?}
+  K --&gt;|timeout| L[Return partial + mark incomplete]
+  K --&gt;|5xx| M[Retry with backoff, capped]
+  K --&gt;|ok| N[Cache, log, return]
+  M --&gt; O{Retries exhausted?}
+  O --&gt;|yes| P[Fallback model, or fail cleanly]</pre><p><strong>Two things people leave out.</strong></p>
+<p><code>L</code> — on timeout, a partial streamed answer is usually better than an error,
+because the user has already read most of it. Mark it incomplete rather than
+discarding it.</p>
+<p><code>M</code> — retries must be capped and jittered. Uncapped retries against a struggling
+provider are how you convert a slow dependency into an outage of your own
+making.</p>
+<hr>
+<h2 id="4-uml-the-serving-stack"><a class="anchor" href="#4-uml-the-serving-stack">#</a>4 · UML — the serving stack</h2><pre class="mermaid">graph TB
+  subgraph Edge
+    A[Load balancer] --&gt; B[Gateway&lt;br/&gt;auth, validation, rate limit]
+  end
+  subgraph Control
+    B --&gt; C[Bounded queue&lt;br/&gt;+ load shedding]
+    C --&gt; D[Router: difficulty, cost, tenant]
+  end
+  subgraph Inference
+    D --&gt; E[vLLM / TGI&lt;br/&gt;continuous batching + paged KV]
+    D --&gt; F[Hosted API&lt;br/&gt;fallback or overflow]
+  end
+  subgraph Observability
+    E --&gt; G[Traces: TTFT, TPOT, tokens, model version]
+    F --&gt; G
+    G --&gt; H[Cost attribution per tenant and feature]
+  end</pre><p><strong>The gateway never runs the model.</strong> Keeping it thin and async means it stays
+responsive enough to shed load correctly while inference is saturated — a
+gateway that blocks on inference cannot tell anyone it is overloaded.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">import asyncio, random
+
+
+class BoundedLLMPool:
+    &quot;&quot;&quot;Concurrency limit, bounded queue, and load shedding with hysteresis.
+
+    The concurrency cap is the important part: without it, a traffic spike
+    opens unbounded connections, every request slows, upstream timeouts fire,
+    clients retry, and the retries finish the job. Bounding admission is what
+    turns overload into degraded service rather than collapse.
+    &quot;&quot;&quot;
+
+    def __init__(self, concurrency=8, high_water=64, low_water=32):
+        self._sem = asyncio.Semaphore(concurrency)
+        self._high, self._low = high_water, low_water
+        self._waiting = 0
+        self._shedding = False
+
+    def _update_shedding(self) -&gt; None:
+        # Two thresholds, not one: a single threshold makes the system flap
+        # between shedding and accepting on every request near the boundary.
+        if self._waiting &gt;= self._high:
+            self._shedding = True
+        elif self._waiting &lt;= self._low:
+            self._shedding = False
+
+    async def submit(self, coro_factory, timeout=30.0):
+        self._update_shedding()
+        if self._shedding:
+            raise Overloaded(retry_after=self._suggested_backoff())
+
+        self._waiting += 1
+        try:
+            async with self._sem:
+                self._waiting -= 1
+                self._update_shedding()
+                return await asyncio.wait_for(coro_factory(), timeout=timeout)
+        except asyncio.TimeoutError:
+            # A timeout is a real outcome the caller can act on, not a crash.
+            raise Timeout(&quot;model did not respond within budget&quot;)
+        finally:
+            self._update_shedding()
+
+    def _suggested_backoff(self) -&gt; int:
+        # Jittered, so shed clients do not return in a synchronised wave and
+        # reproduce the overload that shed them.
+        return random.randint(2, 8)</code></pre><pre class="code"><code class="language-python">def route(query: str, budget_ms: int) -&gt; str:
+    &quot;&quot;&quot;Send the easy majority to the cheap model.
+
+    Most production traffic is easy. Routing on a cheap signal captures most of
+    the cost saving before any per-request optimisation, and it is the first
+    thing to try -- ahead of quantization or serving changes.
+    &quot;&quot;&quot;
+    tokens = len(query.split())
+    if budget_ms &lt; 1000:
+        return &quot;small&quot;                      # latency budget rules everything
+    if tokens &lt; 20 and &quot;?&quot; in query:
+        return &quot;small&quot;                      # short factual lookups
+    if any(w in query.lower() for w in (&quot;compare&quot;, &quot;analyse&quot;, &quot;why&quot;, &quot;design&quot;)):
+        return &quot;large&quot;                      # genuine reasoning
+    return &quot;small&quot;</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Monitor these, in this order.</strong> The list is short on purpose; a dashboard with
+forty panels is one nobody reads.</p>
+<div class="table-scroll"><table><thead><tr><th>Signal</th><th>Why it comes before the others</th></tr></thead><tbody><tr><td><strong>TTFT p50/p95</strong></td><td>What users actually perceive</td></tr><tr><td><strong>TPOT</strong></td><td>Throughput health; degrades before anything else breaks</td></tr><tr><td><strong>Queue depth</strong></td><td>The leading indicator — moves before latency does</td></tr><tr><td><strong>Error rate by class</strong></td><td>429 and 5xx mean different things and need different responses</td></tr><tr><td><strong>Tokens in/out per request</strong></td><td>Cost driver, and where a prompt regression shows up first</td></tr><tr><td><strong>Cost per tenant/feature</strong></td><td>The only way to answer &quot;why did the bill double&quot;</td></tr><tr><td><strong>Cache hit rate</strong></td><td>Directly proportional to money saved</td></tr><tr><td><strong>Refusal rate</strong></td><td>Quality proxy that needs no labels</td></tr></tbody></table></div><p><strong>Queue depth is the leading indicator</strong> and the one most often missing. Latency
+rises <em>after</em> the queue has already grown; if you alert on latency you are
+alerting after users are affected.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure mode</th><th>Symptom</th><th>Fix</th></tr></thead><tbody><tr><td><strong>No concurrency cap</strong></td><td>Spike becomes total collapse</td><td>Bounded pool; shed above high-water mark</td></tr><tr><td><strong>Uncapped retries</strong></td><td>Self-inflicted outage on a slow provider</td><td>Cap, backoff, jitter, circuit breaker</td></tr><tr><td><strong>No timeout</strong></td><td>Requests hang for minutes</td><td>Explicit timeout; return partial output</td></tr><tr><td><strong>Single threshold shedding</strong></td><td>Flapping in and out of overload</td><td>Hysteresis: separate high and low marks</td></tr><tr><td><strong>No output token cap</strong></td><td>One request consumes a whole budget</td><td><code>max_tokens</code> always set</td></tr><tr><td><strong>Cost unattributed</strong></td><td>Bill doubles, cause unknown</td><td>Log tokens with tenant and feature tags</td></tr><tr><td><strong>Optimising total latency</strong></td><td>Effort spent on the wrong half</td><td>Separate TTFT from TPOT and fix each properly</td></tr></tbody></table></div><p><strong>Cost control, ordered by how much it actually saves:</strong></p>
+<ol>
+<li><strong>Route</strong> easy requests to a small model — usually the largest single win</li>
+<li><strong>Cache</strong> exact matches, then semantically similar ones</li>
+<li><strong>Prefix-cache</strong> the stable system prompt and shared context</li>
+<li><strong>Cap output tokens</strong> — output is several times the price of input</li>
+<li><strong>Batch</strong> anything asynchronous at roughly half price</li>
+<li>Only then: quantize, self-host, or negotiate rates</li>
+</ol>
+<p>Teams commonly start at 6 and never do 1, which is backwards by roughly an order
+of magnitude in savings.</p>
+<p><strong>Semantic caching deserves a warning.</strong> Returning a previous answer for a
+&quot;similar&quot; query is powerful and quietly dangerous: similarity threshold too low
+and users receive answers to questions they did not ask. It is also stateful in
+a way exact caching is not — &quot;what did I just order&quot; is similar across users and
+must never share a cache entry. Scope semantic caches per user, or restrict them
+to genuinely stateless queries.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What serving looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Time to first token, and whether it works during the busy hour. Streaming makes a 6-second answer feel fast; the same answer delivered whole feels broken.</td></tr><tr><td><strong>Coder</strong></td><td>Always set a timeout and <code>max_tokens</code>. Cap and jitter retries. Stream by default. Log tokens, model version and latency on every call, or you cannot debug cost or quality later.</td></tr><tr><td><strong>Tester</strong></td><td>Load-test to find the knee, not just the happy path. Assert that overload produces 429 with <code>Retry-After</code> rather than timeouts, and that a provider outage degrades rather than cascades.</td></tr><tr><td><strong>System designer</strong></td><td>This is ordinary distributed systems: bounded queues, backpressure, hysteresis, circuit breakers, graceful degradation. The novelty is unbounded output length, which is why <code>max_tokens</code> is a capacity control and not a formatting preference.</td></tr><tr><td><strong>Architect</strong></td><td>Decide the degradation ladder up front — smaller model, shorter context, cached answer, refuse. Systems without a defined ladder degrade by collapsing, and that choice gets made under pressure at the worst moment.</td></tr><tr><td><strong>CEO</strong></td><td>Cost scales with success, so model the bill at 10× current volume. Routing and caching typically cut spend more than any infrastructure project, and cost per tenant is the number that makes pricing decidable.</td></tr><tr><td><strong>Market</strong></td><td>vLLM, TGI and TensorRT-LLM are open and excellent; serving is not a differentiator. What is scarce is the operational discipline — the teams that stay up under load are not the ones with the best stack.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;What is continuous batching?&quot;</td><td>Serving knowledge</td><td>Scheduling at each token step rather than per batch, so a finished sequence leaves immediately and a waiting request takes its slot. Static batching makes everyone wait for the longest generation; this is several times the throughput.</td></tr><tr><td>&quot;Your p95 latency doubled. Debug it.&quot;</td><td>Method</td><td>Split TTFT from TPOT. Rising TTFT means queueing or longer prompts; rising TPOT means memory pressure, larger batches or a model change. Then check queue depth, which moved before latency did.</td></tr><tr><td>&quot;How do you handle overload?&quot;</td><td>Distributed systems instinct</td><td>Bounded queue, shed above a high-water mark with 429 and jittered <code>Retry-After</code>, resume below a lower mark for hysteresis. Never queue without a bound — everyone waits, nobody is served, and the retries finish it.</td></tr><tr><td>&quot;How would you cut the bill in half?&quot;</td><td>Cost sense</td><td>Route easy traffic to a small model, cache exact then semantic matches, prefix-cache the stable prompt, cap output tokens, batch async work. Infrastructure changes come after those, not before.</td></tr><tr><td>&quot;The provider is returning 500s.&quot;</td><td>Failure handling</td><td>Capped retries with jittered backoff, circuit breaker to stop hammering it, fallback model if the eval suite covers it, and honest degradation to the user. Uncapped retries turn their incident into ours.</td></tr><tr><td>&quot;Why is <code>max_tokens</code> a capacity control?&quot;</td><td>Depth</td><td>Output length is unbounded by default and decode dominates latency and cost. One runaway generation can consume the capacity of many normal requests, so the cap protects the whole system, not just that request.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>separate TTFT from TPOT and give a different fix for each,</li>
+<li>explain continuous batching and why it beats static batching,</li>
+<li>describe load shedding with hysteresis and why one threshold is not enough,</li>
+<li>order the cost levers by actual saving, and</li>
+<li>name the risk in semantic caching.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Continuous batching + paged KV</td><td><em>Efficient Memory Management for LLM Serving with PagedAttention</em> (Kwon et al., 2023) — the vLLM paper</td></tr><tr><td>Iteration-level scheduling</td><td><em>Orca: A Distributed Serving System for Transformer-Based Generative Models</em> (Yu et al., 2022)</td></tr><tr><td>Speculative decoding</td><td>Leviathan et al. (2022)</td></tr><tr><td>Load shedding</td><td>Google SRE Book, chapters on handling overload and cascading failure — the LLM case is a special case, not a new problem</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="orchestration-frameworks.html"><span>previous</span>Orchestration frameworks</a><a class="pager next" href="market-and-business.html"><span>next</span>Market & business of LLMs</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-the-serving-stack">4 · UML — the serving stack</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

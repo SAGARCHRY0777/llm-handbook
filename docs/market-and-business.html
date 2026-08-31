@@ -1,0 +1,257 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market &amp; business of LLMs · LLM Handbook</title>
+<meta name="description" content="Unit economics, build versus buy, where the moat is not, and how to answer the CEO&#39;s actual question.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html" class="active">Market & business of LLMs</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="market-business-of-llms"><a class="anchor" href="#market-business-of-llms">#</a>Market & business of LLMs</h1><blockquote>
+<p><strong>The one sentence:</strong> the model is a depreciating commodity, so anything you
+build that depends on having the best one is a rented advantage.</p>
+</blockquote>
+<p>Engineers are asked business questions in senior interviews and mostly answer
+them technically. This page is the vocabulary and the arithmetic for answering
+them properly.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>   WHERE THE VALUE SITS, and how durable each layer is
+
+   layer                      example                     durability
+   -----                      -------                     ----------
+   SILICON                    NVIDIA, TPU                 very high, capital-defended
+   FOUNDATION MODELS          Anthropic, OpenAI, Meta     high, but converging fast
+   INFRASTRUCTURE / SERVING   vLLM, Bedrock, Databricks   medium, commoditising
+   FRAMEWORKS / TOOLING       LangChain, vector DBs       LOW. Free alternatives, no lock-in
+   APPLICATIONS               your product                depends entirely on the below
+
+   WHAT MAKES AN APPLICATION DURABLE
+     proprietary data nobody else can obtain
+     workflow integration that is painful to rip out
+     distribution and trust in a specific market
+     regulatory position, certifications, approvals
+     an evaluation suite encoding domain expertise
+
+   WHAT DOES NOT
+     a prompt          copied in an afternoon
+     a model choice    obsolete next quarter
+     a RAG pipeline    ~200 lines, in every tutorial
+     being early       only counts if it bought one of the above</code></pre><hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic — the unit economics.</strong> One number decides whether a business exists:
+<strong>gross margin per request</strong>.</p>
+<pre class="code"><code>   revenue per request        subscription / requests, or per-seat / usage
+   − model cost               input + output tokens at their different prices
+   − retrieval + infra        vector DB, compute, storage
+   − support cost             the one everyone forgets
+   = contribution margin</code></pre><p>The trap specific to this industry: <strong>cost scales with usage, and your best
+customers use it most.</strong> In classic SaaS, marginal cost is near zero and heavy
+users are pure profit. With LLMs, a power user on a flat subscription can be
+loss-making. Anyone pricing flat-rate without modelling the heavy tail will
+discover this from their most enthusiastic customers.</p>
+<div class="table-scroll"><table><thead><tr><th>Pricing model</th><th>Works when</th><th>Fails when</th></tr></thead><tbody><tr><td><strong>Flat subscription</strong></td><td>Usage is predictable and capped</td><td>Power users exceed their price</td></tr><tr><td><strong>Per seat</strong></td><td>Value tracks headcount</td><td>One seat automates a whole team&#39;s work</td></tr><tr><td><strong>Usage-based</strong></td><td>Costs pass through cleanly</td><td>Customers cannot forecast their bill and disengage</td></tr><tr><td><strong>Outcome-based</strong></td><td>The outcome is measurable</td><td>Attribution is arguable, and it usually is</td></tr><tr><td><strong>Hybrid (base + usage)</strong></td><td>Most real cases</td><td>Requires explaining two numbers</td></tr></tbody></table></div><p><strong>Intermediate — build versus buy, honestly.</strong> The question is rarely &quot;can we
+build it&quot; and always &quot;what does owning it cost for three years&quot;.</p>
+<div class="table-scroll"><table><thead><tr><th></th><th>Buy (hosted API / vendor)</th><th>Build (self-hosted / in-house)</th></tr></thead><tbody><tr><td><strong>Time to value</strong></td><td>Days</td><td>Months</td></tr><tr><td><strong>Unit cost at low volume</strong></td><td>Lower</td><td>Much higher — idle GPUs still bill</td></tr><tr><td><strong>Unit cost at high sustained volume</strong></td><td>Higher</td><td>Lower</td></tr><tr><td><strong>Data boundary</strong></td><td>Leaves your perimeter</td><td>Stays put</td></tr><tr><td><strong>Quality ceiling</strong></td><td>Frontier</td><td>Whatever you can serve</td></tr><tr><td><strong>Hidden cost</strong></td><td>Vendor roadmap, rate limits</td><td>On-call, upgrades, expertise, capacity planning</td></tr></tbody></table></div><p>The hidden costs are where the decision actually turns, and they are the ones
+absent from the spreadsheet. Self-hosting is not a licence saving; it is hiring.</p>
+<p><strong>Advanced — the value migration.</strong> Each foundation-model release absorbs a
+layer of tooling into the base capability. Products that were &quot;a prompt plus a
+wrapper&quot; in one release are a checkbox feature in the next. The strategic
+question for anything you build is: <strong>does this get better or worse when the
+model improves?</strong></p>
+<ul>
+<li><strong>Better with model improvement:</strong> anything where the model is an input to a
+workflow you own — your data, your integrations, your compliance position.</li>
+<li><strong>Worse with model improvement:</strong> anything compensating for a model
+limitation. Elaborate prompt scaffolding, chunking cleverness, and
+orchestration to route around weak reasoning all become dead weight the moment
+the limitation disappears.</li>
+</ul>
+<p>Building in the second category is not always wrong — it can be the right
+short-term answer — but it should be a knowing bet with an expiry date, not an
+accident.</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+  A[Proposed LLM feature] --&gt; B{Is there a deterministic&lt;br/&gt;solution?}
+  B --&gt;|yes| C[Use it. Cheaper, testable, explainable]
+  B --&gt;|no| D{What is the cost of&lt;br/&gt;being wrong?}
+  D --&gt;|high, irreversible| E[Human in the loop.&lt;br/&gt;Model assists, does not decide]
+  D --&gt;|low, reversible| F[Full automation viable]
+  E --&gt; G[Model unit economics&lt;br/&gt;at 10x current volume]
+  F --&gt; G
+  G --&gt; H{Contribution margin positive&lt;br/&gt;at the 95th-percentile user?}
+  H --&gt;|no| I[Change pricing, or cap usage,&lt;br/&gt;or route to a cheaper model]
+  H --&gt;|yes| J{Does the moat survive&lt;br/&gt;the next model release?}
+  J --&gt;|no| K[Time-boxed bet.&lt;br/&gt;Set an explicit review date]
+  J --&gt;|yes| L[Build]
+  I --&gt; H</pre><p><strong><code>B</code> is the question most often skipped.</strong> A regex, a lookup table or a
+classical classifier is cheaper, faster, testable and explainable. Reaching for
+an LLM where a deterministic solution exists is a cost and reliability decision
+made by default.</p>
+<p><strong><code>H</code> is deliberately the 95th-percentile user, not the average.</strong> Averages hide
+the heavy tail that determines whether the pricing model survives.</p>
+<hr>
+<h2 id="4-uml-where-the-money-goes"><a class="anchor" href="#4-uml-where-the-money-goes">#</a>4 · UML — where the money goes</h2><pre class="mermaid">graph LR
+  A[Revenue per account] --&gt; B[Gross margin]
+  C[Model tokens] --&gt; B
+  D[Vector DB + infra] --&gt; B
+  E[Support tickets] --&gt; B
+  B --&gt; F{Positive at p95 usage?}
+  F --&gt;|no| G[Pricing or product change&lt;br/&gt;NOT an infrastructure project]
+  F --&gt;|yes| H[Scale]
+  H --&gt; I[Volume rises]
+  I --&gt; C
+  Note1[Cost rises with success.&lt;br/&gt;This loop is the whole difference&lt;br/&gt;from classic SaaS.]</pre><hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">def unit_economics(price_per_month, requests, in_tok, out_tok,
+                   in_price=3.0, out_price=15.0, infra=0.40, support=1.20):
+    &quot;&quot;&quot;Contribution margin per account per month.
+
+    Support is included because it is real and routinely omitted. An LLM
+    feature that produces confident wrong answers generates tickets, and those
+    tickets cost more per incident than the inference that caused them.
+    &quot;&quot;&quot;
+    model = requests * (in_tok * in_price + out_tok * out_price) / 1_000_000
+    total = model + infra + support
+    return {
+        &quot;revenue&quot;: price_per_month,
+        &quot;model_cost&quot;: round(model, 2),
+        &quot;total_cost&quot;: round(total, 2),
+        &quot;margin&quot;: round(price_per_month - total, 2),
+        &quot;margin_pct&quot;: round(100 * (price_per_month - total) / price_per_month, 1),
+    }
+
+
+# The comparison that decides the pricing model.
+average = unit_economics(29.00, requests=300,   in_tok=2_000, out_tok=400)
+power   = unit_economics(29.00, requests=4_000, in_tok=2_000, out_tok=400)
+
+print(&quot;average user:&quot;, average)   # margin  ~ 22.76  (78.5%)
+print(&quot;power user  :&quot;, power)     # margin  ~ -19.40 (loss-making)</code></pre><pre class="code"><code>average user: margin  22.76  (78.5%)
+power user  : margin -19.40  (LOSS)</code></pre><p><strong>That is the entire argument for usage caps, tiering or hybrid pricing</strong>, on one
+screen. A flat $29 plan is healthy for the median user and loses money on the
+customer who loves the product most — and that customer is the one who tells
+others about it.</p>
+<pre class="code"><code class="language-python">def routing_saving(requests, easy_fraction=0.7, large=15.0, small=1.25, out_tok=400):
+    &quot;&quot;&quot;What routing the easy majority to a small model saves.
+
+    Almost always the largest single cost lever, and it needs no infrastructure
+    change -- which is why it belongs before quantization or self-hosting in any
+    cost conversation.
+    &quot;&quot;&quot;
+    baseline = requests * out_tok * large / 1_000_000
+    routed = requests * out_tok * (easy_fraction * small + (1 - easy_fraction) * large) / 1_000_000
+    return round(100 * (1 - routed / baseline), 1)
+
+print(f&quot;routing 70% to a small model saves {routing_saving(100_000)}%&quot;)   # ~64.3%</code></pre><hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Model prices fall, and that changes strategy, not just budgets.</strong> Capability
+per dollar has improved by more than an order of magnitude over recent years and
+continues to. Two consequences:</p>
+<ol>
+<li><strong>Do not build a business whose only advantage is efficiency at today&#39;s
+prices.</strong> That advantage evaporates on someone else&#39;s release schedule.</li>
+<li><strong>Features that are uneconomic today may be viable in a year.</strong> Keep a list
+of things rejected on cost and revisit it, rather than treating each rejection
+as permanent.</li>
+</ol>
+<p><strong>The demo-to-production gap is where most projects die</strong>, and it is predictable.
+A demo needs to work once, on a chosen example, watched by someone hoping it
+works. Production needs to work on the long tail, unattended, at a price, with
+evidence. The gap between those is evaluation, monitoring, cost control, and
+failure handling — which is why the technically unglamorous half of this handbook
+is the half that determines whether anything ships.</p>
+<div class="table-scroll"><table><thead><tr><th>Business failure mode</th><th>What it looks like</th><th>What was missing</th></tr></thead><tbody><tr><td><strong>Flat pricing, usage costs</strong></td><td>Best customers are loss-making</td><td>Heavy-tail modelling</td></tr><tr><td><strong>No deterministic baseline</strong></td><td>Expensive, unreliable solution to a solved problem</td><td>Asking whether an LLM was needed</td></tr><tr><td><strong>Moat is a prompt</strong></td><td>Competitor matches it in a week</td><td>Anything proprietary</td></tr><tr><td><strong>Success is unmeasured</strong></td><td>Cannot tell if it helped; funding dries up</td><td>Evaluation from day one</td></tr><tr><td><strong>Compliance discovered late</strong></td><td>Launch blocked at review</td><td>Traceability designed in</td></tr><tr><td><strong>Built around a limitation</strong></td><td>Next release makes the work worthless</td><td>Asking which way the model trend runs</td></tr></tbody></table></div><p><strong>Regulation is a competitive position, not only a cost.</strong> In regulated sectors
+— finance, health, industrial safety — the evaluation suite, audit trail and
+documented limitations are what let you sell at all. Competitors without them
+cannot enter. Framing compliance work as a moat rather than a tax is both more
+accurate and more persuasive internally.</p>
+<p><strong>What to say when asked &quot;should we use AI for this?&quot;</strong> The honest structure:</p>
+<ol>
+<li>Is there a deterministic solution? Use it.</li>
+<li>What does being wrong cost? That sets the automation level.</li>
+<li>What is the margin at the 95th-percentile user?</li>
+<li>Does the advantage survive the next model release?</li>
+<li>Can we measure whether it worked?</li>
+</ol>
+<p>If question five has no answer, the project has no way to prove it succeeded —
+and unprovable projects get cancelled in the first budget review regardless of
+how well they work.</p>
+<hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What the business view looks like from here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>They do not care that it is AI. They care whether it saves them time and whether they can trust it. &quot;AI-powered&quot; is not a benefit and stopped being a differentiator some time ago.</td></tr><tr><td><strong>Coder</strong></td><td>Your token choices are someone&#39;s margin. Capping output, routing and caching are engineering decisions with direct financial consequences — which makes them worth raising, not just implementing.</td></tr><tr><td><strong>Tester</strong></td><td>The eval suite is a commercial asset. In regulated sales it is part of the answer to a due-diligence questionnaire, and it is the reason a buyer believes the quality claim.</td></tr><tr><td><strong>System designer</strong></td><td>Cost per request is a design constraint on the same footing as latency. A design that is fast and unaffordable has not met its requirements.</td></tr><tr><td><strong>Architect</strong></td><td>Build-versus-buy is a three-year commitment about where data lives and what your team operates. The hidden costs — on-call, upgrades, expertise — decide it more often than the per-token arithmetic.</td></tr><tr><td><strong>CEO</strong></td><td>Cost rises with success, so model at 10×. Ask what the margin is at the 95th-percentile user, and what remains valuable when the model is free. If the answer to the second is &quot;nothing&quot;, it is a feature, not a company.</td></tr><tr><td><strong>Market</strong></td><td>Capability converges, prices fall, tooling commoditises. The durable layers are proprietary data, workflow lock-in, distribution and regulatory position. Everything else is rented from a vendor&#39;s roadmap.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>What they are testing</th><th>Answer sketch</th></tr></thead><tbody><tr><td>&quot;Should we build or buy?&quot;</td><td>Whether you see hidden costs</td><td>Hosted below sustained high volume. Self-host for data residency, control or genuine scale. The decision usually turns on on-call, upgrades and expertise, not per-token price — self-hosting is hiring, not a licence saving.</td></tr><tr><td>&quot;How would you price this?&quot;</td><td>Whether you know cost scales</td><td>Not flat, unless usage is capped. Cost rises with usage and heavy users can be loss-making, so hybrid — a base plus usage — or tiering with caps. Model margin at the 95th-percentile user, not the average.</td></tr><tr><td>&quot;What is our moat?&quot;</td><td>Strategic honesty</td><td>Not the prompt, the model choice or the pipeline. Proprietary data, workflow integration, distribution, regulatory position, and an eval suite encoding domain expertise. Everything else is copied in a week or obsoleted next quarter.</td></tr><tr><td>&quot;The demo works. Why isn&#39;t it shipped?&quot;</td><td>Production realism</td><td>A demo works once on a chosen example; production works on the long tail, unattended, at a price, with evidence. The gap is evaluation, monitoring, cost control and failure handling.</td></tr><tr><td>&quot;Model prices fell 10×. What changes?&quot;</td><td>Strategic thinking</td><td>Rejected features become viable, so revisit the list. Any advantage based on efficiency evaporates. And it raises the real question: what is still valuable when the model is free?</td></tr><tr><td>&quot;When should we NOT use an LLM?&quot;</td><td>Judgement</td><td>When a deterministic solution exists — cheaper, testable, explainable. When being wrong is expensive and irreversible without a human. And when nobody can say how we would measure whether it worked.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ol>
+<li>explain why LLM economics differ from classic SaaS,</li>
+<li>compute contribution margin and say why the p95 user is the one that matters,</li>
+<li>name the durable layers and the rented ones,</li>
+<li>give the hidden costs of self-hosting, and</li>
+<li>answer &quot;should we use AI for this&quot; with the five-question structure.</li>
+</ol>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><div class="table-scroll"><table><thead><tr><th>Topic</th><th>Source</th></tr></thead><tbody><tr><td>Value capture</td><td>a16z and Sequoia&#39;s writing on the AI stack — read critically; they are talking their book, and the layer analysis is still useful</td></tr><tr><td>Unit economics</td><td>Any SaaS gross-margin primer, then adjust for marginal cost being non-zero. That adjustment is the whole story</td></tr><tr><td>Pricing</td><td>Discussions of usage-based pricing in developer tools; the heavy-tail problem is not new, only newly acute</td></tr><tr><td>Regulation</td><td>EU AI Act risk tiers — which category your product falls into changes the cost and the moat</td></tr></tbody></table></div></article>
+    <div class="pager-row"><a class="pager previous" href="serving-and-operations.html"><span>previous</span>Serving & operations</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-where-the-money-goes">4 · UML — where the money goes</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
