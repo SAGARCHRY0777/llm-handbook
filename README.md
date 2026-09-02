@@ -54,7 +54,7 @@ so reading has an end.
 ```bash
 npm install
 npm run build     # content/*.md -> docs/
-npm run serve     # preview on http://localhost:4180
+npm run serve     # preview on http://localhost:4281
 ```
 
 Add a page by adding a markdown file to `content/` with frontmatter:
