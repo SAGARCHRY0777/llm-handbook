@@ -5,7 +5,7 @@ LLM systems. Every topic is written at three depths — basic, intermediate,
 advanced — and examined from **seven seats**: user, coder, tester, system
 designer, architect, CEO, and market.
 
-**Live site:** enable GitHub Pages on `main` → `/docs` (see below).
+**Live site:** https://SAGARCHRY0777.github.io/llm-handbook/
 
 ---
 
@@ -84,9 +84,8 @@ more than a generated one.
 
 ## Publishing
 
-`docs/` is committed on purpose, so GitHub Pages can serve it directly:
-
-**Settings → Pages → Source: `main` / `/docs`**
+`docs/` is committed on purpose, so GitHub Pages serves it directly. Pages is
+configured as **Source: `main` / `/docs`** — already enabled; nothing to set up.
 
 No Pages-source change to "GitHub Actions" is required, and no deploy workflow
 can fail silently. The trade-off is that build output lives in the repo, so CI
@@ -113,3 +112,12 @@ All modules written. Nothing is padded to look finished.
 | **Practice & interviews** | System design walkthroughs · Interview question bank · Learning paths |
 | **Reference** | Glossary · Research papers · Numbers to know · Anti-patterns |
 
+
+---
+
+## Companion handbooks
+
+| Repo | Round it prepares |
+|---|---|
+| [dsa-handbook](https://github.com/SAGARCHRY0777/dsa-handbook) | Coding — patterns, ladders, worked solutions in Python and Java |
+| [system-design-handbook](https://github.com/SAGARCHRY0777/system-design-handbook) | System design — the 45-minute framework, building blocks, worked designs |
