@@ -115,9 +115,16 @@ All modules written. Nothing is padded to look finished.
 
 ---
 
-## Companion handbooks
+## Companion repos
 
 | Repo | Round it prepares |
 |---|---|
 | [dsa-handbook](https://github.com/SAGARCHRY0777/dsa-handbook) | Coding — patterns, ladders, worked solutions in Python and Java |
 | [system-design-handbook](https://github.com/SAGARCHRY0777/system-design-handbook) | System design — the 45-minute framework, building blocks, worked designs |
+
+| [system-design-lab](https://github.com/SAGARCHRY0777/system-design-lab) | The depth reference behind the round — 123 pages, 21 sections, 325 diagrams, runnable implementations |
+
+---
+
+**Sagar Chaudhary** — AI Engineer, industrial & manufacturing AI · Bengaluru  
+[Portfolio](https://sagarchry0777.github.io) · [GitHub](https://github.com/SAGARCHRY0777) · [LinkedIn](https://www.linkedin.com/in/sagar-chaudhary777/)
