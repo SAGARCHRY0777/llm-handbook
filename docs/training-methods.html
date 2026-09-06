@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The 20 ways to train a model · LLM Handbook</title>
+<meta name="description" content="Every training method that matters, grouped by stage, with what each one updates, what it costs, and whether it fits on 8 GB of VRAM.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li><li><a href="reasoning-models.html">Reasoning models & test-time compute</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="text2sql.html">Text2SQL & structured data</a></li><li><a href="graphrag.html">GraphRAG & knowledge graphs</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li><li><a href="synthetic-data.html">Synthetic data generation</a></li><li><a href="training-methods.html" class="active">The 20 ways to train a model</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li><li><a href="caching.html">Caching strategies</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li><li><a href="learning-paths.html">Learning paths</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="the-20-ways-to-train-a-model"><a class="anchor" href="#the-20-ways-to-train-a-model">#</a>The 20 ways to train a model</h1><blockquote>
+<p><strong>Most of these you will never use, and that is the point of the map.</strong> The
+value is knowing which three are live options for your problem, and being able
+to say why the other seventeen are not.</p>
+</blockquote>
+<p><strong>Every method below is judged against one practical question: does it fit on a
+single consumer GPU?</strong> The 8 GB column assumes an 8 GB card, which is the most
+common real constraint.</p>
+<hr>
+<h2 id="0-first-should-you-train-at-all"><a class="anchor" href="#0-first-should-you-train-at-all">#</a>0 · First — should you train at all?</h2><pre class="mermaid">flowchart TD
+    S[&quot;I want the model to&lt;br/&gt;behave differently&quot;] --&gt; Q1{&quot;Is it missing&lt;br/&gt;KNOWLEDGE?&quot;}
+    Q1 --&gt;|&quot;yes&quot;| RAG[&quot;&lt;b&gt;RAG&lt;/b&gt;&lt;br/&gt;retrieval, not training&lt;br/&gt;hours, £0, updatable&quot;]
+    Q1 --&gt;|&quot;no&quot;| Q2{&quot;Is it missing a&lt;br/&gt;FORMAT or STYLE?&quot;}
+    Q2 --&gt;|&quot;yes&quot;| Q3{&quot;Did few-shot&lt;br/&gt;prompting fail?&quot;}
+    Q3 --&gt;|&quot;not tried&quot;| P[&quot;&lt;b&gt;Prompt engineering&lt;/b&gt;&lt;br/&gt;minutes, £0&quot;]
+    Q3 --&gt;|&quot;yes, failed&quot;| SFT[&quot;&lt;b&gt;SFT / LoRA&lt;/b&gt;&lt;br/&gt;hours, £10s&quot;]
+    Q2 --&gt;|&quot;no&quot;| Q4{&quot;Is it missing a&lt;br/&gt;SKILL or preference?&quot;}
+    Q4 --&gt;|&quot;yes&quot;| DPO[&quot;&lt;b&gt;DPO&lt;/b&gt; or similar&lt;br/&gt;days, £100s&quot;]
+    Q4 --&gt;|&quot;whole domain&quot;| CPT[&quot;&lt;b&gt;Continued pretraining&lt;/b&gt;&lt;br/&gt;weeks, £1000s&quot;]
+
+    classDef cheap fill:#e4edf6,stroke:#1f4e79,stroke-width:2px
+    classDef dear fill:#fbeee0,stroke:#b15a08,stroke-width:2px
+    class RAG,P cheap
+    class DPO,CPT dear</pre><blockquote>
+<p><strong>The single most useful thing on this page: most &quot;we need to fine-tune&quot;
+problems are retrieval problems.</strong> If the model does not <em>know</em> something,
+training it is the expensive, stale, unverifiable way to tell it — you cannot
+update a fact without retraining, and you cannot cite a source. <strong>Fine-tuning
+teaches behaviour; retrieval supplies knowledge.</strong> Get that the wrong way
+round and you spend weeks producing a model that confidently hallucinates
+last quarter&#39;s numbers.</p>
+</blockquote>
+<hr>
+<h2 id="1-pretraining-stage"><a class="anchor" href="#1-pretraining-stage">#</a>1 · Pretraining stage</h2><h3 id="1-full-pretraining-from-scratch"><a class="anchor" href="#1-full-pretraining-from-scratch">#</a>1. Full pretraining from scratch</h3><p>Train all weights from random initialisation on trillions of tokens.</p>
+<div class="table-scroll"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>Updates</strong></td><td>Everything</td></tr><tr><td><strong>Data</strong></td><td>1–15T tokens</td></tr><tr><td><strong>Cost</strong></td><td>Millions of GPU-hours; $100k–$100M</td></tr><tr><td><strong>8 GB?</strong></td><td><strong>No</strong> — not at any useful scale</td></tr><tr><td><strong>When</strong></td><td>You are a frontier lab, or training something genuinely tiny for research</td></tr></tbody></table></div><p><strong>Worth understanding, never worth doing.</strong> Know the shape so you can explain
+why nobody sane starts here.</p>
+<h3 id="2-continued-pretraining-domain-adaptive"><a class="anchor" href="#2-continued-pretraining-domain-adaptive">#</a>2. Continued pretraining (domain-adaptive)</h3><p>Take an existing base model and keep pretraining on domain text — legal,
+medical, code, a language.</p>
+<div class="table-scroll"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>Updates</strong></td><td>All weights (or LoRA over them)</td></tr><tr><td><strong>Data</strong></td><td>1–100B domain tokens</td></tr><tr><td><strong>Cost</strong></td><td>Thousands of GPU-hours</td></tr><tr><td><strong>8 GB?</strong></td><td>Only with QLoRA, and only for small models</td></tr><tr><td><strong>When</strong></td><td>The domain vocabulary and structure genuinely differ from the base distribution</td></tr></tbody></table></div><p><strong>The risk is catastrophic forgetting</strong> — the model gets better at your domain
+and worse at everything else. Mitigate by mixing in general data (a common
+recipe is ~5–10% replay).</p>
+<hr>
+<h2 id="2-supervised-fine-tuning-stage"><a class="anchor" href="#2-supervised-fine-tuning-stage">#</a>2 · Supervised fine-tuning stage</h2><p><strong>This is where you almost certainly are.</strong> You have input→output pairs and want
+the model to imitate them.</p>
+<h3 id="3-full-fine-tuning"><a class="anchor" href="#3-full-fine-tuning">#</a>3. Full fine-tuning</h3><p>Update every parameter on your labelled examples.</p>
+<pre class="code"><code>Memory = params × (2 bytes weights + 2 grads + 8 Adam states) + activations
+       ≈ 12 bytes per parameter
+
+7B model  -&gt;  ~84 GB.  Not on one consumer card.
+0.5B      -&gt;  ~6 GB.   Tight, but possible.</code></pre><div class="table-scroll"><table><thead><tr><th><strong>8 GB?</strong></th><th>Only up to ~0.5B</th></tr></thead><tbody><tr><td><strong>When</strong></td><td>Small models, or you have real cluster access</td></tr></tbody></table></div><blockquote>
+<p><strong>The 12-bytes-per-parameter rule is worth memorising.</strong> It is why full
+fine-tuning of anything interesting needs a data-centre, and it is the number
+that makes every method below necessary rather than clever.</p>
+</blockquote>
+<h3 id="4-layer-freezing-partial-fine-tuning"><a class="anchor" href="#4-layer-freezing-partial-fine-tuning">#</a>4. Layer freezing / partial fine-tuning</h3><p>Freeze most layers; train only the last N blocks (or just the head).</p>
+<div class="table-scroll"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>Updates</strong></td><td>A chosen subset</td></tr><tr><td><strong>8 GB?</strong></td><td>Yes, for small models</td></tr><tr><td><strong>When</strong></td><td>Crude but effective; largely superseded by LoRA</td></tr></tbody></table></div><h3 id="5-lora"><a class="anchor" href="#5-lora">#</a>5. LoRA ⭐</h3><p><strong>The default, and the one to understand properly.</strong> Freeze the base weights;
+inject small trainable low-rank matrices beside them.</p>
+<pre class="code"><code>Instead of updating W (d × k), learn  ΔW = B·A
+  where A is (r × k) and B is (d × r), with r ≈ 8–64
+
+A 4096 × 4096 layer:      16.7M parameters
+LoRA with r=16:           4096×16 + 16×4096 = 131k parameters   ~0.8%
+
+Base weights stay FROZEN, so no gradients and no optimiser states for them.</code></pre><div class="table-scroll"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>Updates</strong></td><td>~0.1–1% of parameters</td></tr><tr><td><strong>Memory</strong></td><td>Base in bf16 + tiny adapters</td></tr><tr><td><strong>8 GB?</strong></td><td><strong>Up to ~3B</strong></td></tr><tr><td><strong>Output</strong></td><td>A ~10–200 MB adapter file, not a whole model</td></tr></tbody></table></div><blockquote>
+<p><strong>Two properties make LoRA dominant.</strong> Adapters are tiny — you can keep
+dozens for different tasks and swap them at runtime against one base. And they
+are <strong>mergeable</strong>: <code>W + BA</code> folds back into the original weights, so inference
+costs nothing extra once merged.</p>
+</blockquote>
+<h3 id="6-qlora"><a class="anchor" href="#6-qlora">#</a>6. QLoRA ⭐⭐</h3><p><strong>LoRA with the frozen base held in 4-bit.</strong> This is the one that puts 7–8B
+models on consumer hardware.</p>
+<pre class="code"><code>7B in bf16:   ~14 GB   -&gt; will not fit
+7B in 4-bit:  ~3.5 GB  -&gt; fits, with room for activations and adapters</code></pre><div class="table-scroll"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>8 GB?</strong></td><td><strong>Yes — 7–8B comfortably, ~13B at a squeeze</strong></td></tr><tr><td><strong>Cost</strong></td><td>Slower per step than LoRA (dequantisation on the fly)</td></tr><tr><td><strong>Quality</strong></td><td>Very close to full LoRA in practice</td></tr></tbody></table></div><p><strong>Three components worth naming:</strong> 4-bit NormalFloat (a data type matched to the
+normal distribution weights actually follow), double quantisation (quantising the
+quantisation constants), and paged optimisers (spilling optimiser state to CPU on
+memory spikes).</p>
+<blockquote>
+<p><strong>QLoRA is the correct default for your hardware.</strong> Everything else on this
+page is either too big, or a refinement of this.</p>
+</blockquote>
+<h3 id="7-dora"><a class="anchor" href="#7-dora">#</a>7. DoRA</h3><p>LoRA that decomposes weights into magnitude and direction, adapting each
+separately. Slightly better quality than LoRA at similar cost. <strong>Use if your
+library supports it; not worth switching frameworks for.</strong></p>
+<h3 id="8-adapters-bottleneck"><a class="anchor" href="#8-adapters-bottleneck">#</a>8. Adapters (bottleneck)</h3><p>Insert small trainable feed-forward bottlenecks between layers. The pre-LoRA
+approach. <strong>Adds inference latency because the layers cannot be merged away</strong> —
+which is exactly why LoRA replaced it.</p>
+<h3 id="9-prefix-tuning"><a class="anchor" href="#9-prefix-tuning">#</a>9. Prefix tuning</h3><p>Prepend trainable vectors to the key/value states at every layer. Base frozen.</p>
+<h3 id="10-prompt-tuning-soft-prompts"><a class="anchor" href="#10-prompt-tuning-soft-prompts">#</a>10. Prompt tuning (soft prompts)</h3><p>Train a handful of embedding vectors prepended to the input. <strong>Extremely cheap
+— thousands of parameters</strong> — and only works well at large scale (10B+).</p>
+<h3 id="11-p-tuning-v2"><a class="anchor" href="#11-p-tuning-v2">#</a>11. P-tuning v2</h3><p>Prefix tuning applied at every layer, made to work at smaller scales.</p>
+<h3 id="12-ia"><a class="anchor" href="#12-ia">#</a>12. IA³</h3><p>Learn scaling vectors that rescale keys, values and activations. <strong>Even smaller
+than LoRA</strong> — often under 0.01% of parameters.</p>
+<h3 id="13-bitfit"><a class="anchor" href="#13-bitfit">#</a>13. BitFit</h3><p>Train only the bias terms. About 0.1% of parameters. Mostly of academic
+interest, but a genuinely surprising result: it works far better than it should.</p>
+<blockquote>
+<p><strong>Methods 9–13 all exist because LoRA was not obvious yet.</strong> Know that they
+exist and what family they belong to (PEFT). In practice you will reach for
+LoRA or QLoRA and be right to.</p>
+</blockquote>
+<hr>
+<h2 id="3-preference-and-alignment-stage"><a class="anchor" href="#3-preference-and-alignment-stage">#</a>3 · Preference and alignment stage</h2><p><strong>After SFT, the model imitates your examples. This stage teaches it what is
+<em>better</em>.</strong></p>
+<h3 id="14-rlhf-with-ppo"><a class="anchor" href="#14-rlhf-with-ppo">#</a>14. RLHF with PPO</h3><p>The original recipe: train a reward model on human comparisons, then optimise
+the policy against it with reinforcement learning.</p>
+<pre class="code"><code>1. SFT model
+2. Collect human preferences: &quot;response A is better than B&quot;
+3. Train a REWARD MODEL to predict that preference
+4. PPO: optimise the policy against the reward model, with a KL penalty
+   against the SFT model so it does not drift into nonsense</code></pre><div class="table-scroll"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>Needs</strong></td><td>3–4 models in memory at once (policy, reference, reward, critic)</td></tr><tr><td><strong>8 GB?</strong></td><td><strong>No</strong></td></tr><tr><td><strong>Reputation</strong></td><td>Powerful, unstable, expensive, hard to reproduce</td></tr></tbody></table></div><p><strong>The KL penalty is the crucial detail:</strong> without it the policy finds degenerate
+outputs that score highly on the reward model and are useless — <strong>reward
+hacking</strong>.</p>
+<h3 id="15-dpo"><a class="anchor" href="#15-dpo">#</a>15. DPO ⭐</h3><p><strong>Direct Preference Optimization — the one that made this stage accessible.</strong></p>
+<blockquote>
+<p><strong>DPO&#39;s insight: you do not need a separate reward model or RL at all.</strong> The
+optimal policy under a reward model has a closed form, so preference data can
+be optimised <em>directly</em> with a classification-style loss. It reduces
+&quot;reinforcement learning&quot; to &quot;supervised learning on pairs&quot;.</p>
+</blockquote>
+<div class="table-scroll"><table><thead><tr><th></th><th></th></tr></thead><tbody><tr><td><strong>Needs</strong></td><td>Policy + a frozen reference model</td></tr><tr><td><strong>Data</strong></td><td><code>(prompt, chosen, rejected)</code> triples</td></tr><tr><td><strong>8 GB?</strong></td><td><strong>Yes with QLoRA</strong>, for small models</td></tr><tr><td><strong>Why it won</strong></td><td>~90% of PPO&#39;s benefit at ~10% of the complexity</td></tr></tbody></table></div><h3 id="16-orpo"><a class="anchor" href="#16-orpo">#</a>16. ORPO</h3><p>Combines SFT and preference optimisation into <strong>one stage with no reference
+model</strong>. Cheaper still; newer and less battle-tested.</p>
+<h3 id="17-kto"><a class="anchor" href="#17-kto">#</a>17. KTO</h3><p>Uses <strong>single-sided</strong> labels — &quot;this output was good&quot; / &quot;this was bad&quot; — instead
+of pairs. <strong>Enormously more practical</strong>, because thumbs-up/down data is what
+production systems actually collect; matched preference pairs are not.</p>
+<h3 id="18-simpo"><a class="anchor" href="#18-simpo">#</a>18. SimPO</h3><p>Reference-free, using average log-probability as the implicit reward. Simpler
+and memory-lighter than DPO.</p>
+<h3 id="19-rlaif-constitutional-ai"><a class="anchor" href="#19-rlaif-constitutional-ai">#</a>19. RLAIF / Constitutional AI</h3><p>Replace the human labeller with a model that judges against a written set of
+principles. <strong>Scales preference data collection</strong>, at the cost of inheriting the
+judge model&#39;s biases.</p>
+<h3 id="20-rejection-sampling-best-of-n"><a class="anchor" href="#20-rejection-sampling-best-of-n">#</a>20. Rejection sampling / Best-of-N</h3><p>Generate N candidates, keep the best by some scorer, fine-tune on those. <strong>Dead
+simple, surprisingly strong, and the easiest way to start</strong> — no preference
+algorithm required.</p>
+<hr>
+<h2 id="4-adjacent-methods-worth-knowing"><a class="anchor" href="#4-adjacent-methods-worth-knowing">#</a>4 · Adjacent methods worth knowing</h2><div class="table-scroll"><table><thead><tr><th>Method</th><th>Does</th></tr></thead><tbody><tr><td><strong>Knowledge distillation</strong></td><td>Train a small student to match a large teacher&#39;s outputs. How 7B models get good</td></tr><tr><td><strong>Model merging</strong> (SLERP, TIES, DARE)</td><td>Combine several fine-tunes into one model <strong>with no training at all</strong> — a genuinely underrated trick</td></tr><tr><td><strong>Mixture of Experts</strong></td><td>Route tokens to a subset of parameters; more capacity at similar inference cost</td></tr><tr><td><strong>Speculative decoding</strong></td><td>Not training — a small model drafts, a big one verifies. Inference speedup</td></tr></tbody></table></div><hr>
+<h2 id="5-the-whole-map-on-one-screen"><a class="anchor" href="#5-the-whole-map-on-one-screen">#</a>5 · The whole map on one screen</h2><div class="table-scroll"><table><thead><tr><th>#</th><th>Method</th><th>Stage</th><th>Updates</th><th>Fits 8 GB?</th></tr></thead><tbody><tr><td>1</td><td>Pretraining</td><td>pretrain</td><td>everything</td><td>✗</td></tr><tr><td>2</td><td>Continued pretraining</td><td>pretrain</td><td>everything</td><td>~ QLoRA only</td></tr><tr><td>3</td><td>Full fine-tuning</td><td>SFT</td><td>everything</td><td>✗ (&gt;0.5B)</td></tr><tr><td>4</td><td>Layer freezing</td><td>SFT</td><td>last N layers</td><td>~</td></tr><tr><td>5</td><td><strong>LoRA</strong></td><td>SFT</td><td>0.1–1%</td><td><strong>✓ ≤3B</strong></td></tr><tr><td>6</td><td><strong>QLoRA</strong> ⭐</td><td>SFT</td><td>0.1–1%, 4-bit base</td><td><strong>✓ ≤8B</strong></td></tr><tr><td>7</td><td>DoRA</td><td>SFT</td><td>like LoRA</td><td>✓</td></tr><tr><td>8</td><td>Adapters</td><td>SFT</td><td>small blocks</td><td>✓</td></tr><tr><td>9</td><td>Prefix tuning</td><td>SFT</td><td>prefix vectors</td><td>✓</td></tr><tr><td>10</td><td>Prompt tuning</td><td>SFT</td><td>a few embeddings</td><td>✓</td></tr><tr><td>11</td><td>P-tuning v2</td><td>SFT</td><td>per-layer prefixes</td><td>✓</td></tr><tr><td>12</td><td>IA³</td><td>SFT</td><td>scaling vectors</td><td>✓</td></tr><tr><td>13</td><td>BitFit</td><td>SFT</td><td>biases only</td><td>✓</td></tr><tr><td>14</td><td>RLHF (PPO)</td><td>align</td><td>policy + 3 models</td><td>✗</td></tr><tr><td>15</td><td><strong>DPO</strong> ⭐</td><td>align</td><td>policy + reference</td><td><strong>✓ small</strong></td></tr><tr><td>16</td><td>ORPO</td><td>align</td><td>policy only</td><td>✓</td></tr><tr><td>17</td><td>KTO</td><td>align</td><td>policy + reference</td><td>✓</td></tr><tr><td>18</td><td>SimPO</td><td>align</td><td>policy only</td><td>✓</td></tr><tr><td>19</td><td>RLAIF</td><td>align</td><td>as PPO/DPO</td><td>depends</td></tr><tr><td>20</td><td>Rejection sampling</td><td>align</td><td>plain SFT</td><td><strong>✓</strong></td></tr></tbody></table></div><hr>
+<h2 id="6-what-to-actually-do-on-8-gb"><a class="anchor" href="#6-what-to-actually-do-on-8-gb">#</a>6 · What to actually do on 8 GB</h2><pre class="code"><code>1. Try prompting. Seriously. Measure it.
+2. If it is a knowledge gap -&gt; RAG, not training.
+3. If it is a behaviour gap -&gt; QLoRA SFT on a 3B model.
+   Get the pipeline working end to end before scaling up.
+4. Repeat at 7-8B once step 3 works.
+5. Only then consider preference tuning -- and start with
+   rejection sampling, not DPO, because it needs no new algorithm.</code></pre><blockquote>
+<p><strong>Step 3&#39;s &quot;get the pipeline working before scaling&quot; is the advice people skip
+and regret.</strong> A 3B run that completes in twenty minutes lets you find the bugs
+in your data formatting, your eval harness and your chat template. Finding
+those on an 8B run that takes six hours costs a day per bug.</p>
+</blockquote>
+<hr>
+<h2 id="7-interview-questions"><a class="anchor" href="#7-interview-questions">#</a>7 · Interview questions</h2><div class="table-scroll"><table><thead><tr><th>Question</th><th>Answer</th></tr></thead><tbody><tr><td>⭐ &quot;When would you fine-tune rather than use RAG?&quot;</td><td>Fine-tune for behaviour — format, style, task-specific reasoning. RAG for knowledge. If the model does not <em>know</em> something, training is the expensive, stale, uncitable way to tell it; you cannot update a fact without retraining.</td></tr><tr><td>⭐ &quot;Explain LoRA.&quot;</td><td>Freeze the base weights and learn a low-rank update <code>ΔW = BA</code> beside them, typically under 1% of parameters. No gradients or optimiser states for the frozen base, so memory drops enormously. Adapters are tiny, swappable, and mergeable back into the weights at inference.</td></tr><tr><td>⭐ &quot;What does QLoRA add?&quot;</td><td>It holds the frozen base in 4-bit, so a 7B model drops from ~14 GB to ~3.5 GB. Plus 4-bit NormalFloat, double quantisation, and paged optimisers. It is what puts 7B fine-tuning on a single consumer card.</td></tr><tr><td>⭐ &quot;Why did DPO displace PPO?&quot;</td><td>The optimal policy under a reward model has a closed form, so preferences can be optimised directly with a classification-style loss — no reward model, no RL loop, no critic. Roughly PPO&#39;s benefit at a fraction of the complexity and memory.</td></tr><tr><td>&quot;What is reward hacking?&quot;</td><td>The policy finds outputs scoring highly on the reward model that are actually bad. It is why PPO keeps a KL penalty against the reference model — to stop the policy drifting into degenerate high-reward text.</td></tr><tr><td>&quot;How much memory does full fine-tuning need?&quot;</td><td>About 12 bytes per parameter — 2 for weights, 2 for gradients, 8 for Adam states — plus activations. That is ~84 GB for 7B, which is why PEFT exists.</td></tr><tr><td>&quot;What is catastrophic forgetting?&quot;</td><td>The model improves on your task and degrades elsewhere. Mitigate by mixing general data into the training mix, using lower learning rates and PEFT rather than full fine-tuning, and — critically — <strong>evaluating on general benchmarks, not only your task</strong>.</td></tr></tbody></table></div><hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You have this map when you can:</p>
+<ol>
+<li>say why most fine-tuning requests are actually retrieval problems,</li>
+<li>explain LoRA&#39;s rank decomposition and why adapters are mergeable,</li>
+<li>state what QLoRA adds and the memory numbers that motivate it,</li>
+<li>explain DPO&#39;s insight in one sentence,</li>
+<li>recite the 12-bytes-per-parameter rule, and</li>
+<li>pick the right method for a stated problem and 8 GB of VRAM.</li>
+</ol>
+</article>
+    <div class="pager-row"><a class="pager previous" href="synthetic-data.html"><span>previous</span>Synthetic data generation</a><a class="pager next" href="serving-and-operations.html"><span>next</span>Serving & operations</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#0-first-should-you-train-at-all">0 · First — should you train at all?</a></li><li class="d2"><a href="#1-pretraining-stage">1 · Pretraining stage</a></li><li class="d3"><a href="#1-full-pretraining-from-scratch">1. Full pretraining from scratch</a></li><li class="d3"><a href="#2-continued-pretraining-domain-adaptive">2. Continued pretraining (domain-adaptive)</a></li><li class="d2"><a href="#2-supervised-fine-tuning-stage">2 · Supervised fine-tuning stage</a></li><li class="d3"><a href="#3-full-fine-tuning">3. Full fine-tuning</a></li><li class="d3"><a href="#4-layer-freezing-partial-fine-tuning">4. Layer freezing / partial fine-tuning</a></li><li class="d3"><a href="#5-lora">5. LoRA ⭐</a></li><li class="d3"><a href="#6-qlora">6. QLoRA ⭐⭐</a></li><li class="d3"><a href="#7-dora">7. DoRA</a></li><li class="d3"><a href="#8-adapters-bottleneck">8. Adapters (bottleneck)</a></li><li class="d3"><a href="#9-prefix-tuning">9. Prefix tuning</a></li><li class="d3"><a href="#10-prompt-tuning-soft-prompts">10. Prompt tuning (soft prompts)</a></li><li class="d3"><a href="#11-p-tuning-v2">11. P-tuning v2</a></li><li class="d3"><a href="#12-ia">12. IA³</a></li><li class="d3"><a href="#13-bitfit">13. BitFit</a></li><li class="d2"><a href="#3-preference-and-alignment-stage">3 · Preference and alignment stage</a></li><li class="d3"><a href="#14-rlhf-with-ppo">14. RLHF with PPO</a></li><li class="d3"><a href="#15-dpo">15. DPO ⭐</a></li><li class="d3"><a href="#16-orpo">16. ORPO</a></li><li class="d3"><a href="#17-kto">17. KTO</a></li><li class="d3"><a href="#18-simpo">18. SimPO</a></li><li class="d3"><a href="#19-rlaif-constitutional-ai">19. RLAIF / Constitutional AI</a></li><li class="d3"><a href="#20-rejection-sampling-best-of-n">20. Rejection sampling / Best-of-N</a></li><li class="d2"><a href="#4-adjacent-methods-worth-knowing">4 · Adjacent methods worth knowing</a></li><li class="d2"><a href="#5-the-whole-map-on-one-screen">5 · The whole map on one screen</a></li><li class="d2"><a href="#6-what-to-actually-do-on-8-gb">6 · What to actually do on 8 GB</a></li><li class="d2"><a href="#7-interview-questions">7 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
