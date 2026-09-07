@@ -221,7 +221,7 @@ answers wrongly you have a 100k-token prompt and a shrug.
 | **Important content in the middle** | Consistently missed | Place critical material at the ends |
 | **No prefix caching on a fixed corpus** | Cost 10× what it needs to be | Restructure so the stable part is a cacheable prefix |
 | **Ignoring TTFT** | Users wait seconds before the first token | Measure prefill separately |
-| **KV cache exhaustion** | OOM at moderate concurrency | Long context and batch size trade directly |
+| **KV cache exhaustion** | OOM at moderate concurrency | Long context and batch size trade directly — see [KV cache optimization](kv-cache.html) |
 | **Assuming needle-test success generalises** | Fails on multi-fact reasoning | Test the task you actually have |
 
 **Position the important material at the ends.** Given the recall shape, put the

@@ -252,7 +252,8 @@ perplexity will not show it.
 **Quantize the KV cache too, and know that it is riskier.** At long context the
 KV cache can exceed the weights. INT8 KV is usually safe; INT4 KV degrades
 long-context recall noticeably. Quantize weights first, measure, then consider
-the cache separately.
+the cache separately — [KV cache optimization](kv-cache.html) covers that side,
+including why keys tolerate less precision than values.
 
 **The comparison people forget to run.** Before quantizing a large model, check
 the smaller model at full precision:

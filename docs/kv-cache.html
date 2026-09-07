@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KV cache optimization · LLM Handbook</title>
+<meta name="description" content="The twelve ways to shrink the KV cache, organised by which term of the size formula each one attacks — and what each costs you.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li><li><a href="reasoning-models.html">Reasoning models & test-time compute</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="text2sql.html">Text2SQL & structured data</a></li><li><a href="graphrag.html">GraphRAG & knowledge graphs</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li><li><a href="kv-cache.html" class="active">KV cache optimization</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li><li><a href="synthetic-data.html">Synthetic data generation</a></li><li><a href="training-methods.html">The 20 ways to train a model</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li><li><a href="caching.html">Caching strategies</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li><li><a href="learning-paths.html">Learning paths</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="kv-cache-optimization"><a class="anchor" href="#kv-cache-optimization">#</a>KV cache optimization</h1><blockquote>
+<p><strong>The one sentence:</strong> at production context lengths the KV cache, not the
+weights, is what runs you out of memory — and every technique for shrinking it
+is a multiplier on exactly one term of a formula you can write from memory.</p>
+</blockquote>
+<p><a href="transformers.html">Transformers</a> explains <em>what</em> the KV cache is and why it
+exists. This page is about what to do when it becomes the thing standing between
+you and a bigger batch size.</p>
+<p>The framing that makes all of this tractable: there is one formula, it has six
+terms, and <strong>every optimisation multiplies exactly one of them.</strong> Once you see
+which term a technique attacks, you know what it costs and what it composes
+with, without memorising a list.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>  KV bytes = 2  ×  layers  ×  kv_heads  ×  head_dim  ×  seq_len  ×  bytes_per_value  ×  batch
+             ^      ^           ^            ^           ^             ^
+             |      |           |            |           |             |
+          K and V  CLA       MQA / GQA     low-rank   sliding      quantization
+          (fixed)  shares    fewer KV      (Palu)     window,      FP16 -&gt; FP8 -&gt; 4-bit
+                   across    heads         projects   eviction,
+                   layers                  smaller    recurrent
+                                                      layers
+
+  ...and three that do not change the formula at all:
+
+     PagedAttention  -&gt;  removes ALLOCATION WASTE   (same bytes, less slack)
+     Prefix reuse    -&gt;  removes DUPLICATE bytes    (one copy, many requests)
+     Sparse reads    -&gt;  removes READ volume        (same bytes, fewer touched)
+
+
+  WHY IT DOMINATES — a 70B model at long context
+
+    weights (FP16)                            ~140 GB   fixed, paid once
+    KV cache @ 8k ctx, batch 1                  ~2.4 GB
+    KV cache @ 128k ctx, batch 1                 ~39 GB
+    KV cache @ 128k ctx, batch 32              ~1,250 GB   &lt;-- the wall
+                                                           weights are now a
+                                                           rounding error</code></pre><p>The shape to internalise: <strong>weights are a constant, KV is a rectangle that grows
+in two directions at once.</strong> Context length and batch size multiply. Doubling
+context halves the concurrency you can serve on the same card — which is why
+&quot;support 128k context&quot; and &quot;serve 200 concurrent users&quot; are the same budget
+argued from two ends.</p>
+<hr>
+<h2 id="2-design-the-twelve-techniques"><a class="anchor" href="#2-design-the-twelve-techniques">#</a>2 · Design — the twelve techniques</h2><p>Counted as twelve by splitting the two pairs that behave differently in practice:
+MQA and GQA are separate design points (one is a special case of the other, and
+the quality cliff sits between them), and sparse <em>storage</em> is a different
+decision from sparse <em>reads</em>.</p>
+<h3 id="group-a-architectural-fewer-heads-fewer-layers-shorter-state"><a class="anchor" href="#group-a-architectural-fewer-heads-fewer-layers-shorter-state">#</a>Group A — architectural: fewer heads, fewer layers, shorter state</h3><p>These are <strong>training-time</strong> decisions. You cannot retrofit them to a checkpoint
+without retraining, so for an application engineer they are model-selection
+criteria, not knobs.</p>
+<div class="table-scroll"><table><thead><tr><th>#</th><th>Technique</th><th>Term attacked</th><th>Typical factor</th><th>The cost</th></tr></thead><tbody><tr><td>1</td><td><strong>MQA</strong> — one KV head for all query heads</td><td><code>kv_heads</code></td><td>up to 64×</td><td>Sharpest quality drop of the group; largely superseded by GQA</td></tr><tr><td>2</td><td><strong>GQA</strong> — query heads grouped over few KV heads</td><td><code>kv_heads</code></td><td>4–8×</td><td>Near-lossless at 8 groups; the default in modern models</td></tr><tr><td>3</td><td><strong>CLA</strong> — adjacent layers share one KV cache</td><td><code>layers</code></td><td>2×</td><td>Composes <em>on top of</em> MQA/GQA; validated at 1B–3B scale</td></tr><tr><td>4</td><td><strong>Hybrid recurrent layers</strong> — some layers keep fixed-size state instead of a growing cache</td><td><code>seq_len</code>, per layer</td><td>Depends on ratio</td><td>Recurrent layers have finite recall; you are trading exact long-range attention for constant memory</td></tr></tbody></table></div><p><strong>GQA is the one that matters most in practice</strong>, because it is already in
+everything you are likely to serve. Llama-3-70B uses 64 query heads over 8 KV
+heads — an 8× cut before you do anything at all. Check <code>num_key_value_heads</code>
+against <code>num_attention_heads</code> in any model&#39;s config; that ratio is your baseline.</p>
+<p><strong>CLA</strong> (Brandon et al., NeurIPS 2024) shares KV activations <em>between</em> layers
+rather than within one. The configuration that worked best is <strong>CLA2</strong> — sharing
+across pairs of consecutive layers — giving another 2× on top of MQA with
+near-identical accuracy. It is the cleanest example of the composition principle:
+it attacks <code>layers</code>, MQA attacks <code>kv_heads</code>, so they multiply.</p>
+<h3 id="group-b-token-memory-management-fewer-tokens-less-waste"><a class="anchor" href="#group-b-token-memory-management-fewer-tokens-less-waste">#</a>Group B — token & memory management: fewer tokens, less waste</h3><p>These are <strong>inference-time</strong> and you control them. This is where an application
+engineer actually operates.</p>
+<div class="table-scroll"><table><thead><tr><th>#</th><th>Technique</th><th>What it removes</th><th>Typical factor</th><th>The cost</th></tr></thead><tbody><tr><td>5</td><td><strong>Sliding window</strong> — keep only the last <em>W</em> tokens in some layers</td><td><code>seq_len</code> → constant</td><td>Unbounded at long context</td><td>Anything outside the window is gone. Interleave with full-attention layers or lose long-range recall entirely</td></tr><tr><td>6</td><td><strong>Eviction</strong> — drop low-value tokens to hold a fixed budget (H2O, SnapKV, PyramidKV)</td><td><code>seq_len</code></td><td>2–10×</td><td><strong>Irreversible.</strong> An evicted token cannot be recovered if a later query needed it. Failure is silent and input-dependent</td></tr><tr><td>7</td><td><strong>PagedAttention</strong> — virtual-memory paging for the cache</td><td>allocation waste</td><td>2–4× more batch</td><td>Kernel complexity. This is the vLLM idea and it is nearly free — take it</td></tr><tr><td>8</td><td><strong>Prefix reuse</strong> — share cache blocks across requests with an identical prefix</td><td>duplicate bytes</td><td>Huge for shared system prompts</td><td>Only helps on <em>exact</em> prefix match; needs cache-aware routing to pay off</td></tr><tr><td>9</td><td><strong>Sparse attention (storage)</strong> — group or cluster tokens, keep representatives</td><td><code>seq_len</code></td><td>2–8×</td><td>Approximation error concentrated in whatever the grouping got wrong</td></tr><tr><td>10</td><td><strong>Compressed sparse (reads)</strong> — store everything, selectively <em>read</em></td><td>nothing — read volume</td><td>Latency, not memory</td><td>Does not lower peak memory. Solves a bandwidth problem, not a capacity one</td></tr></tbody></table></div><p><strong>PagedAttention is the one to do first</strong> and the one with the least
+justification needed. It does not shrink a single byte of real cache — it removes
+<em>fragmentation</em>. Classic contiguous allocation reserves the worst-case sequence
+length per request, so most of the reservation sits unused. Paging it in fixed
+blocks turns that slack into batch size. Same memory, more concurrency, no
+quality risk at all. If you serve on vLLM you already have it.</p>
+<p><strong>Eviction is the one to be most careful with.</strong> Rows 5, 6 and 9 all discard
+information, and the failure mode is not a crash — it is a model that answers
+confidently having silently lost the token it needed. Whatever eviction policy
+you pick, it must be evaluated against a <strong>long-context recall probe</strong>, not
+average perplexity. See <a href="regression-gates.html">regression gates</a>.</p>
+<h3 id="group-c-data-width-fewer-bits-per-value"><a class="anchor" href="#group-c-data-width-fewer-bits-per-value">#</a>Group C — data width: fewer bits per value</h3><div class="table-scroll"><table><thead><tr><th>#</th><th>Technique</th><th>Term attacked</th><th>Typical factor</th><th>The cost</th></tr></thead><tbody><tr><td>11</td><td><strong>Quantization</strong> — FP16 → FP8 → 4-bit KV</td><td><code>bytes_per_value</code></td><td>2–4×</td><td>Recall degradation at long context, and it hits the early tokens hardest</td></tr><tr><td>12</td><td><strong>Low-rank projection (Palu)</strong> — cache a compressed latent, reconstruct K/V on the fly</td><td><code>head_dim</code></td><td>Reported &gt;90% at the aggressive end</td><td>Reconstruction compute per attention step; needs fused kernels to be a net win</td></tr></tbody></table></div><p><strong>KV quantization is not weight quantization</strong> and the intuition does not
+transfer. INT8 KV is generally safe. <strong>INT4 KV degrades long-context recall
+specifically</strong> — the model still scores well on short prompts and falls apart on
+the thing you bought the long context window for. <a href="quantization.html">Quantization</a>
+covers the weight side; the rule here is: quantize KV one step less aggressively
+than you quantize weights, and always probe recall afterwards.</p>
+<p><strong>Palu</strong> (Chang et al., ICLR 2025) is the least widely deployed and the most
+architecturally interesting: it decomposes the K and V projection layers into
+low-rank matrices, caches the small intermediate state, and reconstructs full
+keys and values during attention. It is the only technique that attacks
+<code>head_dim</code>, which is why it composes with everything else.</p>
+<hr>
+<h2 id="3-flow-how-to-actually-choose"><a class="anchor" href="#3-flow-how-to-actually-choose">#</a>3 · Flow — how to actually choose</h2><p>Do them in this order. The ordering is by <em>risk</em>, not by size of win: everything
+above the line is free, everything below trades quality for memory.</p>
+<pre class="code"><code>  1. What model?           -&gt; GQA is probably already there. Check the config.
+     |                        num_key_value_heads vs num_attention_heads.
+     |                        This is 4-8x you already have.
+     v
+  2. What server?          -&gt; PagedAttention. vLLM/TGI/SGLang. No quality cost.
+     |                        2-4x effective batch. Do this before anything else.
+     v
+  3. Shared prompts?       -&gt; Prefix reuse. Free if your system prompt is shared.
+     |                        Needs prefix-aware routing to actually hit.
+     v
+  =========== everything above is LOSSLESS. Measure here. ===========
+     |
+     v
+  4. Still OOM?            -&gt; FP8 KV quantization. 2x. Probe recall.
+     |
+     v
+  5. Still OOM?            -&gt; Sliding window on some layers, OR eviction with
+     |                        a real long-context eval gate. NOT both blind.
+     v
+  6. Still OOM?            -&gt; You have an architecture problem, not a tuning
+                              problem. Smaller model, shorter context, or
+                              more cards. Say so rather than compressing
+                              until quality quietly dies.</code></pre><p>Step 6 is the one people skip. There is a point past which every remaining
+technique is buying memory with accuracy, and the honest engineering answer is
+to change the requirement instead.</p>
+<hr>
+<h2 id="4-uml-where-each-technique-intervenes"><a class="anchor" href="#4-uml-where-each-technique-intervenes">#</a>4 · UML — where each technique intervenes</h2><pre class="mermaid">flowchart TB
+    REQ[&quot;Request arrives&quot;] --&gt; PFX{&quot;Prefix already cached?&quot;}
+    PFX --&gt;|hit| REUSE[&quot;Prefix reuse: point at existing blocks&quot;]
+    PFX --&gt;|miss| PREFILL[&quot;Prefill: compute K,V for every prompt token&quot;]
+    REUSE --&gt; ALLOC
+    PREFILL --&gt; ALLOC[&quot;Allocate cache blocks&quot;]
+
+    ALLOC --&gt; PAGED[&quot;PagedAttention: fixed-size blocks, no over-reservation&quot;]
+    PAGED --&gt; WRITE[&quot;Write K,V&quot;]
+
+    WRITE --&gt; ARCH[&quot;Architectural reduction, baked into the checkpoint:&lt;br/&gt;GQA/MQA fewer kv_heads · CLA shared across layers&lt;br/&gt;hybrid layers use fixed recurrent state&quot;]
+    ARCH --&gt; WIDTH[&quot;Width reduction at store time:&lt;br/&gt;quantize to FP8/4-bit · Palu low-rank latent&quot;]
+    WIDTH --&gt; STORE[(&quot;KV cache&quot;)]
+
+    STORE --&gt; BUDGET{&quot;Over the token budget?&quot;}
+    BUDGET --&gt;|yes| EVICT[&quot;Eviction: drop low-value tokens&lt;br/&gt;H2O · SnapKV · PyramidKV&lt;br/&gt;IRREVERSIBLE&quot;]
+    BUDGET --&gt;|no| DECODE
+    EVICT --&gt; DECODE[&quot;Decode step: read cache, attend&quot;]
+    DECODE --&gt; SPARSE[&quot;Sparse read: touch a subset&lt;br/&gt;saves bandwidth, not capacity&quot;]
+    SPARSE --&gt; TOK[&quot;Emit token&quot;]
+    TOK --&gt; STORE</pre><p>Note where the boxes sit: <strong>architectural reductions are upstream of everything</strong>
+(they are properties of the checkpoint), width reduction happens at write time,
+eviction happens under memory pressure, and sparse reads happen at read time
+without changing what is stored. That layering is why they compose.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">&quot;&quot;&quot;KV cache sizing, and what each technique does to it.
+
+The formula is the whole topic. Run this against your own model config before
+reaching for any optimisation -- most capacity arguments are settled by
+arithmetic, not by benchmarking.
+&quot;&quot;&quot;
+
+BYTES = {&quot;fp16&quot;: 2, &quot;fp8&quot;: 1, &quot;int4&quot;: 0.5}
+
+
+def kv_gb(layers, kv_heads, head_dim, seq_len, batch=1, dtype=&quot;fp16&quot;, cla_share=1):
+    &quot;&quot;&quot;Bytes held by the KV cache, in GiB.
+
+    Args:
+        layers:     transformer layers
+        kv_heads:   KEY-VALUE heads, not query heads. This is the GQA term --
+                    read num_key_value_heads from the model config.
+        head_dim:   hidden_size / num_attention_heads
+        seq_len:    tokens resident per sequence (context, or window if sliding)
+        batch:      concurrent sequences
+        dtype:      KV storage precision
+        cla_share:  layers sharing one cache. 1 = none, 2 = CLA2.
+    &quot;&quot;&quot;
+    effective_layers = layers / cla_share
+    return (
+        2                       # K and V
+        * effective_layers
+        * kv_heads
+        * head_dim
+        * seq_len
+        * batch
+        * BYTES[dtype]
+    ) / 1024**3
+
+
+# Llama-3-70B geometry: 80 layers, 64 query heads over 8 KV heads, head_dim 128.
+CFG = dict(layers=80, kv_heads=8, head_dim=128)
+
+baseline = kv_gb(**CFG, seq_len=128_000, batch=32)
+print(f&quot;baseline (GQA, fp16)      {baseline:7.1f} GB&quot;)
+
+# Each technique, applied alone, against the same baseline.
+print(f&quot;+ FP8 KV                  {kv_gb(**CFG, seq_len=128_000, batch=32, dtype=&#39;fp8&#39;):7.1f} GB&quot;)
+print(f&quot;+ CLA2                    {kv_gb(**CFG, seq_len=128_000, batch=32, cla_share=2):7.1f} GB&quot;)
+print(f&quot;+ 32k sliding window      {kv_gb(**CFG, seq_len=32_000, batch=32):7.1f} GB&quot;)
+
+# They multiply, because each attacks a different term.
+combined = kv_gb(**CFG, seq_len=128_000, batch=32, dtype=&quot;fp8&quot;, cla_share=2)
+print(f&quot;CLA2 + FP8 together       {combined:7.1f} GB   ({baseline / combined:.1f}x)&quot;)
+
+# The comparison that actually decides the architecture:
+weights_fp16_gb = 70 * 2
+print(f&quot;\nweights (70B @ fp16)      {weights_fp16_gb:7.1f} GB  &lt;- constant&quot;)
+print(f&quot;KV at 128k x 32           {baseline:7.1f} GB  &lt;- grows in two directions&quot;)</code></pre><pre class="code"><code>baseline (GQA, fp16)       1250.0 GB
++ FP8 KV                    625.0 GB
++ CLA2                      625.0 GB
++ 32k sliding window        312.5 GB
+CLA2 + FP8 together         312.5 GB   (4.0x)
+
+weights (70B @ fp16)        140.0 GB  &lt;- constant
+KV at 128k x 32            1250.0 GB  &lt;- grows in two directions</code></pre><p>The 4× from CLA2 + FP8 is the composition result usually quoted as
+&quot;40 GB → 10 GB&quot;, and this geometry is where that figure comes from: <strong>one</strong>
+128k sequence on a 70B model is 39.1 GB of KV, and CLA2 + FP8 takes it to
+9.8 GB. Two independent 2× reductions on different terms multiply.</p>
+<p>That is the whole reason the formula framing is worth learning — it tells you in
+advance which techniques stack and which overlap. CLA2 and FP8 stack because one
+divides <code>layers</code> and the other divides <code>bytes_per_value</code>. MQA and GQA do not,
+because both divide <code>kv_heads</code>: you pick one.</p>
+<hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>The KV cache is a bandwidth problem before it is a capacity problem.</strong> Decode
+is memory-bound: every generated token re-reads the entire cache. At 100 GB of
+resident cache and 3 TB/s of HBM, you cannot exceed ~30 decode steps per second
+no matter how much compute is idle. This is why sparse <em>reads</em> (#10) exist as a
+separate technique from sparse <em>storage</em> — they solve different bottlenecks, and
+a team that conflates them optimises the wrong one.</p>
+<p><strong>Eviction failures are silent, input-dependent, and invisible to your usual
+metrics.</strong> A model with an over-aggressive eviction policy has normal perplexity,
+normal latency, normal throughput, and occasionally cannot recall a fact that was
+in its context. Average-case evals will not find it. You need a needle-style probe
+at your real context length, and it belongs in CI — see
+<a href="regression-gates.html">regression gates</a>.</p>
+<p><strong>Quantization asymmetry: keys tolerate less than values.</strong> Keys go through the
+softmax, so error in a key perturbs the entire attention <em>distribution</em>, while
+error in a value is averaged over the attended set. Implementations that quantize
+K and V to the same width leave quality on the table; per-tensor scaling on K with
+more aggressive V quantization is usually the better split.</p>
+<p><strong>Prefix reuse is a routing problem wearing a caching hat.</strong> The cache hit only
+happens if the request lands on the replica that holds the prefix. Without
+prefix-aware routing you have implemented the mechanism and will observe almost
+none of the benefit — and the metric will say the cache &quot;works&quot;, because hit rate
+is measured per replica.</p>
+<p><strong>&quot;Support 128k context&quot; and &quot;serve N concurrent users&quot; are one budget.</strong> The
+most common planning failure is treating them as separate requirements owned by
+separate people. They multiply in the same formula. Any conversation about
+raising the context window is also a conversation about lowering concurrency,
+and it should be had once, with the arithmetic visible.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure</th><th>Looks like</th><th>Actual cause</th></tr></thead><tbody><tr><td>OOM under load, fine in testing</td><td>Crashes at high concurrency</td><td>KV grows with batch × context; single-request testing never sees it</td></tr><tr><td>Throughput collapses past a batch size</td><td>Sharp cliff, not a curve</td><td>Cache exceeded HBM; decode became bandwidth-bound</td></tr><tr><td>Long-context recall dies after a &quot;safe&quot; change</td><td>Short prompts fine, long ones wrong</td><td>INT4 KV, or eviction, dropping early tokens</td></tr><tr><td>Prefix caching shows no gain</td><td>Hit rate looks fine per replica</td><td>No prefix-aware routing; requests scatter</td></tr><tr><td>Memory freed slower than requests finish</td><td>Steady growth under churn</td><td>Fragmentation — the problem PagedAttention exists to solve</td></tr></tbody></table></div><hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What KV cache optimization means here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Why a long conversation gets slower and eventually forgets the middle. Every optimisation on this page is a trade someone made between how much the model remembers and how many people it can serve at once.</td></tr><tr><td><strong>Coder</strong></td><td>Read <code>num_key_value_heads</code> before you benchmark. Do not implement eviction by hand — use the server&#39;s. Your leverage is prompt length: every token you trim is paid back at prefill <em>and</em> for the whole generation.</td></tr><tr><td><strong>Tester</strong></td><td>Average-case evals cannot see eviction or INT4 damage. Test recall at your real context length, probe the <em>middle</em> and the <em>start</em>, and gate on it. A green suite on short prompts proves nothing about the thing you compressed.</td></tr><tr><td><strong>System designer</strong></td><td>KV is the concurrency limit, so it is the capacity model. Context length and batch size trade directly. Order of work: PagedAttention, then prefix reuse, then FP8 — everything after that costs accuracy.</td></tr><tr><td><strong>Architect</strong></td><td>GQA and CLA are model-selection criteria, not tuning knobs; you inherit them at checkpoint time. Choosing a model is partly choosing a KV budget, and that should be explicit in the decision record.</td></tr><tr><td><strong>CEO</strong></td><td>This is the difference between serving 8 customers and 32 on the same GPU. PagedAttention plus FP8 is typically a 4–8× effective capacity gain for no quality loss, which is a direct multiple on gross margin per card.</td></tr><tr><td><strong>Market</strong></td><td>Long-context claims are cheap to advertise and expensive to serve. A vendor quoting a context window without quoting concurrency at that window has told you the easy half. Ask for both.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><p><strong>&quot;Your 70B model OOMs at 128k context but is fine at 8k. Why?&quot;</strong>
+The weights did not change — the KV cache did, and it scales linearly in both
+context and batch. Give the formula, do the arithmetic out loud (80 layers × 8 KV
+heads × 128 dim × 2 × 2 bytes × 128k ≈ 39 GB <em>per sequence</em>), and point out that
+at batch 32 this is ~1.25 TB against 140 GB of weights. Then fix it in risk order:
+PagedAttention, prefix reuse, FP8, and only then anything lossy.</p>
+<p><strong>&quot;Difference between MQA, GQA and MHA?&quot;</strong>
+Number of KV heads per query head. MHA: one each — best quality, largest cache.
+MQA: one KV head for all — up to 64× smaller, noticeable quality cost. GQA:
+groups in between — 8 groups is near-lossless and is why it is the modern
+default. The interesting part is that all three attack the same single term, so
+you pick one, you do not stack them.</p>
+<p><strong>&quot;Does PagedAttention reduce KV cache size?&quot;</strong>
+No — and this catches people. It reduces <em>waste</em>. Contiguous allocation reserves
+worst-case length per sequence and most of that reservation goes unused. Paging
+turns that slack into batch capacity. Same real bytes, higher utilisation, zero
+quality risk.</p>
+<p><strong>&quot;When would you NOT quantize the KV cache?&quot;</strong>
+When long-context recall is the product. INT8 is usually safe; INT4 degrades
+early-token recall specifically, so the model passes short-prompt evals and fails
+at exactly the length you bought the context window for. Also note keys are more
+sensitive than values, because key error perturbs the whole softmax.</p>
+<p><strong>&quot;You have CLA and FP8. What&#39;s the combined saving, and why?&quot;</strong>
+4×. They multiply because CLA attacks <code>layers</code> and FP8 attacks
+<code>bytes_per_value</code> — different terms of the same product. Two techniques on the
+<em>same</em> term do not stack, which is why you would not run MQA and GQA together.</p>
+<p><strong>&quot;Eviction dropped your memory 4× and evals are unchanged. Ship it?&quot;</strong>
+No, not on that evidence. Ask what the evals measure. Eviction damage is
+input-dependent and invisible to averages; you need a long-context recall probe
+at production context length, gated in CI. &quot;Unchanged average perplexity&quot; is
+consistent with having silently broken retrieval from early context.</p>
+<hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done with this page when you can:</p>
+<ul>
+<li>Write the KV size formula from memory and name which technique attacks each term</li>
+<li>Explain why CLA and FP8 multiply but MQA and GQA do not</li>
+<li>Say why PagedAttention reduces no bytes yet raises batch size</li>
+<li>Name the one failure mode that average-case evals cannot detect, and how you would gate it</li>
+<li>Do the arithmetic that shows KV overtaking weights, and use it to argue a capacity plan</li>
+</ul>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><ul>
+<li><strong>GQA</strong> — <a href="https://arxiv.org/abs/2305.13245">Ainslie et al., <em>GQA: Training Generalized Multi-Query Transformer Models</em></a> (2023) — the paper behind the default.</li>
+<li><strong>CLA</strong> — <a href="https://arxiv.org/abs/2405.12981">Brandon et al., <em>Reducing Transformer Key-Value Cache Size with Cross-Layer Attention</em></a> (NeurIPS 2024) — CLA2, sharing across pairs of adjacent layers.</li>
+<li><strong>PagedAttention</strong> — <a href="https://arxiv.org/abs/2309.06180">Kwon et al., <em>Efficient Memory Management for LLM Serving with PagedAttention</em></a> (SOSP 2023) — the vLLM paper.</li>
+<li><strong>Palu</strong> — <a href="https://arxiv.org/abs/2407.21118">Chang et al., <em>Palu: Compressing KV-Cache with Low-Rank Projection</em></a> (ICLR 2025).</li>
+<li><strong>H2O</strong> — <a href="https://arxiv.org/abs/2306.14048">Zhang et al., <em>Heavy-Hitter Oracle</em></a> (2023) — the eviction line of work.</li>
+<li><strong>Survey</strong> — <a href="https://arxiv.org/abs/2412.19442"><em>A Survey on Large Language Model Acceleration based on KV Cache Management</em></a> (2024) — the map of the whole field.</li>
+</ul>
+<p>Related: <a href="transformers.html">Transformers</a> for what the cache is ·
+<a href="quantization.html">Quantization</a> for the weight side ·
+<a href="long-context.html">Long context</a> for what breaks at length ·
+<a href="serving-and-operations.html">Serving &amp; operations</a> for the latency budget it sits in.</p>
+</article>
+    <div class="pager-row"><a class="pager previous" href="distillation-and-pruning.html"><span>previous</span>Distillation & pruning</a><a class="pager next" href="orchestration-frameworks.html"><span>next</span>Orchestration frameworks</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-the-twelve-techniques">2 · Design — the twelve techniques</a></li><li class="d3"><a href="#group-a-architectural-fewer-heads-fewer-layers-shorter-state">Group A — architectural: fewer heads, fewer layers, shorter state</a></li><li class="d3"><a href="#group-b-token-memory-management-fewer-tokens-less-waste">Group B — token &amp; memory management: fewer tokens, less waste</a></li><li class="d3"><a href="#group-c-data-width-fewer-bits-per-value">Group C — data width: fewer bits per value</a></li><li class="d2"><a href="#3-flow-how-to-actually-choose">3 · Flow — how to actually choose</a></li><li class="d2"><a href="#4-uml-where-each-technique-intervenes">4 · UML — where each technique intervenes</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

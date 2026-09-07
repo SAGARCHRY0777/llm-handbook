@@ -95,6 +95,10 @@ work repeated for every token.
 So you cache them. Each new token computes its own K and V, appends them, and
 attends over the cache.
 
+Once that cache becomes the thing limiting your batch size — which it will, at
+production context lengths — [KV cache optimization](kv-cache.html) covers the
+twelve ways to shrink it and what each one costs.
+
 ```
    KV cache size = 2 (K and V)
                  × layers
