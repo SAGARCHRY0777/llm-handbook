@@ -106,6 +106,31 @@ justification needed. It does not shrink a single byte of real cache — it remo
 length per request, so most of the reservation sits unused. Paging it in fixed
 blocks turns that slack into batch size. Same memory, more concurrency, no
 quality risk at all. If you serve on vLLM you already have it.</p>
+<p><strong>The word &quot;fragmentation&quot; is hiding two different problems</strong>, and knowing which
+one fixed-size blocks solve is the whole insight:</p>
+<div class="table-scroll"><table><thead><tr><th></th><th>External fragmentation</th><th>Internal fragmentation</th></tr></thead><tbody><tr><td>What</td><td>Free memory exists, but no single run of it is long enough. 88 slots free here, 40 there, 200 there — a request needing 300 <em>contiguous</em> slots fails despite 328 being free</td><td>Waste <em>inside</em> an allocated block. A request holding 37 tokens at block size 16 occupies 3 blocks = 48 slots, wasting 11</td></tr><tr><td>Under contiguous allocation</td><td>Unbounded, and gets worse as request lengths diversify</td><td>Enormous — the whole unused tail of a <code>max_seq_len</code> reservation</td></tr><tr><td>Under paging</td><td><strong>Eliminated.</strong> Every block is the same size and a request accepts any block, so there is no such thing as a hole of the wrong shape</td><td><strong>Bounded</strong> at strictly less than one block per request per layer</td></tr></tbody></table></div><p>That is the answer to &quot;are the blocks fixed size?&quot; — yes, and the fixity is the
+point. It converts an unbounded, allocation-order-dependent problem into a
+bounded one you can put a number on. Measured utilisation goes from 20–40% under
+contiguous allocation to above 96%.</p>
+<p>Block size is a genuine trade: smaller blocks (8) waste less but mean longer
+block tables and more indirection per kernel launch; larger blocks (32) are
+kernel-friendlier but waste more and make prefix sharing coarser. vLLM defaults
+to 16.</p>
+<p><strong>Paging is bit-exact, and this is worth being firm about</strong>, because &quot;does
+blocking lose data or accuracy?&quot; is the most common misconception on the topic.
+It does not. Paging changes only the <em>addressing</em> of the bytes: the same fp16
+keys and values participate in the same dot products, in the same order, at the
+same scale. The kernel consults a block table to find each 16-token chunk
+instead of striding through one flat array, and the arithmetic never sees the
+difference. Contrast the genuinely lossy rows in this table — quantization
+rounds the numbers, eviction deletes positions, sliding window refuses to look
+past <em>W</em>. Those change results. Paging and prefix reuse do not.</p>
+<p>The one honest caveat: enabling prefix caching can make outputs differ in the
+last decimal place, because a cache hit changes matmul batch shapes and
+floating-point addition is not associative. That is non-determinism at the 1e-5
+level, not degradation. At temperature 0 it can occasionally tip a near-tie
+between two tokens; it never makes the model worse. Teams chasing bit-identical
+reproducibility across runs need to know this exists.</p>
 <p><strong>Eviction is the one to be most careful with.</strong> Rows 5, 6 and 9 all discard
 information, and the failure mode is not a crash — it is a model that answers
 confidently having silently lost the token it needed. Whatever eviction policy
@@ -244,6 +269,50 @@ KV at 128k x 32            1250.0 GB  &lt;- grows in two directions</code></pre>
 advance which techniques stack and which overlap. CLA2 and FP8 stack because one
 divides <code>layers</code> and the other divides <code>bytes_per_value</code>. MQA and GQA do not,
 because both divide <code>kv_heads</code>: you pick one.</p>
+<h3 id="prefix-reuse-in-the-three-parts-it-actually-decomposes-into"><a class="anchor" href="#prefix-reuse-in-the-three-parts-it-actually-decomposes-into">#</a>Prefix reuse, in the three parts it actually decomposes into</h3><p>Row 8 is a one-liner in the table and a whole subsystem in practice. It is
+always these three pieces, and each owns one data structure:</p>
+<p><strong>1 · Content hashing — decide what &quot;the same prefix&quot; means.</strong> Hash each
+aligned block of token ids, chaining in the previous block&#39;s hash so that
+<em>position</em> is part of the identity. Two requests share a block only if every
+token before it also matched.</p>
+<pre class="code"><code class="language-python">def block_hashes(token_ids, block_size=16):
+    &quot;&quot;&quot;Chained hashes: block i&#39;s identity includes all of blocks 0..i-1.&quot;&quot;&quot;
+    hashes, parent = [], None
+    for i in range(0, len(token_ids) - block_size + 1, block_size):
+        chunk = tuple(token_ids[i:i + block_size])
+        parent = hash((parent, chunk))   # chained -&gt; prefix identity,
+        hashes.append(parent)            # not chunk identity
+    return hashes
+    # The partial trailing block is deliberately never hashed: it is not full,
+    # so it is not final, so it is not safe to share.</code></pre><p><strong>2 · A refcounted block table — decide who owns what.</strong> Each physical block
+carries a reference count. A hit increments it and points the new request&#39;s
+table at the existing block instead of allocating; eviction is legal only at
+refcount 0, normally LRU.</p>
+<pre class="code"><code class="language-python">def allocate_prefix(req_tokens, cache_index, pool):
+    table, hits = [], 0
+    for h in block_hashes(req_tokens):
+        blk = cache_index.get(h)
+        if blk is None:
+            break                    # prefixes are contiguous by definition:
+        blk.refcount += 1            # the first miss ends the shared region
+        table.append(blk.id)
+        hits += 1
+    for _ in range(needed_blocks(req_tokens) - hits):
+        table.append(pool.alloc().id)   # the divergent suffix, prefilled normally
+    return table, hits * 16             # tokens skipped entirely</code></pre><p><strong>3 · Copy-on-write — handle the fork safely.</strong> Two requests share blocks 0–4
+then diverge, and neither may write into a block someone else is reading. When a
+shared block needs a write, copy it first. This is also how parallel sampling
+(<code>n=4</code>) shares one prompt cache across four divergent continuations.</p>
+<pre class="code"><code class="language-python">def prepare_write(blk, pool):
+    if blk.refcount == 1:
+        return blk                   # sole owner -- write in place
+    new = pool.alloc()
+    new.data[:] = blk.data           # copy-on-write
+    blk.refcount -= 1
+    return new</code></pre><p>Three requests sharing a 64-token system prompt pay 64 prefill tokens once
+instead of 192. At a realistic 2,000-token system prompt and a thousand users,
+that ratio is the difference between a viable unit economics and a bankrupt one
+— which is why row 8 sits above the lossless line in the flow.</p>
 <hr>
 <h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>The KV cache is a bandwidth problem before it is a capacity problem.</strong> Decode
 is memory-bound: every generated token re-reads the entire cache. At 100 GB of
@@ -267,6 +336,27 @@ happens if the request lands on the replica that holds the prefix. Without
 prefix-aware routing you have implemented the mechanism and will observe almost
 none of the benefit — and the metric will say the cache &quot;works&quot;, because hit rate
 is measured per replica.</p>
+<p><strong>Speculative decoding needs a cache that can be truncated cheaply.</strong> A draft
+model proposes <em>k</em> tokens and the target model verifies all <em>k</em> in one forward
+pass, turning <em>k</em> bandwidth-bound decode steps into one that is closer to
+compute-bound. Two consequences land on the cache: you append <em>k</em> speculative
+K/V entries and then <strong>roll back</strong> to the first rejected position, which is
+trivial with paged blocks and awkward with a flat contiguous slab; and you are
+now holding two caches, the draft&#39;s and the target&#39;s, advancing and rewinding
+together. That second cache is real memory and has to be in the budget. The
+reason the technique works at all is the bottleneck above — at batch 1 you read
+every weight to produce one token, so verifying five costs nearly the same
+bytes. It spends idle FLOPs to buy latency, and it is the one optimisation on
+this page that gets <em>worse</em> as batch size rises, because a full batch has no
+idle FLOPs left to spend.</p>
+<p><strong>Disaggregated serving separates the two phases onto different hardware.</strong>
+Prefill is compute-bound and decode is bandwidth-bound, so they want different
+GPUs, different batch policies and different scaling curves; co-locating them
+means each interferes with the other&#39;s latency, which is what chunked prefill
+mitigates rather than solves. The cost of splitting them is that the KV cache
+now has to cross a network between prefill and decode pools — which makes cache
+transfer bandwidth a first-class capacity term, and is the main reason the
+approach only pays off at scale.</p>
 <p><strong>&quot;Support 128k context&quot; and &quot;serve N concurrent users&quot; are one budget.</strong> The
 most common planning failure is treating them as separate requirements owned by
 separate people. They multiply in the same formula. Any conversation about
@@ -291,6 +381,23 @@ No — and this catches people. It reduces <em>waste</em>. Contiguous allocation
 worst-case length per sequence and most of that reservation goes unused. Paging
 turns that slack into batch capacity. Same real bytes, higher utilisation, zero
 quality risk.</p>
+<p><strong>&quot;Does blocking the cache lose data, or change the answer?&quot;</strong>
+No. Paging changes the <em>addressing</em> of the bytes, not the bytes: the same fp16
+keys and values go through the same dot products in the same order, with the
+kernel consulting a block table instead of striding a flat array. Bit-exact.
+Name the contrast to show you know where loss actually comes from —
+quantization rounds, eviction deletes, sliding window refuses to look. The one
+honest caveat is that a prefix-cache hit changes matmul batch shapes, and
+floating-point addition is not associative, so outputs can differ at the 1e-5
+level. That is non-determinism, not degradation.</p>
+<p><strong>&quot;Fixed-size blocks waste memory in the last block. Why is that a good trade?&quot;</strong>
+Because it swaps an unbounded problem for a bounded one. Contiguous allocation
+suffers <em>external</em> fragmentation — free memory that no request can use because
+no run of it is long enough, and it worsens as request lengths diversify. Fixed
+blocks make every hole interchangeable, so external fragmentation goes to zero
+and the only remaining waste is <em>internal</em>: strictly less than one block per
+request per layer. Utilisation goes from 20–40% to above 96%, which is 2–4×
+batch size.</p>
 <p><strong>&quot;When would you NOT quantize the KV cache?&quot;</strong>
 When long-context recall is the product. INT8 is usually safe; INT4 degrades
 early-token recall specifically, so the model passes short-prompt evals and fails
@@ -311,6 +418,9 @@ consistent with having silently broken retrieval from early context.</p>
 <li>Write the KV size formula from memory and name which technique attacks each term</li>
 <li>Explain why CLA and FP8 multiply but MQA and GQA do not</li>
 <li>Say why PagedAttention reduces no bytes yet raises batch size</li>
+<li>Distinguish internal from external fragmentation, and say which one fixed blocks eliminate</li>
+<li>Name the three parts prefix reuse decomposes into, and what each one owns</li>
+<li>Say which techniques on this page are bit-exact and which trade accuracy, without hedging</li>
 <li>Name the one failure mode that average-case evals cannot detect, and how you would gate it</li>
 <li>Do the arithmetic that shows KV overtaking weights, and use it to argue a capacity plan</li>
 </ul>
@@ -331,7 +441,7 @@ consistent with having silently broken retrieval from early context.</p>
     <div class="pager-row"><a class="pager previous" href="distillation-and-pruning.html"><span>previous</span>Distillation & pruning</a><a class="pager next" href="orchestration-frameworks.html"><span>next</span>Orchestration frameworks</a></div>
   </main>
 
-  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-the-twelve-techniques">2 · Design — the twelve techniques</a></li><li class="d3"><a href="#group-a-architectural-fewer-heads-fewer-layers-shorter-state">Group A — architectural: fewer heads, fewer layers, shorter state</a></li><li class="d3"><a href="#group-b-token-memory-management-fewer-tokens-less-waste">Group B — token &amp; memory management: fewer tokens, less waste</a></li><li class="d3"><a href="#group-c-data-width-fewer-bits-per-value">Group C — data width: fewer bits per value</a></li><li class="d2"><a href="#3-flow-how-to-actually-choose">3 · Flow — how to actually choose</a></li><li class="d2"><a href="#4-uml-where-each-technique-intervenes">4 · UML — where each technique intervenes</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-the-twelve-techniques">2 · Design — the twelve techniques</a></li><li class="d3"><a href="#group-a-architectural-fewer-heads-fewer-layers-shorter-state">Group A — architectural: fewer heads, fewer layers, shorter state</a></li><li class="d3"><a href="#group-b-token-memory-management-fewer-tokens-less-waste">Group B — token &amp; memory management: fewer tokens, less waste</a></li><li class="d3"><a href="#group-c-data-width-fewer-bits-per-value">Group C — data width: fewer bits per value</a></li><li class="d2"><a href="#3-flow-how-to-actually-choose">3 · Flow — how to actually choose</a></li><li class="d2"><a href="#4-uml-where-each-technique-intervenes">4 · UML — where each technique intervenes</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d3"><a href="#prefix-reuse-in-the-three-parts-it-actually-decomposes-into">Prefix reuse, in the three parts it actually decomposes into</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
 </div>
 
 <script type="module">

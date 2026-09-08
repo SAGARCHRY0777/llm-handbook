@@ -114,6 +114,42 @@ length per request, so most of the reservation sits unused. Paging it in fixed
 blocks turns that slack into batch size. Same memory, more concurrency, no
 quality risk at all. If you serve on vLLM you already have it.
 
+**The word "fragmentation" is hiding two different problems**, and knowing which
+one fixed-size blocks solve is the whole insight:
+
+| | External fragmentation | Internal fragmentation |
+|---|---|---|
+| What | Free memory exists, but no single run of it is long enough. 88 slots free here, 40 there, 200 there — a request needing 300 *contiguous* slots fails despite 328 being free | Waste *inside* an allocated block. A request holding 37 tokens at block size 16 occupies 3 blocks = 48 slots, wasting 11 |
+| Under contiguous allocation | Unbounded, and gets worse as request lengths diversify | Enormous — the whole unused tail of a `max_seq_len` reservation |
+| Under paging | **Eliminated.** Every block is the same size and a request accepts any block, so there is no such thing as a hole of the wrong shape | **Bounded** at strictly less than one block per request per layer |
+
+That is the answer to "are the blocks fixed size?" — yes, and the fixity is the
+point. It converts an unbounded, allocation-order-dependent problem into a
+bounded one you can put a number on. Measured utilisation goes from 20–40% under
+contiguous allocation to above 96%.
+
+Block size is a genuine trade: smaller blocks (8) waste less but mean longer
+block tables and more indirection per kernel launch; larger blocks (32) are
+kernel-friendlier but waste more and make prefix sharing coarser. vLLM defaults
+to 16.
+
+**Paging is bit-exact, and this is worth being firm about**, because "does
+blocking lose data or accuracy?" is the most common misconception on the topic.
+It does not. Paging changes only the *addressing* of the bytes: the same fp16
+keys and values participate in the same dot products, in the same order, at the
+same scale. The kernel consults a block table to find each 16-token chunk
+instead of striding through one flat array, and the arithmetic never sees the
+difference. Contrast the genuinely lossy rows in this table — quantization
+rounds the numbers, eviction deletes positions, sliding window refuses to look
+past *W*. Those change results. Paging and prefix reuse do not.
+
+The one honest caveat: enabling prefix caching can make outputs differ in the
+last decimal place, because a cache hit changes matmul batch shapes and
+floating-point addition is not associative. That is non-determinism at the 1e-5
+level, not degradation. At temperature 0 it can occasionally tip a near-tie
+between two tokens; it never makes the model worse. Teams chasing bit-identical
+reproducibility across runs need to know this exists.
+
 **Eviction is the one to be most careful with.** Rows 5, 6 and 9 all discard
 information, and the failure mode is not a crash — it is a model that answers
 confidently having silently lost the token it needed. Whatever eviction policy
@@ -292,6 +328,69 @@ advance which techniques stack and which overlap. CLA2 and FP8 stack because one
 divides `layers` and the other divides `bytes_per_value`. MQA and GQA do not,
 because both divide `kv_heads`: you pick one.
 
+### Prefix reuse, in the three parts it actually decomposes into
+
+Row 8 is a one-liner in the table and a whole subsystem in practice. It is
+always these three pieces, and each owns one data structure:
+
+**1 · Content hashing — decide what "the same prefix" means.** Hash each
+aligned block of token ids, chaining in the previous block's hash so that
+*position* is part of the identity. Two requests share a block only if every
+token before it also matched.
+
+```python
+def block_hashes(token_ids, block_size=16):
+    """Chained hashes: block i's identity includes all of blocks 0..i-1."""
+    hashes, parent = [], None
+    for i in range(0, len(token_ids) - block_size + 1, block_size):
+        chunk = tuple(token_ids[i:i + block_size])
+        parent = hash((parent, chunk))   # chained -> prefix identity,
+        hashes.append(parent)            # not chunk identity
+    return hashes
+    # The partial trailing block is deliberately never hashed: it is not full,
+    # so it is not final, so it is not safe to share.
+```
+
+**2 · A refcounted block table — decide who owns what.** Each physical block
+carries a reference count. A hit increments it and points the new request's
+table at the existing block instead of allocating; eviction is legal only at
+refcount 0, normally LRU.
+
+```python
+def allocate_prefix(req_tokens, cache_index, pool):
+    table, hits = [], 0
+    for h in block_hashes(req_tokens):
+        blk = cache_index.get(h)
+        if blk is None:
+            break                    # prefixes are contiguous by definition:
+        blk.refcount += 1            # the first miss ends the shared region
+        table.append(blk.id)
+        hits += 1
+    for _ in range(needed_blocks(req_tokens) - hits):
+        table.append(pool.alloc().id)   # the divergent suffix, prefilled normally
+    return table, hits * 16             # tokens skipped entirely
+```
+
+**3 · Copy-on-write — handle the fork safely.** Two requests share blocks 0–4
+then diverge, and neither may write into a block someone else is reading. When a
+shared block needs a write, copy it first. This is also how parallel sampling
+(`n=4`) shares one prompt cache across four divergent continuations.
+
+```python
+def prepare_write(blk, pool):
+    if blk.refcount == 1:
+        return blk                   # sole owner -- write in place
+    new = pool.alloc()
+    new.data[:] = blk.data           # copy-on-write
+    blk.refcount -= 1
+    return new
+```
+
+Three requests sharing a 64-token system prompt pay 64 prefill tokens once
+instead of 192. At a realistic 2,000-token system prompt and a thousand users,
+that ratio is the difference between a viable unit economics and a bankrupt one
+— which is why row 8 sits above the lossless line in the flow.
+
 ---
 
 ## 6 · Depth — the senior layer
@@ -321,6 +420,29 @@ happens if the request lands on the replica that holds the prefix. Without
 prefix-aware routing you have implemented the mechanism and will observe almost
 none of the benefit — and the metric will say the cache "works", because hit rate
 is measured per replica.
+
+**Speculative decoding needs a cache that can be truncated cheaply.** A draft
+model proposes *k* tokens and the target model verifies all *k* in one forward
+pass, turning *k* bandwidth-bound decode steps into one that is closer to
+compute-bound. Two consequences land on the cache: you append *k* speculative
+K/V entries and then **roll back** to the first rejected position, which is
+trivial with paged blocks and awkward with a flat contiguous slab; and you are
+now holding two caches, the draft's and the target's, advancing and rewinding
+together. That second cache is real memory and has to be in the budget. The
+reason the technique works at all is the bottleneck above — at batch 1 you read
+every weight to produce one token, so verifying five costs nearly the same
+bytes. It spends idle FLOPs to buy latency, and it is the one optimisation on
+this page that gets *worse* as batch size rises, because a full batch has no
+idle FLOPs left to spend.
+
+**Disaggregated serving separates the two phases onto different hardware.**
+Prefill is compute-bound and decode is bandwidth-bound, so they want different
+GPUs, different batch policies and different scaling curves; co-locating them
+means each interferes with the other's latency, which is what chunked prefill
+mitigates rather than solves. The cost of splitting them is that the KV cache
+now has to cross a network between prefill and decode pools — which makes cache
+transfer bandwidth a first-class capacity term, and is the main reason the
+approach only pays off at scale.
 
 **"Support 128k context" and "serve N concurrent users" are one budget.** The
 most common planning failure is treating them as separate requirements owned by
@@ -374,6 +496,25 @@ worst-case length per sequence and most of that reservation goes unused. Paging
 turns that slack into batch capacity. Same real bytes, higher utilisation, zero
 quality risk.
 
+**"Does blocking the cache lose data, or change the answer?"**
+No. Paging changes the *addressing* of the bytes, not the bytes: the same fp16
+keys and values go through the same dot products in the same order, with the
+kernel consulting a block table instead of striding a flat array. Bit-exact.
+Name the contrast to show you know where loss actually comes from —
+quantization rounds, eviction deletes, sliding window refuses to look. The one
+honest caveat is that a prefix-cache hit changes matmul batch shapes, and
+floating-point addition is not associative, so outputs can differ at the 1e-5
+level. That is non-determinism, not degradation.
+
+**"Fixed-size blocks waste memory in the last block. Why is that a good trade?"**
+Because it swaps an unbounded problem for a bounded one. Contiguous allocation
+suffers *external* fragmentation — free memory that no request can use because
+no run of it is long enough, and it worsens as request lengths diversify. Fixed
+blocks make every hole interchangeable, so external fragmentation goes to zero
+and the only remaining waste is *internal*: strictly less than one block per
+request per layer. Utilisation goes from 20–40% to above 96%, which is 2–4×
+batch size.
+
 **"When would you NOT quantize the KV cache?"**
 When long-context recall is the product. INT8 is usually safe; INT4 degrades
 early-token recall specifically, so the model passes short-prompt evals and fails
@@ -400,6 +541,9 @@ You are done with this page when you can:
 - Write the KV size formula from memory and name which technique attacks each term
 - Explain why CLA and FP8 multiply but MQA and GQA do not
 - Say why PagedAttention reduces no bytes yet raises batch size
+- Distinguish internal from external fragmentation, and say which one fixed blocks eliminate
+- Name the three parts prefix reuse decomposes into, and what each one owns
+- Say which techniques on this page are bit-exact and which trade accuracy, without hedging
 - Name the one failure mode that average-case evals cannot detect, and how you would gate it
 - Do the arithmetic that shows KV overtaking weights, and use it to argue a capacity plan
 

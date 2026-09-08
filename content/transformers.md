@@ -68,6 +68,42 @@ softmaxed into weights, and the output is a weighted sum of values.
 `softmax(QKᵀ/√d)V` — that formula is the whole mechanism, and the `√d` is there
 to stop the dot products growing with dimension until the softmax saturates.
 
+Three things about that formula are worth pinning down, because each one is a
+place people acquire a wrong model that survives for years.
+
+**Only token ids are integers.** The tokenizer emits a row index — `791` means
+"row 791 of the embedding table", not a quantity, and it is not larger than
+`790` in any meaningful sense. From the embedding lookup onward everything is
+floating point: hidden states, Q, K, V, attention weights, logits,
+probabilities. In production that is `bfloat16` or `float16`, sometimes `fp8`
+for the KV cache specifically. Integer-quantized formats like `int4` are
+compressed *storage* that is converted back to float before the arithmetic runs.
+
+**The score is a scaled dot product, not cosine similarity.** These get
+conflated because `q·k = ‖q‖‖k‖cos θ` relates them, but attention divides by
+`√d` — a constant — while cosine divides by `‖q‖‖k‖`. Cosine discards
+magnitude; attention keeps it, deliberately. Take `q = [1,0,1,0]` against
+`k = [1,0,2,0]`: the dot product is 3. Scale that key to `[10,0,20,0]` and the
+cosine is unchanged at 0.949 — same direction — but the score becomes 30, and
+after softmax that key takes essentially all of the attention. The model uses
+key norms to make some positions loud and others quiet independently of
+direction, and cosine similarity cannot express that.
+
+**There are two different softmaxes per forward pass, and they answer different
+questions.** This is the single most common confusion in the topic.
+
+| | Attention softmax | Output softmax |
+|---|---|---|
+| Where | Inside every head of every layer — 1,024 times per pass in a 32×32 model | Once, at the very end of the stack |
+| Over what | The `seq_len` past positions | The `vocab` possible next tokens |
+| Length | Grows with the sequence | 128,256, always |
+| Means | "How much of each earlier token do I mix into myself?" | "How likely is each vocabulary entry to be next?" |
+| Consumed by | The weighted sum over `V` | The sampler |
+
+Attention does produce a probability distribution — over *positions*. It is not
+the next-token distribution, and no amount of staring at attention weights will
+show you the model's output probabilities.
+
 **Multi-head** attention runs several of these in parallel with different
 projections, so different heads can specialise — some track syntax, some track
 position, some appear to do very little at all, which is what makes pruning
@@ -87,6 +123,20 @@ massively parallel: every position predicts its next token simultaneously, so
 one sequence yields as many training signals as it has tokens. That efficiency,
 not any representational advantage, is the reason.
 
+Those three architectures use three arrangements of the same operation, and the
+difference is only *where Q, K and V come from*:
+
+| Kind | Q from | K, V from | Mask | Where you meet it |
+|---|---|---|---|---|
+| **Self** | sequence A | sequence A | none | BERT-style encoders. Every token sees every other, both directions |
+| **Causal self** | sequence A | sequence A | lower-triangular | Every decoder-only LLM. **This is the one that makes the KV cache possible** |
+| **Cross** | decoder | encoder output | usually none | T5, Whisper, translation — K and V come from a *different* sequence |
+
+Causal is a *subset* of self-attention, not an alternative to it. And note that
+cross-attention K/V are even more cacheable than causal self-attention K/V: they
+are computed once from the encoder output and never change at all for the entire
+decode, not by a single row. Whisper exploits exactly that.
+
 **Advanced — the KV cache, which is the single most practically important
 concept here.** Generating token 500 needs attention over tokens 1–499. Without
 caching you would recompute all their keys and values every step — quadratic
@@ -94,6 +144,32 @@ work repeated for every token.
 
 So you cache them. Each new token computes its own K and V, appends them, and
 attends over the cache.
+
+**Why that is legal** is worth deriving once rather than accepting. Let `xₜ` be
+the hidden state of token `t` at some layer. Then `Kₜ = norm(xₜ) @ W_K`, so `Kₜ`
+depends on `xₜ` and nothing else; `xₜ` depends, through causal attention, only on
+positions `≤ t`; by induction down to the embedding, `xₜ` is a function of token
+ids `1..t` alone. Appending token `t+1` does not change token ids `1..t`.
+Therefore **`Kₜ` and `Vₜ` are final the instant they are computed** — nothing
+downstream can reach back and alter them.
+
+That argument depends entirely on causality. In a bidirectional encoder `xₜ`
+depends on future tokens, so appending one invalidates every cached K and V.
+That is precisely why BERT-style models have no KV cache and decoder-only models
+do — the same property that made decoder-only cheap to *train* is what makes it
+cheap to *serve*.
+
+**Q is not cached, and not because it would be wrong.** Old queries are equally
+frozen. They are simply never read again: query `q₅` is used exactly once, to
+produce position 5's output, and is dead the moment that output exists. Keys and
+values are re-read by every future query, forever. Cache what gets read
+repeatedly.
+
+**The cache is per layer, not per model.** Layer 3's keys come from layer 3's
+hidden states through layer 3's own `W_K`; layer 4's come from different inputs
+through a different matrix. Neither is derivable from the other, so a "KV cache"
+is really *N independent KV caches* that happen to be indexed by the same token
+positions — which is why `layers` appears as a term in the size formula below.
 
 Once that cache becomes the thing limiting your batch size — which it will, at
 production context lengths — [KV cache optimization](kv-cache.html) covers the
@@ -135,14 +211,16 @@ graph TD
   G --> H[Sample one token]
   H --> I{Stop token or limit?}
   I -->|no| J[Append token, append its K and V to cache]
-  J --> E
+  J --> C
   I -->|yes| K[Done]
 ```
 
-**The loop from `J` back to `E` is generation.** Note what it skips: the new
-token re-enters at the blocks, not at the start, and previous tokens are never
-recomputed — they are read from the cache. That distinction is exactly the
-prefill/decode split that drives the whole serving module.
+**The loop from `J` back to `C` is generation.** The new token is embedded and
+run through every block, exactly like any other token — what it skips is the
+*history*. Previous tokens are never re-embedded or re-projected; their K and V
+are read from the cache. So the loop costs one token's worth of forward pass,
+not the whole sequence's, and that distinction is exactly the prefill/decode
+split that drives the whole serving module.
 
 ---
 
@@ -205,6 +283,38 @@ def attention(Q, K, V, causal=True):
     weights /= weights.sum(-1, keepdims=True)
     return weights @ V
 ```
+
+The same head during decode, with a cache. The entire mechanism is the two
+`append` lines — everything else is unchanged arithmetic:
+
+```python
+def decode_step(x_new, Wq, Wk, Wv, k_cache, v_cache):
+    """One new token, attending over all history.
+
+    k_cache / v_cache are lists of past K and V rows for THIS layer. They are
+    mutated in place: this position's K and V are final the moment they exist.
+    """
+    q = x_new @ Wq
+    k_cache.append(x_new @ Wk)          # <- the cache write
+    v_cache.append(x_new @ Wv)          # <- there is nothing else to it
+
+    K = np.stack(k_cache)               # every position, including this one
+    V = np.stack(v_cache)
+
+    # No mask. Causality is structural here: the cache only ever contains the
+    # past and the present, so there is no future entry to mask out. Batched
+    # implementations still need an explicit mask, but only because padding
+    # forces them to -- not because the algorithm requires it.
+    scores = q @ K.T / np.sqrt(q.shape[-1])
+    w = np.exp(scores - scores.max()); w /= w.sum()
+    return w @ V
+```
+
+A runnable version of the whole stack — two layers, GQA, cache growth, and an
+assertion that cached and uncached generation emit *identical* tokens — is in
+[`examples/kv_cache_lab.py`](https://github.com/SAGARCHRY0777/llm-handbook/blob/main/examples/kv_cache_lab.py).
+It is pure standard-library Python so it runs anywhere, and it counts every dot
+product so the saving is a number rather than a claim.
 
 The memory arithmetic that decides your batch size:
 
@@ -269,7 +379,23 @@ the mathematics, it changes the memory access pattern. By tiling the computation
 so intermediate scores never leave fast on-chip memory, it avoids materialising
 the n×n matrix in HBM. Same output, several times faster, much less memory.
 That distinction — an IO optimisation, not an approximation — is the kind of
-detail that separates recall from understanding.
+detail that separates recall from understanding. Note also that it is orthogonal
+to the KV cache: FlashAttention reduces *activation* memory during a pass, not
+the cache that persists between passes. The two compose.
+
+**The causal-mask bug everyone writes exactly once.** Leaving `is_causal=True`
+on during decode:
+
+```python
+out = F.scaled_dot_product_attention(q, k, v, is_causal=(T_new > 1))
+```
+
+With one query row against 500 cached keys, PyTorch aligns the triangular mask
+to the top-left of a 1×500 score matrix and hides almost the entire history. The
+model appears to catastrophically forget its own prompt, generation degenerates,
+and nothing raises an error. The guard is the fix: masking is needed during
+prefill, where `T_new == T_total`, and is actively wrong during decode, where a
+single query legitimately sees everything before it.
 
 | Failure mode | Symptom | Cause |
 |---|---|---|
@@ -306,6 +432,8 @@ billion parameter" model can serve at reasonable cost.
 |---|---|---|
 | "Explain attention." | Whether you understand it or recite it | Each token emits a query, key and value. Queries are scored against all keys, softmaxed, and used to weight values. Scaling by √d stops the softmax saturating. Multi-head runs several in parallel with different projections. |
 | "What is the KV cache and why does it matter?" | Practical depth | Cached keys and values for previous tokens, so decode does not recompute history. It matters because it grows linearly with context and batch, and at long context exceeds the weights — it is what limits concurrency. |
+| "Why can you cache K and V but not Q?" | Whether you derived it or memorised it | You *could* cache Q — old queries are equally frozen — but nothing ever reads them again. A query is used once, for its own position's output. Keys and values are re-read by every future query. The reason K and V are *safe* to cache is causality: a token's hidden state depends only on ids `1..t`, so appending `t+1` cannot change them. Bidirectional models get no cache for exactly this reason. |
+| "Is the attention softmax the same as the output softmax?" | Whether the mental model is real | No. Attention softmax runs inside every head of every layer, over `seq_len` positions — "how much of each earlier token do I mix in". The output softmax runs once at the end over `vocab` entries — "what comes next". Different length, different meaning, different place in the network. |
 | "Why is decode memory-bound but prefill compute-bound?" | Systems understanding | Prefill processes all positions at once — big matrix multiplies, arithmetic dominates. Decode processes one token against the whole weight set — you read every weight and do very little with it, so bandwidth dominates. |
 | "Why decoder-only?" | Architecture reasoning | Training efficiency. The causal mask lets every position predict its next token in parallel, so one sequence gives as many signals as it has tokens. Not a representational advantage. |
 | "How do models get longer context?" | Currency | Position-encoding interpolation or scaling, usually with RoPE, plus continued training. It is why extended-context models often degrade in the extended region — those positions were interpolated into, not trained on. |
@@ -318,10 +446,13 @@ billion parameter" model can serve at reasonable cost.
 You are done when you can:
 
 1. write the attention formula and say what the `√d` is for,
-2. explain the KV cache and compute its size from model shape,
-3. say why decode is bandwidth-bound and prefill is compute-bound,
-4. name why decoder-only dominates generation, and
-5. explain what GQA and FlashAttention each save.
+2. explain why the score is a dot product rather than a cosine, and what that buys,
+3. name the two softmaxes, what each ranges over, and where each sits,
+4. derive why K and V can be cached — and say why Q is not,
+5. explain the KV cache and compute its size from model shape,
+6. say why decode is bandwidth-bound and prefill is compute-bound,
+7. name why decoder-only dominates generation, and
+8. explain what GQA and FlashAttention each save — and why only one of them touches the cache.
 
 ---
 
