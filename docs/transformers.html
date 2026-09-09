@@ -74,7 +74,46 @@ handbook.</p>
    THE TWO COSTS ARE IN DIFFERENT PLACES, and this matters:
 
      ATTENTION   → quadratic in CONTEXT LENGTH   → long prompts hurt
-     MLP         → linear, but holds most params → model SIZE dominates memory</code></pre><hr>
+     MLP         → linear, but holds most params → model SIZE dominates memory</code></pre><p>The one thing a still picture cannot show is the <em>shape of the work over time</em> —
+the prompt lands in a single pass, and then the cache grows one slot at a time
+for the whole rest of the generation:</p>
+<figure class="fig-anim">
+<svg viewBox="0 0 620 128" role="img" aria-label="Animated: six prompt slots of the KV cache fill together during prefill, then ten more fill one at a time during decode, each slot holding a key and a value">
+  <path d="M20 34 L20 28 L232 28 L232 34" fill="none" stroke="currentColor" stroke-width="1" opacity=".45"/>
+  <text class="lbl-b" x="126" y="20" text-anchor="middle">PREFILL — one pass</text>
+  <path d="M236 34 L236 28 L592 28 L592 34" fill="none" stroke="currentColor" stroke-width="1" opacity=".45"/>
+  <text class="lbl-b" x="414" y="20" text-anchor="middle">DECODE — one slot per token, forever</text>
+
+  <g>
+    <rect class="slot" x="20"  y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" x="23"  y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" x="23"  y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="56"  y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" x="59"  y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" x="59"  y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="92"  y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" x="95"  y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" x="95"  y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="128" y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" x="131" y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" x="131" y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="164" y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" x="167" y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" x="167" y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="200" y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" x="203" y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" x="203" y="61" width="26" height="14" rx="2"/>
+  </g>
+  <g>
+    <rect class="slot" x="236" y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" style="animation-delay:.45s" x="239" y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" style="animation-delay:.45s" x="239" y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="272" y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" style="animation-delay:.9s"  x="275" y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" style="animation-delay:.9s"  x="275" y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="308" y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" style="animation-delay:1.35s" x="311" y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" style="animation-delay:1.35s" x="311" y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="344" y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" style="animation-delay:1.8s"  x="347" y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" style="animation-delay:1.8s"  x="347" y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="380" y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" style="animation-delay:2.25s" x="383" y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" style="animation-delay:2.25s" x="383" y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="416" y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" style="animation-delay:2.7s"  x="419" y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" style="animation-delay:2.7s"  x="419" y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="452" y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" style="animation-delay:3.15s" x="455" y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" style="animation-delay:3.15s" x="455" y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="488" y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" style="animation-delay:3.6s"  x="491" y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" style="animation-delay:3.6s"  x="491" y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="524" y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" style="animation-delay:4.05s" x="527" y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" style="animation-delay:4.05s" x="527" y="61" width="26" height="14" rx="2"/>
+    <rect class="slot" x="560" y="42" width="32" height="34" rx="3"/><rect class="k kv-fill" style="animation-delay:4.5s"  x="563" y="45" width="26" height="14" rx="2"/><rect class="v kv-fill" style="animation-delay:4.5s"  x="563" y="61" width="26" height="14" rx="2"/>
+  </g>
+
+<p>  <rect class="k" x="20" y="94" width="11" height="11" rx="2"/><text class="lbl" x="37" y="103">key</text>
+  <rect class="v" x="76" y="94" width="11" height="11" rx="2"/><text class="lbl" x="93" y="103">value</text>
+  <text class="lbl" x="150" y="103">one slot per token — and this whole strip exists once per layer, so ×32</text>
+  <text class="lbl" x="20" y="120">Nothing already drawn is ever recomputed. That is the entire optimisation.</text>
+</svg></p>
+<figcaption>Prefill writes every prompt position at once; decode appends exactly one. The strip only ever grows to the right — which is why cost is linear in tokens, and why it is also the thing that runs you out of memory.</figcaption>
+</figure>
+
+<hr>
 <h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic — what attention computes.</strong> Three vectors are derived from each token:</p>
 <div class="table-scroll"><table><thead><tr><th>Vector</th><th>Intuition</th></tr></thead><tbody><tr><td><strong>Query</strong></td><td>What this token is looking for</td></tr><tr><td><strong>Key</strong></td><td>What this token offers to others</td></tr><tr><td><strong>Value</strong></td><td>What it actually contributes if selected</td></tr></tbody></table></div><p>Each query is compared against every key (a dot product), the scores are
 softmaxed into weights, and the output is a weighted sum of values.
@@ -149,7 +188,7 @@ is really <em>N independent KV caches</em> that happen to be indexed by the same
 positions — which is why <code>layers</code> appears as a term in the size formula below.</p>
 <p>Once that cache becomes the thing limiting your batch size — which it will, at
 production context lengths — <a href="kv-cache.html">KV cache optimization</a> covers the
-twelve ways to shrink it and what each one costs.</p>
+thirteen ways to shrink it and what each one costs.</p>
 <pre class="code"><code>   KV cache size = 2 (K and V)
                  × layers
                  × kv_heads × head_dim

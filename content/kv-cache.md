@@ -5,7 +5,7 @@ module: optimization
 order: 32
 status: live
 level: intermediate → advanced
-summary: The twelve ways to shrink the KV cache, organised by which term of the size formula each one attacks — and what each costs you.
+summary: The thirteen ways to shrink the KV cache, organised by which term of the size formula each one attacks — plus the scheduling that decides whether you ever feel the win.
 ---
 
 # KV cache optimization
@@ -19,9 +19,16 @@ exists. This page is about what to do when it becomes the thing standing between
 you and a bigger batch size.
 
 The framing that makes all of this tractable: there is one formula, it has six
-terms, and **every optimisation multiplies exactly one of them.** Once you see
-which term a technique attacks, you know what it costs and what it composes
-with, without memorising a list.
+terms, and **almost every optimisation multiplies exactly one of them.** Once
+you see which term a technique attacks, you know what it costs and what it
+composes with, without memorising a list.
+
+Two sets of things sit outside that formula and are worth naming up front so you
+know where they fit. MLA changes the *shape* of what gets cached rather than
+scaling a term. And the whole scheduling group — continuous batching, chunked
+prefill, preemption, cache-aware routing — shrinks nothing at all; it decides
+whether the memory you freed ever becomes throughput. Teams routinely halve
+their cache and see no gain because the answer was in that second set.
 
 ---
 
@@ -36,12 +43,20 @@ with, without memorising a list.
                    across    heads         projects   eviction,
                    layers                  smaller    recurrent
                                                       layers
+                            └──────┬──────┘
+                                MLA — caches a latent instead, so neither
+                                term applies in its original form
 
-  ...and three that do not change the formula at all:
+  ...and the ones that change no term at all:
 
      PagedAttention  ->  removes ALLOCATION WASTE   (same bytes, less slack)
      Prefix reuse    ->  removes DUPLICATE bytes    (one copy, many requests)
      Sparse reads    ->  removes READ volume        (same bytes, fewer touched)
+
+     Continuous batching -> keeps the freed memory BUSY  (occupancy, not size)
+     Chunked prefill     -> stops one long prompt stalling everyone
+     Preempt / swap      -> lets you admit optimistically and recover
+     Cache-aware routing -> decides whether prefix reuse ever actually fires
 
 
   WHY IT DOMINATES — a 70B model at long context
@@ -60,11 +75,67 @@ context halves the concurrency you can serve on the same card — which is why
 "support 128k context" and "serve 200 concurrent users" are the same budget
 argued from two ends.
 
+And the reason the *placement* techniques are worth as much as the shrinking
+ones: identical free memory, two allocators, one of which cannot use it.
+
+<figure class="fig-anim">
+<svg viewBox="0 0 510 232" role="img" aria-label="Animated comparison: a request needing four blocks probes contiguous memory, finds only two-block gaps, and is rejected; the same request immediately claims four scattered blocks in paged memory">
+  <text class="lbl-b" x="20" y="18">CONTIGUOUS — needs 4 blocks in a row</text>
+  <g>
+    <rect class="k" x="20"  y="30" width="30" height="26" rx="3"/>
+    <rect class="k" x="54"  y="30" width="30" height="26" rx="3"/>
+    <rect class="k" x="88"  y="30" width="30" height="26" rx="3"/>
+    <rect class="k" x="122" y="30" width="30" height="26" rx="3"/>
+    <rect class="slot" x="156" y="30" width="30" height="26" rx="3"/>
+    <rect class="slot" x="190" y="30" width="30" height="26" rx="3"/>
+    <rect class="v" x="224" y="30" width="30" height="26" rx="3"/>
+    <rect class="v" x="258" y="30" width="30" height="26" rx="3"/>
+    <rect class="v" x="292" y="30" width="30" height="26" rx="3"/>
+    <rect class="v" x="326" y="30" width="30" height="26" rx="3"/>
+    <rect class="slot" x="360" y="30" width="30" height="26" rx="3"/>
+    <rect class="slot" x="394" y="30" width="30" height="26" rx="3"/>
+  </g>
+  <g class="probe">
+    <rect class="probe-body" x="156" y="26" width="132" height="34" rx="4"/>
+    <text class="lbl" x="222" y="47" text-anchor="middle" fill="currentColor">need 4</text>
+  </g>
+  <g class="reject">
+    <text class="lbl-b" x="20" y="80" fill="currentColor">4 blocks free — but only in runs of 2. REQUEST REJECTED.</text>
+  </g>
+  <text class="lbl" x="20" y="98">external fragmentation: the memory exists, the shape is wrong</text>
+
+  <line x1="20" y1="114" x2="490" y2="114" stroke="currentColor" stroke-width="1" opacity=".18"/>
+
+  <text class="lbl-b" x="20" y="140">PAGED — takes any 4, wherever they are</text>
+  <g>
+    <rect class="k" x="20"  y="152" width="30" height="26" rx="3"/>
+    <rect class="k" x="54"  y="152" width="30" height="26" rx="3"/>
+    <rect class="k" x="88"  y="152" width="30" height="26" rx="3"/>
+    <rect class="k" x="122" y="152" width="30" height="26" rx="3"/>
+    <rect class="slot" x="156" y="152" width="30" height="26" rx="3"/>
+    <rect class="ok claim" style="animation-delay:0s"   x="156" y="152" width="30" height="26" rx="3"/>
+    <rect class="slot" x="190" y="152" width="30" height="26" rx="3"/>
+    <rect class="ok claim" style="animation-delay:.25s" x="190" y="152" width="30" height="26" rx="3"/>
+    <rect class="v" x="224" y="152" width="30" height="26" rx="3"/>
+    <rect class="v" x="258" y="152" width="30" height="26" rx="3"/>
+    <rect class="v" x="292" y="152" width="30" height="26" rx="3"/>
+    <rect class="v" x="326" y="152" width="30" height="26" rx="3"/>
+    <rect class="slot" x="360" y="152" width="30" height="26" rx="3"/>
+    <rect class="ok claim" style="animation-delay:.5s"  x="360" y="152" width="30" height="26" rx="3"/>
+    <rect class="slot" x="394" y="152" width="30" height="26" rx="3"/>
+    <rect class="ok claim" style="animation-delay:.75s" x="394" y="152" width="30" height="26" rx="3"/>
+  </g>
+  <text class="lbl" x="20" y="196">block table:  logical 0→p4   1→p5   2→p10   3→p11</text>
+  <text class="lbl" x="20" y="214">contiguous to the kernel, scattered in memory. Waste &lt;1 block.</text>
+</svg>
+<figcaption>Neither allocator has more memory than the other. Fixed-size blocks make every free block interchangeable, which is what turns 20–40% utilisation into 96%+ — and utilisation is batch size, and batch size is throughput.</figcaption>
+</figure>
+
 ---
 
-## 2 · Design — the twelve techniques
+## 2 · Design — the thirteen techniques
 
-Counted as twelve by splitting the two pairs that behave differently in practice:
+Counted as thirteen by splitting the two pairs that behave differently in practice:
 MQA and GQA are separate design points (one is a special case of the other, and
 the quality cliff sits between them), and sparse *storage* is a different
 decision from sparse *reads*.
@@ -81,6 +152,7 @@ criteria, not knobs.
 | 2 | **GQA** — query heads grouped over few KV heads | `kv_heads` | 4–8× | Near-lossless at 8 groups; the default in modern models |
 | 3 | **CLA** — adjacent layers share one KV cache | `layers` | 2× | Composes *on top of* MQA/GQA; validated at 1B–3B scale |
 | 4 | **Hybrid recurrent layers** — some layers keep fixed-size state instead of a growing cache | `seq_len`, per layer | Depends on ratio | Recurrent layers have finite recall; you are trading exact long-range attention for constant memory |
+| 13 | **MLA** — cache one small shared latent per token, reconstruct K and V from it during attention | `kv_heads` × `head_dim`, jointly | ~10× vs GQA, far more vs MHA | Extra decode compute to reconstruct, and it needs fused kernels to be a net win. Numbered last because it arrived last, not because it matters least |
 
 **GQA is the one that matters most in practice**, because it is already in
 everything you are likely to serve. Llama-3-70B uses 64 query heads over 8 KV
@@ -92,6 +164,21 @@ rather than within one. The configuration that worked best is **CLA2** — shari
 across pairs of consecutive layers — giving another 2× on top of MQA with
 near-identical accuracy. It is the cleanest example of the composition principle:
 it attacks `layers`, MQA attacks `kv_heads`, so they multiply.
+
+**MLA** (multi-head latent attention, DeepSeek-V2/V3) is the most aggressive
+architectural answer currently deployed at scale, and it reframes the problem
+rather than tuning a term. Instead of caching keys and values, it caches a
+single low-rank *latent* vector per token and reconstructs the full per-head K
+and V from it inside the attention kernel. The cache stops scaling with
+`kv_heads × head_dim` and starts scaling with the latent width, which is far
+smaller — DeepSeek-V2 reports roughly a 93% cut against the MHA equivalent.
+
+The reason it is worth knowing even if you never train a model: it is the
+clearest demonstration that the six-term formula is a description of one
+*design*, not a law. Palu (row 12) does the same thing bolted onto an existing
+checkpoint; MLA does it as the architecture. Both trade decode FLOPs for cache
+bytes, which is exactly the right trade given that decode is bandwidth-bound and
+has FLOPs to spare — see the first paragraph of the depth section.
 
 ### Group B — token & memory management: fewer tokens, less waste
 
@@ -156,6 +243,18 @@ confidently having silently lost the token it needed. Whatever eviction policy
 you pick, it must be evaluated against a **long-context recall probe**, not
 average perplexity. See [regression gates](regression-gates.html).
 
+**And whatever you evict, do not evict the first few tokens.** StreamingLLM's
+finding is that the earliest positions act as *attention sinks*: heads dump
+surplus probability mass onto them precisely because softmax must sum to one and
+something has to absorb the weight when nothing in the window is relevant. Drop
+those four or so tokens and the distribution has nowhere to put its slack,
+attention redistributes onto content that should have been ignored, and
+generation degenerates — not gracefully, but into repetition and gibberish.
+Keeping four sink tokens plus a sliding window is what lets a fixed-size cache
+stream indefinitely without collapse. Any eviction policy you write yourself
+needs the same carve-out, and this is the most common way a home-grown one
+fails.
+
 ### Group C — data width: fewer bits per value
 
 | # | Technique | Term attacked | Typical factor | The cost |
@@ -173,8 +272,46 @@ than you quantize weights, and always probe recall afterwards.
 **Palu** (Chang et al., ICLR 2025) is the least widely deployed and the most
 architecturally interesting: it decomposes the K and V projection layers into
 low-rank matrices, caches the small intermediate state, and reconstructs full
-keys and values during attention. It is the only technique that attacks
-`head_dim`, which is why it composes with everything else.
+keys and values during attention. It is the only technique here that attacks
+`head_dim` on a checkpoint you did not train — MLA (row 13) does the same thing
+architecturally — which is why it composes with everything else.
+
+### Group D — scheduling: same bytes, better occupancy
+
+Nothing in this group shrinks a single byte. They decide whether the savings
+from Groups A–C ever turn into throughput, and a team that gets the arithmetic
+right and the scheduling wrong ships a server that is half idle while requests
+queue. They belong on this page because every one of them is a policy over the
+*cache* — what to admit, what to hold, what to give back.
+
+| Technique | The policy | What it buys | The cost |
+|---|---|---|---|
+| **Continuous batching** | Re-form the batch every decode step instead of running one to completion: finished requests leave, queued ones join immediately | The single largest throughput win in serving — often 2–3× over static batching | Only possible because a request's entire state *is* its KV blocks, so joining and leaving is free |
+| **Chunked prefill** | Split a long prompt into fixed chunks and interleave them with ongoing decode steps | Stops one 32k prompt stalling every other user's tokens; large improvement in tail TTFT | Slightly worse TPOT for everyone, because decode steps now share the batch with prefill work |
+| **Preemption — swap** | Under pressure, move a low-priority request's blocks to CPU RAM and bring them back later | Keeps the request alive; no recompute | PCIe is roughly 30× slower than HBM, so the round trip is visible |
+| **Preemption — recompute** | Discard the blocks entirely and re-prefill the prompt when the request resumes | No memory held at all while preempted | Pays full prefill again. Usually cheaper than swapping for short prompts, worse for long ones |
+| **Cache-aware routing** | Send a request to the replica that already holds its prefix | Turns prefix reuse from a mechanism into an actual hit rate | Fights load balancing: the replica with the cache may not be the least loaded one |
+
+**Continuous batching is the one to check first**, before any of the shrinking
+techniques, because it is where the memory you free actually becomes money.
+Static batching pads every request in the batch to the longest one and holds the
+whole batch until the slowest finishes, so a batch of 32 where one request
+generates 2,000 tokens and the rest generate 50 spends most of its life running
+at effective batch size 1. Continuous batching removes that entirely.
+
+**Cache-aware routing is the quietest failure on this page.** Prefix reuse
+without it is a mechanism that works perfectly and never fires: requests scatter
+across replicas, each replica sees a cold prefix, and the hit-rate metric —
+measured per replica — reports something reassuring. The symptom is a prefix
+cache that "works" in every test and delivers no TTFT improvement in production.
+
+**Preemption is a policy decision, not a failure.** A server that never preempts
+is a server that under-admits: it holds enough headroom for every resident
+request's worst case, which is exactly the over-reservation PagedAttention
+exists to kill. Admitting optimistically and preempting occasionally gets higher
+utilisation than admitting conservatively and never preempting — but only if you
+watch the preemption rate, because a high one means you are thrashing rather
+than scheduling.
 
 ---
 
@@ -188,11 +325,17 @@ above the line is free, everything below trades quality for memory.
      |                        num_key_value_heads vs num_attention_heads.
      |                        This is 4-8x you already have.
      v
-  2. What server?          -> PagedAttention. vLLM/TGI/SGLang. No quality cost.
-     |                        2-4x effective batch. Do this before anything else.
+  2. What server?          -> PagedAttention + continuous batching. vLLM/TGI/
+     |                        SGLang give you both. No quality cost, 2-4x
+     |                        effective batch, and the batching is what turns
+     |                        freed memory into throughput. Before anything else.
      v
   3. Shared prompts?       -> Prefix reuse. Free if your system prompt is shared.
-     |                        Needs prefix-aware routing to actually hit.
+     |                        Needs prefix-aware routing to actually hit --
+     |                        without it you get the mechanism and no benefit.
+     v
+  3b. Long prompts hurting -> Chunked prefill. Costs a little TPOT, protects
+     |  everyone's TTFT?      tail TTFT. Pure scheduling, no quality cost.
      v
   =========== everything above is LOSSLESS. Measure here. ===========
      |
@@ -521,6 +664,16 @@ early-token recall specifically, so the model passes short-prompt evals and fail
 at exactly the length you bought the context window for. Also note keys are more
 sensitive than values, because key error perturbs the whole softmax.
 
+**"You halved your KV cache and throughput barely moved. What went wrong?"**
+Almost certainly scheduling, not memory. Freeing cache raises the batch size you
+*could* run; it does nothing on its own. Check continuous batching is on — under
+static batching the whole batch waits for its slowest request, so a batch of 32
+with one long generation runs at an effective batch of about 1 for most of its
+life. Then check admission: a scheduler holding worst-case headroom per resident
+request will not spend the memory you just freed. Then check whether you are
+now bandwidth-bound rather than capacity-bound, in which case more batch buys
+nothing and the next move is quantization or a different card.
+
 **"You have CLA and FP8. What's the combined saving, and why?"**
 4×. They multiply because CLA attacks `layers` and FP8 attacks
 `bytes_per_value` — different terms of the same product. Two techniques on the
@@ -555,6 +708,9 @@ You are done with this page when you can:
 - **CLA** — [Brandon et al., *Reducing Transformer Key-Value Cache Size with Cross-Layer Attention*](https://arxiv.org/abs/2405.12981) (NeurIPS 2024) — CLA2, sharing across pairs of adjacent layers.
 - **PagedAttention** — [Kwon et al., *Efficient Memory Management for LLM Serving with PagedAttention*](https://arxiv.org/abs/2309.06180) (SOSP 2023) — the vLLM paper.
 - **Palu** — [Chang et al., *Palu: Compressing KV-Cache with Low-Rank Projection*](https://arxiv.org/abs/2407.21118) (ICLR 2025).
+- **MLA** — [*DeepSeek-V2*](https://arxiv.org/abs/2405.04434) (2024) — multi-head latent attention, the largest architectural cut currently deployed at scale.
+- **Attention sinks** — [Xiao et al., *Efficient Streaming Language Models with Attention Sinks*](https://arxiv.org/abs/2309.17453) (2023) — why the first four tokens must never be evicted.
+- **Continuous batching** — [Yu et al., *Orca: A Distributed Serving System for Transformer-Based Generative Models*](https://www.usenix.org/conference/osdi22/presentation/yu) (OSDI 2022) — iteration-level scheduling, the idea every modern server implements.
 - **H2O** — [Zhang et al., *Heavy-Hitter Oracle*](https://arxiv.org/abs/2306.14048) (2023) — the eviction line of work.
 - **Survey** — [*A Survey on Large Language Model Acceleration based on KV Cache Management*](https://arxiv.org/abs/2412.19442) (2024) — the map of the whole field.
 

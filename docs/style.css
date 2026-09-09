@@ -179,6 +179,101 @@ pre.mermaid { background: var(--panel-2); border: 1px solid var(--rule-2); borde
   .prose h1 { font-size: 30px; }
   .brand { font-size: 18px; }
 }
+/* ------------------------------------------------------------------ motion
+   Interaction feedback only: things that already change on hover, focus or
+   open now travel there instead of snapping. Nothing here moves on its own,
+   and nothing is hidden waiting for a trigger -- the page at rest is the page
+   in full. The reduced-motion guard at the bottom neutralises all of it. */
+html { scroll-behavior: smooth; }
+
+a, .sidebar li a, .toc li a, .pager, .menu-btn, .theme-btn,
+.results a, .anchor, #search {
+  transition: color .16s ease, background-color .16s ease,
+              border-color .16s ease, opacity .16s ease;
+}
+.pager { transition: color .16s ease, border-color .16s ease,
+                     box-shadow .18s ease, transform .18s ease; }
+.pager:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(0, 0, 0, .09); }
+.menu-btn:active, .theme-btn:active { transform: scale(.94); }
+#search:focus { border-color: var(--signal); box-shadow: 0 0 0 3px var(--signal-wash); }
+
+/* The dropdown is created on keystroke, so it animates in rather than appearing. */
+.results { animation: drop-in .14s ease-out; transform-origin: top center; }
+@keyframes drop-in {
+  from { opacity: 0; transform: translateY(-4px) scale(.99); }
+  to   { opacity: 1; transform: none; }
+}
+.sidebar.open { animation: drop-in .16s ease-out; }
+
+/* Heading anchors fade rather than blink. */
+.anchor { transition: opacity .18s ease, color .18s ease; }
+h2:hover .anchor, h3:hover .anchor { color: var(--ink-3); }
+
+/* Sticky nav marks where you are; let the marker slide between entries. */
+.sidebar li a, .toc li a { transition: color .16s ease, border-left-color .22s ease; }
+
+/* ------------------------------------------------------- animated diagrams
+   Figures that show a process over time. The markup lives in the markdown as
+   plain SVG; the timing lives here so the reduced-motion guard can switch it
+   off, and so colours come from the same tokens as the rest of the page. */
+.fig-anim {
+  margin: 0 0 18px; padding: 18px 16px 12px;
+  background: var(--panel-2); border: 1px solid var(--rule-2); border-radius: 8px;
+}
+.fig-anim svg { display: block; width: 100%; height: auto; color: var(--ink-2); }
+.fig-anim figcaption {
+  margin-top: 10px; font-size: 13.5px; line-height: 1.5; color: var(--ink-3);
+}
+.fig-anim .lbl { font-family: var(--mono); font-size: 10.5px; fill: var(--ink-3); }
+.fig-anim .lbl-b { font-family: var(--mono); font-size: 11px; fill: var(--ink-2); font-weight: 500; }
+.fig-anim .slot { fill: none; stroke: var(--rule); stroke-width: 1; }
+.fig-anim .k { fill: var(--signal); }
+.fig-anim .v { fill: var(--caution); }
+.fig-anim .ok { fill: var(--good); }
+.fig-anim .no { fill: var(--bad); }
+
+/* 1 - the cache filling: prefill lands as a block, decode adds one slot a
+   time, then the cycle restarts. Each cell carries its own delay inline. */
+.kv-fill { opacity: 0; animation: kv-appear 8s linear infinite; }
+@keyframes kv-appear {
+  0%   { opacity: 0; transform: scaleY(.4); }
+  3%   { opacity: 1; transform: scaleY(1); }
+  88%  { opacity: 1; transform: scaleY(1); }
+  96%  { opacity: 0; transform: scaleY(.4); }
+  100% { opacity: 0; transform: scaleY(.4); }
+}
+.kv-fill { transform-box: fill-box; transform-origin: bottom; }
+
+/* 2 - allocation: a four-block request probes contiguous memory, finds no run
+   long enough, and is rejected; the same request lands immediately in paged
+   memory because every free block is interchangeable. */
+.probe { animation: probe-slide 8s ease-in-out infinite; }
+@keyframes probe-slide {
+  0%,  8%  { transform: translateX(0);     opacity: 0; }  /* over the 2-block gap */
+  14%, 34% { transform: translateX(0);     opacity: 1; }
+  46%, 92% { transform: translateX(204px); opacity: 1; }  /* the other 2-block gap */
+  98%,100% { transform: translateX(204px); opacity: 0; }
+}
+.probe-body { fill: var(--bad); opacity: .28; stroke: var(--bad); stroke-width: 1; }
+.reject { opacity: 0; animation: reject-flash 8s ease-in-out infinite; }
+@keyframes reject-flash {
+  0%, 70%   { opacity: 0; }
+  76%, 88%  { opacity: 1; }
+  94%, 100% { opacity: 0; }
+}
+.claim { opacity: 0; animation: claim-in 8s ease-in-out infinite; }
+@keyframes claim-in {
+  0%, 12%  { opacity: 0; transform: scale(.5); }
+  20%      { opacity: 1; transform: scale(1); }
+  90%      { opacity: 1; transform: scale(1); }
+  96%,100% { opacity: 0; transform: scale(.5); }
+}
+.claim { transform-box: fill-box; transform-origin: center; }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+  html { scroll-behavior: auto; }
+  /* Held at the end state so the figures still read as finished pictures. */
+  .kv-fill, .claim, .reject { opacity: 1 !important; }
+  .probe { opacity: 1 !important; }
 }
