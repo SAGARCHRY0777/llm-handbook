@@ -296,3 +296,11 @@ You are done when you can:
 | Self-consistency | *Self-Consistency Improves Chain of Thought Reasoning* (Wang et al., 2022) — the sampling alternative |
 | Verification | *Let's Verify Step by Step* (Lightman et al., 2023) — process versus outcome supervision |
 | Practical | Provider documentation on reasoning-effort parameters and how reasoning tokens are billed |
+
+Related: [Reasoning inference optimization](reasoning-inference-optimization.html)
+for what to do once you have decided the reasoning is worth doing and the bill
+has arrived — nineteen ways to make the same thinking cheaper ·
+[Prompt engineering](prompt-engineering.html) for why elaborate CoT scaffolding
+hurts a trained reasoner ·
+[Bias & explainability](bias-and-explainability.html) for why a reasoning trace
+is not an explanation.

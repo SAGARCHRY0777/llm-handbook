@@ -717,4 +717,6 @@ You are done with this page when you can:
 Related: [Transformers](transformers.html) for what the cache is ·
 [Quantization](quantization.html) for the weight side ·
 [Long context](long-context.html) for what breaks at length ·
-[Serving & operations](serving-and-operations.html) for the latency budget it sits in.
+[Serving & operations](serving-and-operations.html) for the latency budget it sits in ·
+[Reasoning inference optimization](reasoning-inference-optimization.html) for the
+workload that fills this cache fastest — a 32k reasoning chain is 32k of KV.

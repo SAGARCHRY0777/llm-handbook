@@ -1,0 +1,442 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reasoning inference optimization · LLM Handbook</title>
+<meta name="description" content="Nineteen ways to make a reasoning model cheaper, organised by which of the three cost factors each one attacks — and which of them you can actually deploy this quarter.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li><li><a href="reasoning-models.html">Reasoning models & test-time compute</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="text2sql.html">Text2SQL & structured data</a></li><li><a href="graphrag.html">GraphRAG & knowledge graphs</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li><li><a href="kv-cache.html">KV cache optimization</a></li><li><a href="reasoning-inference-optimization.html" class="active">Reasoning inference optimization</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li><li><a href="synthetic-data.html">Synthetic data generation</a></li><li><a href="training-methods.html">The 20 ways to train a model</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li><li><a href="caching.html">Caching strategies</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li><li><a href="learning-paths.html">Learning paths</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="reasoning-inference-optimization"><a class="anchor" href="#reasoning-inference-optimization">#</a>Reasoning inference optimization</h1><blockquote>
+<p><strong>The one sentence:</strong> a reasoning model&#39;s bill is three numbers multiplied
+together — how many chains, how long each chain is, and what a token costs —
+and every technique here moves exactly one of them, or removes the work
+entirely.</p>
+</blockquote>
+<p><a href="reasoning-models.html">Reasoning models</a> is about <em>whether</em> to reason: routing,
+when thinking helps, when it is expensive superstition. This page assumes you
+have already decided the reasoning is worth doing, and the bill has arrived.</p>
+<p>That bill is unlike a normal inference bill in one specific way: <strong>you are paying
+output-token prices for tokens the user never sees.</strong> A 4,000-token chain that
+produces a 200-word answer is 95% invisible cost. Which is why this is a
+distinct optimisation surface rather than a footnote on
+<a href="kv-cache.html">KV cache optimization</a> — the techniques are about the <em>shape of
+the thinking</em>, not the memory it sits in.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>  REASONING COST  =  chains  ×  tokens_per_chain  ×  cost_per_token
+                       ^              ^                   ^
+                       |              |                   |
+                  path reduction   token reduction    distillation
+                  early stopping   step skipping      SRM
+                  adaptive compute concise CoT        scaffold + SRM
+                  CoT-decoding     constrained CoT    long-context CoT
+                  single-pass      Coconut / latent   (attention + KV cost
+                                   CoT sparsity        of a long chain)
+                                   prompt sequence
+
+  ...and the one that removes the multiplication:
+
+     REASONING CACHING  -&gt;  this problem was already solved. Do not re-solve it.
+
+
+  WHY IT IS ITS OWN PROBLEM
+
+    normal request     300 in  +   200 out                 user sees 100%
+    reasoning request  300 in  + 4,300 out                 user sees ~5%
+                                   ^^^^^
+                                   billed at output rates, invisible,
+                                   and the length is not yours to predict
+
+    Cutting a chain from 4,000 to 1,500 tokens is a ~2.4x bill cut with
+    no model change, no infrastructure change, and no new hardware.</code></pre><p>The asymmetry to internalise: on a normal workload you optimise the <em>serving</em>.
+On a reasoning workload the dominant term is <strong>how much the model chose to
+think</strong>, and most of the leverage is in constraining that rather than in
+serving it faster.</p>
+<hr>
+<h2 id="2-design-the-nineteen-techniques-in-order"><a class="anchor" href="#2-design-the-nineteen-techniques-in-order">#</a>2 · Design — the nineteen techniques, in order</h2><p>Numbered as listed. The <strong>Factor</strong> column is the one that makes this memorable:
+once you know which of the three numbers a technique moves, you know what it
+composes with. Two techniques on the same factor usually overlap; two on
+different factors multiply.</p>
+<p>The <strong>Ready?</strong> column is the one that saves you a quarter. Several of the most
+interesting entries here are research results with no path into your serving
+stack yet, and the page would be dishonest if it listed them flat alongside a
+prompt change you can ship this afternoon.</p>
+<h3 id="group-a-shorten-the-chain-attacks-tokens_per_chain"><a class="anchor" href="#group-a-shorten-the-chain-attacks-tokens_per_chain">#</a>Group A — shorten the chain (attacks `tokens_per_chain`)</h3><div class="table-scroll"><table><thead><tr><th>#</th><th>Technique</th><th>What it does</th><th>Factor</th><th>Ready?</th></tr></thead><tbody><tr><td>1</td><td><strong>CoT token reduction</strong></td><td>The umbrella: any method that makes the same reasoning use fewer tokens. Symbol-heavy notation, dropped filler, no restating the question</td><td>tokens</td><td>✅ Ship today</td></tr><tr><td>2</td><td><strong>CoT step skipping</strong></td><td>Train or prompt the model to omit steps it can do implicitly — the model has learned which intermediate work it does not need to write down</td><td>tokens</td><td>🟡 Prompting yes, trained versions are research</td></tr><tr><td>4</td><td><strong>CoT early stopping</strong></td><td>Halt generation once the answer is determined — monitor answer-token confidence and cut the chain rather than letting it run to its natural end</td><td>tokens</td><td>🟡 Needs logprob access and a decision rule</td></tr><tr><td>6</td><td><strong>Constrained CoT</strong></td><td>Put an explicit length budget in the prompt (&quot;reason in under 100 words&quot;) or enforce it with <code>max_tokens</code> on the reasoning segment</td><td>tokens</td><td>✅ Ship today</td></tr><tr><td>8</td><td><strong>Concise CoT</strong></td><td>Prompt for compact reasoning without a hard numeric cap. Weaker than constrained CoT, but degrades more gracefully on hard items</td><td>tokens</td><td>✅ Ship today</td></tr><tr><td>10</td><td><strong>CoT prompt sequence optimisation</strong></td><td>Order and prune what you put <em>before</em> the reasoning: exemplar choice, instruction placement, dropping few-shot CoT entirely on trained reasoners</td><td>tokens (input and output)</td><td>✅ Ship today</td></tr><tr><td>11</td><td><strong>CoT sparsity</strong></td><td>Exploits the finding that a small minority of reasoning tokens carry most of the causal weight; the rest are elaboration. Prune toward the load-bearing ones</td><td>tokens</td><td>🔴 Research</td></tr></tbody></table></div><h3 id="group-b-fewer-chains-or-fewer-tokens-spent-deciding-attacks-chains"><a class="anchor" href="#group-b-fewer-chains-or-fewer-tokens-spent-deciding-attacks-chains">#</a>Group B — fewer chains, or fewer tokens spent deciding (attacks `chains`)</h3><div class="table-scroll"><table><thead><tr><th>#</th><th>Technique</th><th>What it does</th><th>Factor</th><th>Ready?</th></tr></thead><tbody><tr><td>3</td><td><strong>CoT path reduction</strong></td><td>Self-consistency samples <em>k</em> chains and votes. Path reduction cuts <em>k</em> — adaptively, stopping when the votes agree, instead of always paying for a fixed 5 or 10</td><td>chains</td><td>✅ Ship today</td></tr><tr><td>5</td><td><strong>CoT reasoning decoding</strong></td><td>CoT-decoding: branch on the top-<em>k</em> first tokens and pick the path whose answer tokens are most confident. Elicits reasoning with <em>no</em> CoT prompt at all</td><td>chains</td><td>🟡 Needs custom decoding</td></tr><tr><td>16</td><td><strong>Adaptive inference-time compute</strong></td><td>Spend per item, not per workload: classify difficulty first, give easy items one short chain and hard items a long one or several</td><td>chains + tokens</td><td>✅ Ship today — but see §5: smaller than it looks</td></tr><tr><td>17</td><td><strong>Single-pass long-form reasoning</strong></td><td>One long chain instead of many sampled short ones. The trade is real: one 8k chain is serial and slow; five 1.5k chains are parallel, cheaper in wall-clock, and often more accurate by majority vote</td><td>chains = 1</td><td>✅ It is what R1-style models already do</td></tr></tbody></table></div><h3 id="group-c-make-the-tokens-cheaper-attacks-cost_per_token"><a class="anchor" href="#group-c-make-the-tokens-cheaper-attacks-cost_per_token">#</a>Group C — make the tokens cheaper (attacks `cost_per_token`)</h3><div class="table-scroll"><table><thead><tr><th>#</th><th>Technique</th><th>What it does</th><th>Factor</th><th>Ready?</th></tr></thead><tbody><tr><td>12</td><td><strong>CoT distillation</strong></td><td>Fine-tune a small model on a strong model&#39;s reasoning traces. The clearest current case where distillation genuinely transfers capability</td><td>cost/token</td><td>✅ Ship today — mind the licence</td></tr><tr><td>13</td><td><strong>Long-context CoT</strong></td><td>Not a saving — a cost to manage. A 32k chain is a 32k KV cache that grows for the whole generation, so reasoning length is a <em>memory</em> problem too</td><td>cost/token</td><td>✅ Manage it, via <a href="kv-cache.html">KV cache optimization</a></td></tr><tr><td>14</td><td><strong>Small Reasoning Model (SRM)</strong></td><td>A small model trained specifically to reason, rather than a general small model prompted to. 7B-class SRMs beat much larger general models on narrow reasoning</td><td>cost/token</td><td>✅ Ship today</td></tr><tr><td>18</td><td><strong>Augmented scaffold + SRM</strong></td><td>Give the small model tools instead of asking it to think harder: a calculator, a code interpreter, a verifier, a retriever. Offloads the part it is worst at</td><td>cost/token</td><td>✅ Ship today — best accuracy-per-dollar on this page</td></tr></tbody></table></div><h3 id="group-d-reason-in-latent-space-attacks-tokens_per_chain-radically"><a class="anchor" href="#group-d-reason-in-latent-space-attacks-tokens_per_chain-radically">#</a>Group D — reason in latent space (attacks `tokens_per_chain`, radically)</h3><div class="table-scroll"><table><thead><tr><th>#</th><th>Technique</th><th>What it does</th><th>Factor</th><th>Ready?</th></tr></thead><tbody><tr><td>7</td><td><strong>Coconut</strong></td><td>Chain of Continuous Thought: feed the last hidden state straight back as the next input embedding, so reasoning steps never become tokens. No decode, no detokenise, no token bill for the thinking</td><td>tokens → ~0</td><td>🔴 Research</td></tr><tr><td>9</td><td><strong>Hidden CoT / latent reasoning</strong></td><td>The general family Coconut belongs to: interim steps held as continuous state rather than emitted text</td><td>tokens → ~0</td><td>🔴 Research</td></tr></tbody></table></div><p><strong>Note the naming collision.</strong> &quot;Hidden CoT&quot; is used for two unrelated things.
+The one in this table is <em>latent</em> reasoning — steps that were never tokens.
+The other is <em>provider-hidden</em> reasoning: o1- and R1-style models that generate
+ordinary reasoning tokens, bill you for them, and show you a summary. Those are
+opposites operationally — one removes the cost, the other removes only your
+visibility into it. Be explicit about which you mean.</p>
+<h3 id="the-two-entries-that-are-not-techniques"><a class="anchor" href="#the-two-entries-that-are-not-techniques">#</a>The two entries that are not techniques</h3><div class="table-scroll"><table><thead><tr><th>#</th><th>Entry</th><th>What it actually is</th></tr></thead><tbody><tr><td>15</td><td><strong>Reasoning tokens</strong></td><td>The <em>unit</em>, not a method. The billing line for tokens generated during thinking. They price as output tokens, count against your context window, and occupy KV cache exactly like visible tokens. Everything on this page is measured in them</td></tr><tr><td>19</td><td><strong>Reasoning caching</strong></td><td>Not an optimisation of the reasoning — an elimination of it. If this exact problem was solved before, serve the stored trace or its answer. It is the only entry that can take the cost to zero</td></tr></tbody></table></div><p><strong>Reasoning caching deserves more than a table row</strong>, because it is the highest-
+leverage item here and the one teams reach for last. Three levels, in increasing
+order of both payoff and risk:</p>
+<ol>
+<li><strong>Exact-match answer cache.</strong> Same normalised problem, serve the stored
+answer. Trivially safe, and on workloads with repeated queries — support
+triage, code review of similar diffs, homework-shaped traffic — the hit rate
+is much higher than people expect.</li>
+<li><strong>Prefix cache on the reasoning preamble.</strong> The system prompt and any shared
+scaffolding are identical across requests; that KV is reusable by the normal
+<a href="kv-cache.html">prefix-caching</a> mechanism. Cuts TTFT, not reasoning tokens.</li>
+<li><strong>Semantic / trace cache.</strong> Retrieve a <em>similar</em> solved problem and give its
+trace to the model as an exemplar, so it reasons less from scratch. This is
+the one with real payoff and real danger: near-miss retrieval hands the model
+a confidently wrong template, and the failure looks like careful reasoning.
+Gate it on a similarity threshold you validated, and log every hit.</li>
+</ol>
+<hr>
+<h2 id="3-flow-how-to-actually-choose"><a class="anchor" href="#3-flow-how-to-actually-choose">#</a>3 · Flow — how to actually choose</h2><p>Risk order, not size-of-win order. Everything above the line is reversible and
+costs no accuracy; everything below changes what the model does.</p>
+<pre class="code"><code>  1. Measure first          -&gt; What fraction of your output tokens are REASONING
+     |                         tokens? If it is under ~40%, this whole page is
+     |                         the wrong page. Go optimise something else.
+     v
+  2. Repeated problems?     -&gt; Reasoning caching, exact match first. The only
+     |                         technique that removes the cost rather than
+     |                         reducing it. Check hit rate before assuming zero.
+     v
+  3. Long chains?           -&gt; Constrained / concise CoT. A length budget in the
+     |                         prompt. Free to try, instantly reversible,
+     |                         measurable in an afternoon, and worth ~2.4x.
+     |                         Best effort-to-payoff ratio on the page.
+     v
+  4. Uniform spend?         -&gt; Adaptive inference-time compute. Classify
+     |                         difficulty, route easy items to one short chain.
+     |                         Worth less than intuition suggests -- the hard
+     |                         tail dominates the bill, so the win comes from
+     |                         CAPPING the hard items, not cheapening easy ones.
+     v
+  5. Using self-consistency -&gt; Path reduction: stop sampling when the votes
+     |  with fixed k?          already agree, instead of always paying for k.
+     v
+  ============ everything above is LOSSLESS or cheap to revert ============
+     |
+     v
+  6. Still too expensive?   -&gt; SRM, or distil your own on traces. Real
+     |                         accuracy trade, real evaluation required.
+     v
+  7. SRM not accurate       -&gt; Augmented scaffold: give it a calculator, a code
+     |  enough?                interpreter, a verifier. Almost always better
+     |                         than a bigger model for the same money.
+     v
+  8. Still too expensive?   -&gt; You have a task-fit problem, not a tuning
+                               problem. Either the task does not need reasoning,
+                               or it needs more than you can afford. Say which.</code></pre><p>Step 1 is the one people skip, and skipping it is how teams spend a month on
+this page for a workload where reasoning was 12% of the bill.</p>
+<hr>
+<h2 id="4-uml-where-the-tokens-go"><a class="anchor" href="#4-uml-where-the-tokens-go">#</a>4 · UML — where the tokens go</h2><pre class="mermaid">flowchart TB
+    REQ[&quot;Request arrives&quot;] --&gt; CACHE{&quot;Solved this before?&quot;}
+    CACHE --&gt;|exact hit| SERVE[&quot;Serve stored answer&lt;br/&gt;COST: ~0&quot;]
+    CACHE --&gt;|semantic hit| SEED[&quot;Seed the prompt with a&lt;br/&gt;similar solved trace&lt;br/&gt;RISK: near-miss template&quot;]
+    CACHE --&gt;|miss| DIFF{&quot;Classify difficulty&quot;}
+    SEED --&gt; DIFF
+
+    DIFF --&gt;|easy| SHORT[&quot;1 chain, tight budget&lt;br/&gt;concise + constrained CoT&quot;]
+    DIFF --&gt;|hard| BUDGET[&quot;Long chain, or k samples&lt;br/&gt;adaptive compute decides which&quot;]
+
+    SHORT --&gt; MODEL
+    BUDGET --&gt; MODEL{&quot;Which model?&quot;}
+    MODEL --&gt;|narrow domain| SRM[&quot;SRM or distilled model&lt;br/&gt;+ scaffold: calculator,&lt;br/&gt;interpreter, verifier&quot;]
+    MODEL --&gt;|general| BIG[&quot;Frontier reasoning model&quot;]
+
+    SRM --&gt; GEN[&quot;Generate reasoning tokens&quot;]
+    BIG --&gt; GEN
+    GEN --&gt; KV[(&quot;KV cache grows with&lt;br/&gt;every reasoning token&quot;)]
+    KV --&gt; GEN
+
+    GEN --&gt; STOP{&quot;Answer determined?&quot;}
+    STOP --&gt;|yes, confidently| CUT[&quot;Early stop — cut the chain&quot;]
+    STOP --&gt;|no| GEN
+    CUT --&gt; VERIFY{&quot;Checkable?&quot;}
+    VERIFY --&gt;|yes| CHECK[&quot;Run the test / the code /&lt;br/&gt;the constraint check&quot;]
+    VERIFY --&gt;|no| OUT[&quot;Answer&quot;]
+    CHECK --&gt;|fails| BUDGET
+    CHECK --&gt;|passes| OUT
+    OUT --&gt; STORE[&quot;Write trace to cache&quot;]
+    STORE --&gt; CACHE</pre><p>Two things the diagram is trying to make obvious. <strong>The KV loop is not
+decorative</strong> — every reasoning token is a token in the cache for the rest of the
+generation, so a long chain is a memory cost as well as a token cost, and this
+is where this page and the <a href="kv-cache.html">KV cache page</a> meet. And <strong>the
+verify-retry edge is cheaper than more thinking</strong>: where an answer is checkable,
+checking it costs a fraction of what generating a longer chain costs.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><p>The arithmetic that decides which technique is worth your quarter. Substitute
+your own prices and volumes — the point is the <em>ratios</em>, and they are usually
+decisive before you benchmark anything.</p>
+<pre class="code"><code class="language-python">&quot;&quot;&quot;What each reasoning optimisation is actually worth, in money.
+
+Three factors multiply: chains x tokens_per_chain x cost_per_token. Every
+technique moves one of them. Run this before choosing what to work on --
+most of these decisions are settled by arithmetic.
+&quot;&quot;&quot;
+
+REQS_PER_MONTH = 1_000_000
+IN_TOKENS = 400          # the prompt
+ANSWER_TOKENS = 250      # what the user actually reads
+
+# $ per million tokens. Illustrative -- substitute your provider&#39;s numbers.
+PRICE_IN, PRICE_OUT = 3.0, 15.0
+PRICE_IN_SMALL, PRICE_OUT_SMALL = 0.3, 1.2   # a 7B-class SRM, self-hosted
+
+
+def monthly(chains, reasoning_tokens, p_in=PRICE_IN, p_out=PRICE_OUT,
+            cache_hit=0.0, share=1.0):
+    &quot;&quot;&quot;Cost in $/month.
+
+    chains:           sampled reasoning paths per request
+    reasoning_tokens: thinking tokens per chain -- billed, mostly unread
+    cache_hit:        fraction served from cache at ~zero cost
+    share:            fraction of traffic this configuration applies to
+    &quot;&quot;&quot;
+    live = REQS_PER_MONTH * share * (1 - cache_hit)
+    out = chains * (reasoning_tokens + ANSWER_TOKENS)
+    return live * (IN_TOKENS * p_in + out * p_out) / 1e6
+
+
+base = monthly(chains=1, reasoning_tokens=4000)
+print(f&quot;{&#39;baseline: 1 chain, 4000 reasoning tokens&#39;:&lt;48}${base:&gt;10,.0f}&quot;)
+print(f&quot;{&#39;  of which is thinking nobody reads&#39;:&lt;48}&quot;
+      f&quot;${base * 4000 / 4250:&gt;10,.0f}\n&quot;)
+
+rows = [
+    # (label, cost)
+    (&quot;6+8  constrained/concise CoT -&gt; 1500 tok&quot;,
+     monthly(chains=1, reasoning_tokens=1500)),
+    (&quot;4    early stopping, ~20% of chain cut&quot;,
+     monthly(chains=1, reasoning_tokens=3200)),
+    (&quot;3    self-consistency k=5 (a COST, not saving)&quot;,
+     monthly(chains=5, reasoning_tokens=4000)),
+    (&quot;3    path reduction: adaptive k, avg 2.1&quot;,
+     monthly(chains=2.1, reasoning_tokens=4000)),
+    (&quot;14   SRM at small-model prices&quot;,
+     monthly(chains=1, reasoning_tokens=4000,
+             p_in=PRICE_IN_SMALL, p_out=PRICE_OUT_SMALL)),
+    (&quot;19   reasoning cache, 30% exact-hit rate&quot;,
+     monthly(chains=1, reasoning_tokens=4000, cache_hit=0.30)),
+]
+for label, cost in rows:
+    print(f&quot;{label:&lt;48}${cost:&gt;10,.0f}   {base / cost:&gt;5.2f}x&quot;)
+
+# 16 - adaptive compute: the same workload, split by difficulty.
+adaptive = (
+    monthly(chains=1, reasoning_tokens=400,  share=0.70) +   # easy: barely think
+    monthly(chains=1, reasoning_tokens=2000, share=0.22) +   # medium
+    monthly(chains=3, reasoning_tokens=6000, share=0.08)     # hard: spend freely
+)
+print(f&quot;\n{&#39;16   adaptive compute (70/22/8 split)&#39;:&lt;48}&quot;
+      f&quot;${adaptive:&gt;10,.0f}   {base / adaptive:&gt;5.2f}x&quot;)
+
+# Different factors, so they multiply.
+stacked = (
+    monthly(chains=1, reasoning_tokens=150,  share=0.70, cache_hit=0.30,
+            p_in=PRICE_IN_SMALL, p_out=PRICE_OUT_SMALL) +
+    monthly(chains=1, reasoning_tokens=800,  share=0.22, cache_hit=0.30) +
+    monthly(chains=2, reasoning_tokens=2500, share=0.08, cache_hit=0.30)
+)
+print(f&quot;{&#39;     + concise + SRM on easy + 30% cache&#39;:&lt;48}&quot;
+      f&quot;${stacked:&gt;10,.0f}   {base / stacked:&gt;5.2f}x&quot;)</code></pre><pre class="code"><code>baseline: 1 chain, 4000 reasoning tokens        $    64,950
+  of which is thinking nobody reads             $    61,129
+
+6+8  constrained/concise CoT -&gt; 1500 tok        $    27,450    2.37x
+4    early stopping, ~20% of chain cut          $    52,950    1.23x
+3    self-consistency k=5 (a COST, not saving)  $   319,950    0.20x
+3    path reduction: adaptive k, avg 2.1        $   135,075    0.48x
+14   SRM at small-model prices                  $     5,220   12.44x
+19   reasoning cache, 30% exact-hit rate        $    45,465    1.43x
+
+16   adaptive compute (70/22/8 split)           $    37,950    1.71x
+     + concise + SRM on easy + 30% cache        $     7,592    8.56x</code></pre><p>Three things fall out of that table that are hard to see any other way.</p>
+<p><strong>Self-consistency is a 5× cost multiplier, not a saving.</strong> It buys accuracy.
+Path reduction (row 3, second entry) does not make it cheaper than baseline — it
+makes it cheaper <em>than fixed k</em>. If you are comparing against a single chain, be
+honest that you are choosing to spend more.</p>
+<p><strong>Model price dominates everything else.</strong> A 12× cut from moving to an SRM beats
+every prompt-level technique combined, which is why Group C is where the money
+is and Group A is where the <em>effort</em> usually goes. The catch is that Group A
+costs an afternoon and Group C costs an evaluation programme.</p>
+<p><strong>Adaptive compute is worth less than intuition says, and for an instructive
+reason.</strong> Routing 70% of traffic to short chains sounds like it should be worth
+most of the bill; it returns 1.71×. Break the split down and it is obvious why:
+the hard 8% costs $22,596 of the $37,950 total. <strong>8% of requests carry 60% of
+the bill.</strong> Making the easy majority cheaper barely moves a total the minority
+dominates — so the adaptive-compute win comes from putting a <em>ceiling on the
+hard items</em>, not from economising on the easy ones. Any long-tailed workload
+behaves this way, and it is the most commonly mis-estimated number on this
+page.</p>
+<hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Reasoning length is not yours to control, and that is the actual problem.</strong>
+On a normal workload you know your output length distribution. Here the model
+decides how long to think, per item, and the distribution has a long right tail.
+Two consequences: <strong>budget on p95, never the mean</strong>, and put a hard token cap on
+the reasoning segment even if you never expect to hit it — an uncapped reasoning
+request is an unbounded bill, and one pathological input can produce a chain
+that runs until the context window stops it.</p>
+<p><strong>Cutting the chain and cutting accuracy are the same lever at different
+settings, and the curve has a knee.</strong> Constrained CoT down to 60% of natural
+length is typically free; down to 20% is not, and the loss is concentrated in
+exactly the hard items you bought reasoning for. Measure on a <em>stratified</em> eval
+— overall accuracy hides this completely, because the easy majority is
+unaffected while the hard minority collapses.</p>
+<p><strong>Early stopping needs a decision rule you can defend.</strong> &quot;Stop when the answer
+tokens are confident&quot; sounds clean and is not: models are confidently wrong
+mid-chain, particularly before a backtrack. A reasoning model that was about to
+say &quot;wait, that is wrong&quot; is at its most confident immediately before. If you
+implement early stopping, validate it against full-length runs on the same
+inputs and look specifically at items where the full chain changed its mind.</p>
+<p><strong>Latent reasoning (Coconut, hidden CoT) is genuinely interesting and genuinely
+not deployable.</strong> It is on this page because you will be asked about it and
+because the direction matters — if reasoning steps never become tokens, the
+entire cost model on this page collapses. But there is no serving stack you can
+switch it on in, the models are research artefacts, and the interpretability
+cost is severe: a chain you cannot read is a chain you cannot debug, audit, or
+show anyone. Know it, do not plan around it.</p>
+<p><strong>The scaffold usually beats the model.</strong> The most reliable accuracy-per-dollar
+result in this area is not a reasoning technique at all: give a small model a
+calculator, a code interpreter and a verifier, and it will outperform a much
+larger model reasoning unaided about arithmetic, code behaviour and constraint
+satisfaction. Reasoning tokens spent simulating a computation the machine could
+have <em>run</em> are the most wasteful tokens on this page.</p>
+<p><strong>Reasoning caching has a correctness trap that ordinary caching does not.</strong>
+A prompt cache serves identical inputs. A semantic reasoning cache serves
+<em>similar</em> inputs a trace that solved a different problem — and the model will
+follow that template confidently past the point where the problems diverge. The
+failure is not a wrong lookup that looks wrong; it is careful, fluent reasoning
+to a wrong answer. Threshold conservatively, and treat a trace hit as a <em>hint</em>
+the model may discard, never as an answer.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure</th><th>Looks like</th><th>Actual cause</th></tr></thead><tbody><tr><td>Bill 10× the estimate</td><td>Costs fine in testing, terrible in production</td><td>Budgeted on mean chain length; the tail is long</td></tr><tr><td>One request never returns</td><td>Single hung generation</td><td>No cap on the reasoning segment; it runs to the context limit</td></tr><tr><td>Accuracy fell only on hard items</td><td>Aggregate eval still green</td><td>Chain budget cut past the knee; stratify the eval</td></tr><tr><td>Early stopping made it worse</td><td>Confident wrong answers</td><td>Stopped before a backtrack the full chain would have made</td></tr><tr><td>Cache hits, wrong answers</td><td>Fluent reasoning, wrong conclusion</td><td>Semantic cache served a near-miss trace as a template</td></tr><tr><td>SRM fine on evals, poor in production</td><td>Narrow benchmark, broad traffic</td><td>An SRM is narrow by construction; route to it, do not replace with it</td></tr><tr><td>Optimised for a month, bill unchanged</td><td>All the work landed, nothing moved</td><td>Reasoning was never the dominant term. Step 1 of the flow</td></tr></tbody></table></div><hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What reasoning inference optimization means here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Answers arrive faster and cost less, and on easy questions the model stops pretending to deliberate. The risk they carry is invisible: a cached or truncated chain can be wrong in a way that reads exactly like a careful one.</td></tr><tr><td><strong>Coder</strong></td><td>Cap the reasoning segment. Try a length budget in the prompt before anything architectural — it is an afternoon and it is often 2×. Do not build early stopping without validating against full-length runs.</td></tr><tr><td><strong>Tester</strong></td><td>Stratify by difficulty or you will not see the damage; the easy majority masks a collapse on hard items. Every technique below the line in the flow needs its own eval, and semantic cache hits need logging so a wrong answer can be traced to the trace that caused it.</td></tr><tr><td><strong>System designer</strong></td><td>Reasoning tokens are KV cache too, so chain length is a concurrency limit as well as a bill. Adaptive routing is the highest-leverage component you own; build the difficulty classifier before the clever prompt.</td></tr><tr><td><strong>Architect</strong></td><td>The choice is scaffold-plus-small versus frontier-unaided, and it is a standing decision, not a one-off. Latent reasoning would invalidate this page&#39;s cost model — worth tracking, not worth planning around.</td></tr><tr><td><strong>CEO</strong></td><td>Most of what you pay a reasoning model for is text no customer reads. Typical realistic programmes land 3–10× on the same accuracy; the cheapest of them is noticing that most traffic was never hard.</td></tr><tr><td><strong>Market</strong></td><td>Per-token pricing on invisible tokens is a pricing model under obvious pressure. Providers hiding reasoning traces while billing for them is a live tension, and reasoning-effort controls are the first concession.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><p><strong>&quot;Your reasoning bill tripled after launch. Where do you look first?&quot;</strong>
+Length distribution, not model choice. Reasoning length is model-decided and
+long-tailed, so a mean-based estimate under-predicts badly the moment real
+traffic arrives. Check p95 chain length, confirm there is a hard cap on the
+reasoning segment, then look at whether every request is getting the same budget
+regardless of difficulty — uniform spend on non-uniform traffic is the most
+common cause.</p>
+<p><strong>&quot;Rank constrained CoT, an SRM, and reasoning caching by expected saving.&quot;</strong>
+SRM first, and not close: model price dominates the arithmetic at roughly 12×,
+where no prompt-level technique reaches 3×. Constrained CoT second at about
+2.4×, and <em>first</em> by effort — an afternoon, instantly reversible, so it is what
+you ship while the SRM evaluation runs. Caching last <strong>at a 30% hit rate</strong>,
+where it is only 1.43× — the caveat is the whole answer, because caching is the
+one technique whose value is set entirely by a number you have to measure. At
+80% hit rate it beats everything except the SRM. Anyone who ranks it first
+without quoting a hit rate is guessing.</p>
+<p><strong>&quot;Does self-consistency reduce cost?&quot;</strong>
+No, and this catches people. It multiplies cost by <em>k</em> to buy accuracy. Path
+reduction makes it cheaper than fixed <em>k</em> — stop sampling once the votes agree —
+but it is still more expensive than one chain. If someone lists it as a saving,
+they are comparing against the wrong baseline.</p>
+<p><strong>&quot;What is Coconut and would you use it?&quot;</strong>
+Chain of Continuous Thought: the last hidden state is fed back as the next input
+embedding, so reasoning happens in latent space and never becomes tokens. It is
+the most interesting direction here because it would collapse the entire cost
+model — no decode, no token bill for thinking. And no, not in production: it is
+research, there is no serving path, and a chain you cannot read is one you
+cannot debug or audit.</p>
+<p><strong>&quot;Why is early stopping riskier than it sounds?&quot;</strong>
+Because confidence mid-chain is not a reliable signal of correctness. Reasoning
+models backtrack, and the moment just before a backtrack is often a
+high-confidence wrong state. Any stopping rule has to be validated against
+full-length runs on the same inputs, with specific attention to items where the
+complete chain changed its answer.</p>
+<p><strong>&quot;Small model with tools, or large model reasoning unaided?&quot;</strong>
+Tools, for anything checkable. Reasoning tokens spent simulating arithmetic or
+code execution are the worst-value tokens in the system — the machine can just
+run it. A scaffolded small model typically wins on accuracy-per-dollar for
+arithmetic, code behaviour and constraint satisfaction. The large model earns
+its price on genuinely open-ended problems where there is nothing to call.</p>
+<hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done with this page when you can:</p>
+<ul>
+<li>State the three-factor cost model and place any technique on this list into it</li>
+<li>Say why adaptive compute usually beats every prompt-level technique</li>
+<li>Explain why self-consistency belongs in a cost section, not a savings section</li>
+<li>Name which entries are deployable now and which are research, without hedging</li>
+<li>Describe the specific failure mode of a semantic reasoning cache</li>
+<li>Say why a stratified eval is mandatory once you start cutting chain length</li>
+</ul>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><ul>
+<li><strong>Chain-of-thought</strong> — <a href="https://arxiv.org/abs/2201.11903">Wei et al., <em>Chain-of-Thought Prompting Elicits Reasoning in LLMs</em></a> (2022) — where the whole line starts.</li>
+<li><strong>Self-consistency</strong> — <a href="https://arxiv.org/abs/2203.11171">Wang et al., <em>Self-Consistency Improves Chain of Thought Reasoning</em></a> (2022) — the <em>k</em>-sample method that path reduction trims.</li>
+<li><strong>CoT-decoding</strong> — <a href="https://arxiv.org/abs/2402.10200">Wang &amp; Zhou, <em>Chain-of-Thought Reasoning Without Prompting</em></a> (2024) — reasoning elicited by branching the first token instead of by instruction.</li>
+<li><strong>Constrained CoT</strong> — <a href="https://arxiv.org/abs/2407.19825">Nayab et al., <em>Concise Thoughts: Impact of Output Length on LLM Reasoning</em></a> (2024) — explicit length budgets, and where accuracy starts to go.</li>
+<li><strong>Coconut</strong> — <a href="https://arxiv.org/abs/2412.06769">Hao et al., <em>Training Large Language Models to Reason in a Continuous Latent Space</em></a> (2024) — the latent-reasoning reference point.</li>
+<li><strong>Test-time scaling</strong> — <a href="https://arxiv.org/abs/2408.03314">Snell et al., <em>Scaling LLM Test-Time Compute Optimally</em></a> (2024) — the evidence behind adaptive allocation.</li>
+<li><strong>Distilled reasoning</strong> — <a href="https://arxiv.org/abs/2501.12948"><em>DeepSeek-R1</em></a> (2025) — long-form RL-trained reasoning, and the distilled small models released with it.</li>
+</ul>
+<p>Related: <a href="reasoning-models.html">Reasoning models</a> for whether to reason at all ·
+<a href="kv-cache.html">KV cache optimization</a> for the memory a long chain occupies ·
+<a href="decoding.html">Decoding</a> for sampling and speculative decoding ·
+<a href="distillation-and-pruning.html">Distillation &amp; pruning</a> for the licence caution ·
+<a href="regression-gates.html">Regression gates</a> for the stratified eval this page keeps demanding.</p>
+</article>
+    <div class="pager-row"><a class="pager previous" href="kv-cache.html"><span>previous</span>KV cache optimization</a><a class="pager next" href="orchestration-frameworks.html"><span>next</span>Orchestration frameworks</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-the-nineteen-techniques-in-order">2 · Design — the nineteen techniques, in order</a></li><li class="d3"><a href="#group-a-shorten-the-chain-attacks-tokens_per_chain">Group A — shorten the chain (attacks `tokens_per_chain`)</a></li><li class="d3"><a href="#group-b-fewer-chains-or-fewer-tokens-spent-deciding-attacks-chains">Group B — fewer chains, or fewer tokens spent deciding (attacks `chains`)</a></li><li class="d3"><a href="#group-c-make-the-tokens-cheaper-attacks-cost_per_token">Group C — make the tokens cheaper (attacks `cost_per_token`)</a></li><li class="d3"><a href="#group-d-reason-in-latent-space-attacks-tokens_per_chain-radically">Group D — reason in latent space (attacks `tokens_per_chain`, radically)</a></li><li class="d3"><a href="#the-two-entries-that-are-not-techniques">The two entries that are not techniques</a></li><li class="d2"><a href="#3-flow-how-to-actually-choose">3 · Flow — how to actually choose</a></li><li class="d2"><a href="#4-uml-where-the-tokens-go">4 · UML — where the tokens go</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>
