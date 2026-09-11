@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KV reuse beyond the exact prefix · LLM Handbook</title>
+<meta name="description" content="Prefix caching only fires on an exact prefix, and most real traffic is not one. What it takes to reuse a cached block at a different position, in a different structure, or on a different layer — and why RoPE decides all of it.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li><li><a href="reasoning-models.html">Reasoning models & test-time compute</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="text2sql.html">Text2SQL & structured data</a></li><li><a href="graphrag.html">GraphRAG & knowledge graphs</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li><li><a href="kv-cache.html">KV cache optimization</a></li><li><a href="reasoning-inference-optimization.html">Reasoning inference optimization</a></li><li><a href="kernel-and-attention-optimization.html">Kernel & attention optimization</a></li><li><a href="kv-reuse.html" class="active">KV reuse beyond the exact prefix</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li><li><a href="synthetic-data.html">Synthetic data generation</a></li><li><a href="training-methods.html">The 20 ways to train a model</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li><li><a href="caching.html">Caching strategies</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li><li><a href="learning-paths.html">Learning paths</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="kv-reuse-beyond-the-exact-prefix"><a class="anchor" href="#kv-reuse-beyond-the-exact-prefix">#</a>KV reuse beyond the exact prefix</h1><blockquote>
+<p><strong>The one sentence:</strong> a cached KV block is only valid for the position and
+the history it was computed at — so every technique here is a different
+answer to &quot;can we use it anyway?&quot;, and RoPE is what makes the answer hard.</p>
+</blockquote>
+<p><a href="kv-cache.html">KV cache optimization</a> covers prefix reuse as row 8: hash the
+blocks, match the chain, share the physical pages. That works perfectly and
+fires less often than you would like, because it requires an <strong>exact</strong> prefix.
+Change one token near the front and every block after it is a miss.</p>
+<p>This page is about the cases just outside that boundary, and they are most of
+real traffic: a system prompt that must survive eviction, a code completion
+whose suffix moves every keystroke, a conversation whose middle turns got
+trimmed, a document that appears at a different offset in two different prompts.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>  WHY A CACHED BLOCK IS NOT PORTABLE
+
+  K for token t = RoPE( W_k · x_t , position=t )
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                  the rotation is baked in at position t
+
+     block cached at positions 100..115
+            |
+            |  move it to positions 500..515?
+            v
+     keys carry the WRONG rotation          -&gt; KV SHIFTING fixes this
+     and were computed with the wrong
+     preceding context                      -&gt; KV CORRECTION tries to fix this
+
+
+  THE FOUR THINGS THAT CAN DIFFER, AND WHAT ANSWERS EACH
+
+    position differs ............. KV shifting · RoPE alignment · post-RoPE storage
+    structure differs (FIM) ...... prompt reformulation (EFIM) · suffix correction
+    the block must not be lost ... KV pinning
+    the LAYER differs ............ KV layer propagation · cross-layer fusion
+
+
+  WHAT IT IS WORTH
+
+    exact prefix hit ........... the whole prefill, free
+    shifted/corrected hit ...... the prefill, minus a correction pass
+    miss ....................... the whole prefill, paid</code></pre><p>Everything on this page trades <strong>exactness for hit rate</strong>. The prefix cache is
+bit-exact and rarely fires; each step down this page fires more often and is
+less obviously safe. That ordering is the thing to carry away.</p>
+<hr>
+<h2 id="2-design-position-rope-is-the-whole-problem"><a class="anchor" href="#2-design-position-rope-is-the-whole-problem">#</a>2 · Design — position: RoPE is the whole problem</h2><p>A key is not a property of a token. It is a property of a token <strong>at a
+position</strong>, because RoPE rotates it by an angle derived from that position.
+Move the block and the rotation is wrong; the model reads it as though the text
+were somewhere it is not.</p>
+<h3 id="store-post-rope-or-pre-rope"><a class="anchor" href="#store-post-rope-or-pre-rope">#</a>Store post-RoPE, or pre-RoPE?</h3><p>The first decision, and it is not obvious.</p>
+<div class="table-scroll"><table><thead><tr><th></th><th><strong>Post-RoPE</strong> (store rotated)</th><th><strong>Pre-RoPE</strong> (store unrotated)</th></tr></thead><tbody><tr><td>Decode cost</td><td>None — read and use</td><td>Re-apply RoPE on every read</td></tr><tr><td>Reuse at a new position</td><td>Needs an explicit shift</td><td>Free — just rotate to the new position</td></tr><tr><td>Who does it</td><td>Nearly every serving stack, for the decode cost</td><td>Systems built around aggressive reuse</td></tr></tbody></table></div><p>Most engines store <strong>post-RoPE</strong>, because decode happens far more often than
+reuse and re-rotating the whole cache every step is not worth it. That choice is
+what makes everything below necessary: once the rotation is baked in, moving a
+block means <em>undoing and redoing</em> it.</p>
+<h3 id="kv-shifting"><a class="anchor" href="#kv-shifting">#</a>KV shifting</h3><p>Apply the delta rotation that takes a block from its cached position to its new
+one. Because RoPE is a rotation, composing two of them is a rotation — so the
+correction is cheap and, for the positional part, <strong>exact</strong>.</p>
+<p>This is what lets a cached segment be reused at an arbitrary offset, and it is
+the mechanism behind &quot;RoPE alignment&quot; in segment-sharing systems: the same
+document cached once can serve prompts that place it third, fifth or tenth. It
+is also what StreamingLLM-style rolling caches do when they renumber positions
+after dropping tokens from the front.</p>
+<p><strong>What shifting does not fix</strong> is the other half of the problem. <code>x_t</code> — the
+hidden state the key was computed from — depended on every token <em>before</em> it.
+Shift a block into a prompt with a different preamble and the rotation is now
+right and the content is still wrong.</p>
+<h3 id="kv-correction-and-kv-reversal"><a class="anchor" href="#kv-correction-and-kv-reversal">#</a>KV correction, and KV reversal</h3><p><strong>KV correction</strong> is the family of methods that try to repair that second error
+rather than recompute. The published work under this name is mostly about
+repairing <em>quantization</em> damage rather than <em>position</em> damage — KVLinC pairs a
+Hadamard rotation with lightweight linear correction adapters that compensate
+for the error introduced by quantized keys; other work identifies which pages
+went wrong and selectively recalls them head-wise rather than fixing everything.
+The shared shape is: cheap detector, targeted repair, avoid the full recompute.</p>
+<p><strong>KV reversal</strong> is the one entry on this page with no body of literature behind
+it. Read literally it means undoing a transform already applied to a cached
+block — un-rotating post-RoPE keys back to their pre-RoPE form so they can be
+re-rotated elsewhere, which is the natural implementation of shifting. Treat it
+as a description of that step rather than as a named technique with results, and
+do not go looking for a paper.</p>
+<hr>
+<h2 id="3-design-structure-infill-is-where-prefix-caching-breaks"><a class="anchor" href="#3-design-structure-infill-is-where-prefix-caching-breaks">#</a>3 · Design — structure: infill is where prefix caching breaks</h2><p>Fill-in-the-middle is the workload that defeats prefix caching most completely,
+and code assistants are almost entirely FIM.</p>
+<pre class="code"><code>  a FIM prompt is assembled, not concatenated:
+
+     &lt;PRE&gt; prefix tokens &lt;SUF&gt; suffix tokens &lt;MID&gt; -&gt; model generates here
+
+  so the SUFFIX sits in the middle of the sequence.
+
+  the user types one character in the prefix
+     -&gt; prefix tokens change
+     -&gt; the suffix now follows different text
+     -&gt; the suffix&#39;s KV is invalid
+     -&gt; and the suffix may be thousands of tokens
+
+  changes to prefix and suffix invalidate each other&#39;s cache. Every keystroke
+  is close to a full miss, on the workload with the tightest latency budget
+  anyone has.</code></pre><p><strong>Suffix KV correction</strong> is the direct attack: keep the suffix&#39;s KV and repair
+it for its new preceding context. <strong>EFIM is the indirect one, and it is the one
+that shipped.</strong> Rather than correcting the cache, it reformulates the prompt so
+the shared parts stay at the front and new tokens are appended at the end — the
+shape ordinary prefix caching already handles. Reported: <strong>52% average latency
+reduction and roughly double the throughput</strong> in multi-user serving, with no
+infilling degradation, plus fragment tokenization at training time so subtoken
+generation stays correct.</p>
+<p>The lesson generalises past FIM: <strong>when the cache cannot serve your prompt
+shape, changing the prompt shape is often cheaper and safer than teaching the
+cache new tricks.</strong> A correction scheme is an approximation with a failure mode;
+a reformulation is exact and needs no new evaluation.</p>
+<hr>
+<h2 id="4-design-lifetime-and-depth"><a class="anchor" href="#4-design-lifetime-and-depth">#</a>4 · Design — lifetime and depth</h2><h3 id="kv-pinning"><a class="anchor" href="#kv-pinning">#</a>KV pinning</h3><p>Prefix caching is only as good as its eviction policy, and LRU cannot tell the
+difference between a system-prompt block touched by ten thousand requests and a
+block used once. Pinning marks blocks as protected so they survive.</p>
+<p>This turns out to matter more than the cleverness of the evictor. Work from
+Salesforce Research and UIUC found that <strong>pinning the prompt and evicting
+everything else uniformly at random matched the strongest published eviction
+scorers</strong> across four models and six reasoning tasks, at 32–43% higher vLLM
+throughput. That result is now a baseline any &quot;intelligent cache compression&quot;
+claim has to beat — and it is a useful piece of scepticism to carry into a
+vendor conversation.</p>
+<p>It is also becoming a first-class feature rather than a hack: vLLM has an open
+design for a pluggable block-eviction policy with protected positions, using
+<strong>attention-sink protection</strong> as the reference implementation — the same sinks
+the <a href="kv-cache.html">KV cache page</a> warns you never to evict.</p>
+<p><strong>Pin the system prompt. It is one line of policy and it is close to free.</strong></p>
+<h3 id="kv-layer-propagation"><a class="anchor" href="#kv-layer-propagation">#</a>KV layer propagation</h3><p>The last axis. Adjacent layers produce similar KV states, so some of them can be
+derived rather than computed. <a href="kv-cache.html">CLA</a> shares one cache between
+adjacent layers; cross-layer <em>fusion</em> goes further and reconstructs upper-layer
+KV from lower ones — one published design reuses top-half keys from a middle
+layer and values from a bottom layer, cutting I/O by about a third, with
+reported KV memory halved at perplexity no worse than a standard decoder.</p>
+<p>Note where RoPE reappears: because keys are rotated, a reconstruction cannot be
+folded into a matrix multiply the way values can, so it needs its own kernel.
+Every technique on this page eventually runs into the same fact.</p>
+<hr>
+<h2 id="5-flow-which-reuse-applies-to-you"><a class="anchor" href="#5-flow-which-reuse-applies-to-you">#</a>5 · Flow — which reuse applies to you</h2><pre class="code"><code>  1. Is your prefix genuinely shared and unchanging?
+     |    yes -&gt; plain prefix caching. Exact, free, already in your server.
+     |           PIN the system prompt while you are there.
+     v    no
+  2. Is it the same TEXT at a different POSITION?
+     |    yes -&gt; KV shifting / RoPE alignment. Exact for position,
+     |           NOT exact for preceding context. Evaluate it.
+     v    no
+  3. Is it an infill / FIM workload?
+     |    yes -&gt; reformulate the prompt (EFIM) before attempting
+     |           suffix correction. Cheaper and exact.
+     v    no
+  4. Are you evicting things you keep needing?
+     |    yes -&gt; pinning, and measure against random-plus-pinning
+     |           before believing any scorer.
+     v    no
+  5. Out of memory rather than out of hit rate?
+          -&gt; this is the wrong page. KV cache optimization is.</code></pre><p>Step 5 is the common mistake. Reuse raises <strong>hit rate</strong> and cuts <strong>TTFT</strong>; it
+does not shrink a resident cache. If your problem is that you cannot fit enough
+concurrent requests, nothing here helps.</p>
+<hr>
+<h2 id="6-uml-a-cached-block-meeting-a-new-request"><a class="anchor" href="#6-uml-a-cached-block-meeting-a-new-request">#</a>6 · UML — a cached block meeting a new request</h2><pre class="mermaid">flowchart TB
+    REQ[&quot;New request&quot;] --&gt; HASH{&quot;Exact prefix hash hit?&quot;}
+    HASH --&gt;|yes| SERVE[&quot;Reuse blocks as-is&lt;br/&gt;BIT-EXACT · free&quot;]
+    HASH --&gt;|no| SAME{&quot;Same text, different position?&quot;}
+
+    SAME --&gt;|yes| ROT[&quot;KV SHIFTING&lt;br/&gt;apply the delta rotation&quot;]
+    ROT --&gt; CTX{&quot;Same preceding context?&quot;}
+    CTX --&gt;|yes| SERVE
+    CTX --&gt;|no| CORR[&quot;KV CORRECTION&lt;br/&gt;repair, or recompute the block&lt;br/&gt;APPROXIMATE — needs an eval&quot;]
+
+    SAME --&gt;|no| SHAPE{&quot;Infill / FIM shape?&quot;}
+    SHAPE --&gt;|yes| EFIM[&quot;Reformulate the prompt&lt;br/&gt;shared parts to the front&lt;br/&gt;EXACT — no eval needed&quot;]
+    SHAPE --&gt;|no| MISS[&quot;Full prefill&quot;]
+
+    EFIM --&gt; HASH
+    CORR --&gt; SERVE
+    MISS --&gt; WRITE[&quot;Write blocks&quot;]
+    SERVE --&gt; WRITE
+    WRITE --&gt; PIN{&quot;Hot and shared?&quot;}
+    PIN --&gt;|yes| PINNED[(&quot;PINNED — exempt from eviction&quot;)]
+    PIN --&gt;|no| LRU[(&quot;LRU pool&quot;)]
+    LRU --&gt; EVICT[&quot;Evicted when memory is tight&quot;]</pre><p>The two edges worth tracing are the ones that reach <code>SERVE</code>. One arrives
+bit-exact and needs nothing from you. The other arrives through <code>CORR</code>, carrying
+an approximation — which is why the boxes are labelled with their exactness
+rather than their speed.</p>
+<hr>
+<h2 id="7-depth-the-senior-layer"><a class="anchor" href="#7-depth-the-senior-layer">#</a>7 · Depth — the senior layer</h2><p><strong>A cached block encodes two things, and everyone remembers one of them.</strong>
+Position is the visible one, RoPE is the obvious culprit, and shifting fixes it
+cleanly because rotations compose. The invisible one is that <code>x_t</code> was computed
+from the entire preceding context — so a block is only truly valid after the
+<em>same history</em>. Any scheme that reuses a block under a different prefix is
+approximating, whatever it says on the label, and the approximation is worst
+exactly where the preceding context mattered most.</p>
+<p><strong>Reuse and capacity are different budgets.</strong> Everything here improves hit rate,
+which improves TTFT and reduces prefill compute. None of it makes a resident
+cache smaller. Teams routinely adopt aggressive reuse to fix an OOM and are
+surprised when the OOM is unchanged — the blocks they now share were never the
+ones exhausting memory.</p>
+<p><strong>Prefer reformulation to correction.</strong> EFIM is the model case: faced with a
+prompt shape the cache could not serve, the winning move was to change the shape
+so the existing exact mechanism applied, not to build an approximate mechanism
+for the old shape. A reformulation needs no new evaluation because it changes no
+arithmetic. Reach for correction only when you cannot control the prompt.</p>
+<p><strong>Pinning beats scoring, and that should update your priors.</strong> The strongest
+result on this page is that protecting the prompt and evicting the rest at
+random matched the best published eviction scorers. Structural knowledge you
+already have — <em>this block is the system prompt, it will be used again</em> — is
+worth more than a learned estimate of importance. Before evaluating any
+sophisticated eviction policy, implement pinning and make the policy beat it.</p>
+<p><strong>FP16 divergence is lurking under all of this.</strong> Reusing a block instead of
+recomputing it changes matmul shapes, and floating-point addition is not
+associative, so a cache hit and a cache miss can produce outputs that differ in
+the last decimal place even when the reuse is &quot;exact&quot;. That is the same caveat
+the <a href="kv-cache.html">KV cache page</a> raises for prefix caching, and it bites
+harder here because there are more paths to the same answer.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure</th><th>Looks like</th><th>Actual cause</th></tr></thead><tbody><tr><td>Prefix cache hit rate near zero on a code assistant</td><td>Mechanism works in tests, never fires live</td><td>FIM — prefix and suffix invalidate each other every keystroke</td></tr><tr><td>Shifted block gives subtly wrong answers</td><td>Fluent, plausible, wrong detail</td><td>Rotation corrected, preceding context was not</td></tr><tr><td>Aggressive reuse did not fix the OOM</td><td>Hit rate up, memory unchanged</td><td>Reuse raises hit rate; it does not shrink a resident cache</td></tr><tr><td>Clever evictor beats LRU but not by much</td><td>Modest gain for a lot of machinery</td><td>Compare against random-plus-pinning, not LRU</td></tr><tr><td>System prompt keeps getting evicted</td><td>TTFT spikes under load</td><td>No pinning; LRU cannot see that a block is structural</td></tr><tr><td>Outputs differ run to run at temperature 0</td><td>Non-determinism nobody asked for</td><td>Different reuse paths, different matmul shapes, FP non-associativity</td></tr></tbody></table></div><hr>
+<h2 id="8-from-each-seat"><a class="anchor" href="#8-from-each-seat">#</a>8 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What KV reuse means here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>The second question about the same document is fast, and the first is not. On a code assistant it is the difference between a completion that feels instant and one that does not.</td></tr><tr><td><strong>Coder</strong></td><td>Two things you own: pin the system prompt, and do not fight your cache over prompt shape — put the stable parts first and append. That is most of the available win and neither needs a paper.</td></tr><tr><td><strong>Tester</strong></td><td>Anything downstream of a correction step is approximate and needs its own eval. Also assert on <em>scores</em>, not exact strings: reuse paths change matmul shapes and outputs can differ in the last decimal.</td></tr><tr><td><strong>System designer</strong></td><td>Reuse is a TTFT and prefill-compute lever, not a capacity lever. Budget it separately from KV memory, and remember a hit only happens if routing sends the request to the replica holding the block.</td></tr><tr><td><strong>Architect</strong></td><td>Post-RoPE versus pre-RoPE storage is a real fork: it trades decode cost against reuse flexibility, and it is hard to reverse once the kernels assume one. Decide it deliberately.</td></tr><tr><td><strong>CEO</strong></td><td>On shared-prompt workloads this is the cheapest large win available — the prefill you do not repeat. The FIM number is the striking one: roughly half the latency, double the throughput, by rewriting the prompt.</td></tr><tr><td><strong>Market</strong></td><td>&quot;Intelligent cache compression&quot; is a crowded claim. The question that separates the real ones: did you beat random eviction with the prompt pinned? Several published scorers do not.</td></tr></tbody></table></div><hr>
+<h2 id="9-interview-questions"><a class="anchor" href="#9-interview-questions">#</a>9 · Interview questions</h2><p><strong>&quot;Why can&#39;t you move a cached KV block to a different position?&quot;</strong>
+Two reasons, and most people give one. The visible one is RoPE: the key was
+rotated by an angle derived from its position, so at a new position the rotation
+is wrong — fixable by composing the delta rotation, which is what KV shifting
+does, and exact because rotations compose. The invisible one is that the hidden
+state the key came from depended on every preceding token, so a block moved into
+a different context is wrong in a way no rotation fixes. Anything that reuses
+across different histories is approximating.</p>
+<p><strong>&quot;Your code-completion product has a 2% prefix cache hit rate. Why?&quot;</strong>
+It is almost certainly FIM. The suffix sits in the middle of the assembled
+sequence, so a single keystroke in the prefix invalidates the suffix&#39;s KV and
+vice versa — near-total miss on every edit, on the workload with the tightest
+latency budget. The fix that shipped is reformulation rather than correction:
+restructure the prompt so shared parts stay at the front and new tokens append,
+which is the shape ordinary prefix caching already serves. Roughly half the
+latency and double the throughput, reported, with no infilling degradation.</p>
+<p><strong>&quot;Rank pinning against a state-of-the-art eviction policy.&quot;</strong>
+Pinning first, and the evidence is stronger than it sounds: protecting the
+prompt and evicting everything else uniformly at random matched the best
+published scorers across four models and six reasoning tasks at 32–43% higher
+throughput. Structural knowledge beats learned importance here. The correct
+professional response to any cache-compression pitch is &quot;did you beat
+random-plus-pinning&quot;, because several published methods do not.</p>
+<p><strong>&quot;Post-RoPE or pre-RoPE KV storage?&quot;</strong>
+Post-RoPE for almost everyone: decode reads the cache constantly and reuse is
+comparatively rare, so you do not want to re-rotate on every read. Pre-RoPE
+makes reuse at arbitrary positions free, which is worth it only if aggressive
+segment sharing is your main workload. It is a hard fork to reverse, because the
+kernels get written against one assumption.</p>
+<p><strong>&quot;Does KV reuse help with out-of-memory?&quot;</strong>
+No, and this is the common planning error. Reuse raises hit rate, which cuts
+TTFT and prefill compute. The blocks that get shared were not the ones
+exhausting memory. If you are OOM, the levers are on the KV cache page —
+GQA, quantization, paging, eviction — not this one.</p>
+<hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done with this page when you can:</p>
+<ul>
+<li>Name the two things a cached block encodes, and say which one shifting fixes</li>
+<li>Explain why FIM defeats prefix caching, and why reformulation beat correction</li>
+<li>Say why pinning is the first eviction policy to implement, and what it beat</li>
+<li>Argue post-RoPE versus pre-RoPE storage from the decode/reuse trade</li>
+<li>Separate the techniques on this page into exact and approximate without hedging</li>
+<li>Say why none of this fixes an OOM</li>
+</ul>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><ul>
+<li><strong>EFIM</strong> — <a href="https://arxiv.org/abs/2505.21889"><em>Efficient Serving of LLMs for Infilling Tasks with Improved KV Cache Reuse</em></a> — the prompt reformulation, and the clearest statement of why FIM breaks prefix caching.</li>
+<li><strong>Pinning</strong> — <a href="https://arxiv.org/abs/2605.18053"><em>Protection Is (Nearly) All You Need: Structural Protection Dominates Scoring in Globally Capped KV Eviction</em></a> (2026) — the random-plus-pinning baseline.</li>
+<li><strong>KV shifting</strong> — <a href="https://arxiv.org/abs/2411.19574"><em>KV Shifting Attention Enhances Language Modeling</em></a> (2024) for the architectural sense of the term; segment-sharing systems for the RoPE-alignment sense.</li>
+<li><strong>KV correction</strong> — <a href="https://arxiv.org/abs/2510.05373"><em>KVLinC: KV Cache Quantization with Hadamard Rotation and Linear Correction</em></a>, and <a href="https://arxiv.org/abs/2505.13109"><em>FreeKV</em></a> for query-based identification and head-wise recall.</li>
+<li><strong>Cross-layer reuse</strong> — <a href="https://arxiv.org/abs/2512.03870"><em>Reconstructing KV Caches with Cross-Layer Fusion</em></a>, and <a href="kv-cache.html">CLA</a> for the simpler sharing version.</li>
+<li><strong>FP divergence</strong> — <a href="https://arxiv.org/abs/2604.15409"><em>The Illusion of Equivalence: Systematic FP16 Divergence in KV-Cached Autoregressive Inference</em></a> (2026) — why &quot;exact&quot; reuse still moves the last decimal.</li>
+</ul>
+<p>Related: <a href="kv-cache.html">KV cache optimization</a> for capacity, paging and the
+sinks this page keeps pinning · <a href="kernel-and-attention-optimization.html">Kernel &amp; attention optimization</a>
+for the layer below · <a href="transformers.html">Transformers</a> for RoPE itself ·
+<a href="caching.html">Caching</a> for the application-level cache above all of this.</p>
+</article>
+    <div class="pager-row"><a class="pager previous" href="kernel-and-attention-optimization.html"><span>previous</span>Kernel & attention optimization</a><a class="pager next" href="orchestration-frameworks.html"><span>next</span>Orchestration frameworks</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-position-rope-is-the-whole-problem">2 · Design — position: RoPE is the whole problem</a></li><li class="d3"><a href="#store-post-rope-or-pre-rope">Store post-RoPE, or pre-RoPE?</a></li><li class="d3"><a href="#kv-shifting">KV shifting</a></li><li class="d3"><a href="#kv-correction-and-kv-reversal">KV correction, and KV reversal</a></li><li class="d2"><a href="#3-design-structure-infill-is-where-prefix-caching-breaks">3 · Design — structure: infill is where prefix caching breaks</a></li><li class="d2"><a href="#4-design-lifetime-and-depth">4 · Design — lifetime and depth</a></li><li class="d3"><a href="#kv-pinning">KV pinning</a></li><li class="d3"><a href="#kv-layer-propagation">KV layer propagation</a></li><li class="d2"><a href="#5-flow-which-reuse-applies-to-you">5 · Flow — which reuse applies to you</a></li><li class="d2"><a href="#6-uml-a-cached-block-meeting-a-new-request">6 · UML — a cached block meeting a new request</a></li><li class="d2"><a href="#7-depth-the-senior-layer">7 · Depth — the senior layer</a></li><li class="d2"><a href="#8-from-each-seat">8 · From each seat</a></li><li class="d2"><a href="#9-interview-questions">9 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

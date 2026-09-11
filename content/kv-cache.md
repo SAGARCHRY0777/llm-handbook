@@ -736,4 +736,6 @@ Related: [Transformers](transformers.html) for what the cache is ·
 workload that fills this cache fastest — a 32k reasoning chain is 32k of KV ·
 [Kernel & attention optimization](kernel-and-attention-optimization.html) for the
 layer under rows 9 and 10: the sparse-attention schemes that decide which scores
-get computed at all.
+get computed at all ·
+[KV reuse beyond the exact prefix](kv-reuse.html) for what to do when row 8 does
+not fire — shifting, correction, infill, and pinning.

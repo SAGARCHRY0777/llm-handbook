@@ -70,6 +70,12 @@ model advertised at 128k may have been trained at 8k and stretched. It will
 accept 128k tokens; whether it uses them well is an empirical question about
 that specific model.
 
+Those four are **context extension** — stretching a model past what it was
+trained on. Worth separating from *architectural* long context: extension takes
+a checkpoint and reinterprets its positions, so the quality question is always
+"how far past its training length has this been pushed", while an architecture
+built for length has a different failure mode entirely.
+
 **Advanced — measure it yourself, because vendor claims are about acceptance.**
 The standard probe is **needle in a haystack**: place a specific fact at varying
 depths in contexts of varying lengths, then ask for it. It gives a two-dimensional
@@ -79,6 +85,31 @@ Its limitation matters too: retrieving one distinctive sentence is much easier
 than *reasoning over* dispersed information. A model can score perfectly on
 needle-in-a-haystack and still fail to compare three facts scattered through the
 same document. Test with the multi-fact variant if that is your use case.
+
+**"Infinite context" is a claim about memory, not about recall.** The
+architectures marketed this way — compressive-memory schemes that fold older
+tokens into a fixed-size state alongside a local attention window, streaming
+caches that keep attention sinks plus a rolling window — all share one property:
+**bounded state**. They will accept an unbounded stream without running out of
+memory, which is genuinely useful for a long-running agent or a transcript.
+
+What they do not offer is unbounded *recall*. Once a token has been folded into
+a fixed-size summary it cannot be recovered verbatim, so the failure mode is a
+model that keeps answering fluently about material it can no longer actually
+see. Read "infinite context" as "never OOMs", and then probe recall separately —
+it is a different claim and it is the one you were buying.
+
+**Shallow prefill is the newer idea worth knowing**, because it exploits an
+asymmetry nobody used for years: deeper layers hold progressively more redundant
+KV, and upper-layer attention contributes less to *gathering* prefill
+information than lower-layer attention does. So run prefill over fewer layers
+than decode — shallow prefill, deep decoding. It attacks all three coupled
+long-context costs at once, because prefill depth drives TTFT, and the KV you
+never computed is KV you never store or read.
+
+Note how it composes with the rest of this page: sparsity cuts prefill *width*
+(which keys), shallow prefill cuts prefill *depth* (which layers). Different
+terms, so they multiply.
 
 ---
 

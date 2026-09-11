@@ -221,6 +221,61 @@ Three things to keep straight:
   fine inside a kernel that knows its own value range and wrong as a global
   default.
 
+### Whole-layer fused kernels — megakernels
+
+The launch-overhead version of the same asymmetry argument. At batch size 1 a
+decode step is hundreds of small kernel launches, and each launch is fixed
+overhead on work that is already bandwidth-bound. A **megakernel** fuses the
+entire forward pass — all layers, sometimes all GPUs — into one persistent
+kernel launch.
+
+What that buys is not arithmetic, it is the gaps between arithmetic: no launch
+overhead, fine-grained software pipelining across operations that used to be
+separate kernels, and compute overlapped with communication rather than
+sequenced after it. Reported results range from 1.2–6.7× end-to-end latency
+depending on the shape; one published system takes per-token decode on a single
+A100 from 14.5 ms to 12.5 ms, and HazyResearch's Llama megakernel reports
+reaching 78% of H100 memory bandwidth at batch 1 — which is close to the
+theoretical ceiling for a bandwidth-bound workload.
+
+The catch is generality. A megakernel is compiled for a model shape, a batch
+size and a GPU, so the work has moved into compilers that generate one on
+demand rather than into kernels written by hand.
+
+### Kernel synthesis
+
+Which is the next step: **have a model write the kernel.** KernelBench framed
+it as a benchmark — 250 PyTorch workloads, graded first on whether the generated
+kernel compiles and matches the reference, then on whether it is actually
+faster. That two-stage grading is the important part, because a kernel that is
+fast and wrong is worse than no kernel.
+
+It works better than it has any right to. NVIDIA reported automatically
+generating attention kernels with an R1-based workflow plus inference-time
+scaling, hitting 100% correctness on KernelBench Level 1 and 96% on Level 2;
+Meta's KernelLLM fine-tuned an 8B model to translate PyTorch modules into Triton
+and is competitive on the Triton variant despite its size.
+
+For an application engineer this is not yet a tool, it is a trajectory — and the
+relevant consequence is the one from the section above: **if kernels become
+cheap to generate, "is there a kernel tuned for my exact shape and GPU" stops
+being a question you answer by waiting for a library release.**
+
+### A note on the algebraic integer number system
+
+It appears on inference-optimization taxonomies and it is worth being clear:
+this is a **digital signal processing** technique, not an LLM one. Algebraic
+integer quantization represents values in a ring of algebraic integers so that
+transforms like the DCT can be computed **error-free**, with rounding deferred
+to a single conversion at the end — the same family as number-theoretic
+transforms and Fermat number transforms.
+
+The connection to this page is conceptual rather than practical: it is the
+extreme version of the BF16xN trade, exact arithmetic bought by representing one
+number as several cheaper ones. But there is no body of work applying it to
+transformer inference, no kernel you can switch on, and nothing to evaluate. If
+you meet it on a list, that is the honest thing to say about it.
+
 ---
 
 ## 4 · UML — where each one intervenes
@@ -473,6 +528,7 @@ You are done with this page when you can:
 - **Ozaki scheme** — [*DGEMM without FP64 Arithmetic*](https://arxiv.org/abs/2508.00441) — the same splitting idea one precision further down.
 
 Related: [KV cache optimization](kv-cache.html) for the bytes, including OSCAR ·
+[KV reuse beyond the exact prefix](kv-reuse.html) for the work you can skip entirely ·
 [Quantization](quantization.html) for the weight side and for what "lossless"
 means · [Transformers](transformers.html) for why attention is quadratic in the
 first place · [Long context](long-context.html) for what breaks at length ·
