@@ -261,6 +261,31 @@ relevant consequence is the one from the section above: **if kernels become
 cheap to generate, "is there a kernel tuned for my exact shape and GPU" stops
 being a question you answer by waiting for a library release.**
 
+### Prefill micro-optimisations
+
+Three small ones that share a premise: **prefill computes a great deal it never
+uses.** They are worth knowing mostly because they are easy to overlook and each
+one is free.
+
+- **Last-layer FFN skipping.** Prefill runs the full stack over every prompt
+  token, but only the *final* position's logits are needed to produce the first
+  output token. The final layer's FFN, computed for every other position, is
+  discarded. Skipping it is exact — the discarded values are provably unused —
+  and on a long prompt it removes a full FFN pass over thousands of tokens.
+- **First-layer precomputation.** Layer 0 consumes embeddings directly, so for a
+  fixed prefix its inputs are fixed. Anything derived from them can be computed
+  once and stored rather than recomputed per request — the same reasoning as
+  prefix caching, applied to the one layer whose input does not depend on
+  anything upstream.
+- **First-token handling.** Position 0 attends only to itself, so its softmax is
+  degenerate and its attention output is just its own value vector. Kernels that
+  special-case it skip a pass; it is a small win that matters mainly because the
+  first token is also, on most models, the attention sink that nothing may evict.
+
+The general shape is worth more than the three items: **prefill is a batch
+computation being used for one scalar answer, so ask what is discarded.** Most
+of the easy wins in prefill are the things that were computed and thrown away.
+
 ### A note on the algebraic integer number system
 
 It appears on inference-optimization taxonomies and it is worth being clear:

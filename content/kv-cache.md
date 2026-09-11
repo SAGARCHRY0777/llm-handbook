@@ -302,6 +302,7 @@ queue. They belong on this page because every one of them is a policy over the
 |---|---|---|---|
 | **Continuous batching** | Re-form the batch every decode step instead of running one to completion: finished requests leave, queued ones join immediately | The single largest throughput win in serving — often 2–3× over static batching | Only possible because a request's entire state *is* its KV blocks, so joining and leaving is free |
 | **Chunked prefill** | Split a long prompt into fixed chunks and interleave them with ongoing decode steps | Stops one 32k prompt stalling every other user's tokens; large improvement in tail TTFT | Slightly worse TPOT for everyone, because decode steps now share the batch with prefill work |
+| **Layered prefill** | Pipeline prefill *by layer group* rather than by token chunk: some layer groups process the incoming prefill while the rest run decode-only, and the prefill advances group by group across iterations | Keeps decode stall-free without token-level partitioning | Each layer sees the prompt once, so it avoids the memory amplification chunking causes — at the cost of a more complex scheduler |
 | **Preemption — swap** | Under pressure, move a low-priority request's blocks to CPU RAM and bring them back later | Keeps the request alive; no recompute | PCIe is roughly 30× slower than HBM, so the round trip is visible |
 | **Preemption — recompute** | Discard the blocks entirely and re-prefill the prompt when the request resumes | No memory held at all while preempted | Pays full prefill again. Usually cheaper than swapping for short prompts, worse for long ones |
 | **Cache-aware routing** | Send a request to the replica that already holds its prefix | Turns prefix reuse from a mechanism into an actual hit rate | Fights load balancing: the replica with the cache may not be the least loaded one |
@@ -566,6 +567,15 @@ in its context. Average-case evals will not find it. You need a needle-style pro
 at your real context length, and it belongs in CI — see
 [regression gates](regression-gates.html).
 
+**KIVI is where the K/V asymmetry became actionable.** The distributions are
+not alike: key-cache outliers cluster along **channels**, value-cache outliers
+do not. So KIVI quantizes **keys per-channel and values per-token** — different
+grouping axes for the two tensors, from one analysis of where the outliers
+actually sit. Tuning-free and plug-and-play at 2-bit, reporting ~2.6× lower peak
+memory, up to 4× larger batches and 2.35–3.47× throughput. Read it alongside
+OSCAR above: KIVI found the right *axes*, OSCAR found the right *rotation*, and
+both are answers to the same question of what INT2 destroys.
+
 **Quantization asymmetry: keys tolerate less than values.** Keys go through the
 softmax, so error in a key perturbs the entire attention *distribution*, while
 error in a value is averaged over the attended set. Implementations that quantize
@@ -600,6 +610,15 @@ mitigates rather than solves. The cost of splitting them is that the KV cache
 now has to cross a network between prefill and decode pools — which makes cache
 transfer bandwidth a first-class capacity term, and is the main reason the
 approach only pays off at scale.
+
+**KV sharding is the axis the formula leaves out.** Everything above sizes the
+cache for one device. Across a tensor-parallel group the KV heads are split with
+the attention heads, so each rank holds its own slice and per-rank memory falls
+with the degree — which is why a model that will not fit at TP=1 may fit
+comfortably at TP=4 with no compression at all. Two caveats: with GQA the KV
+heads may be fewer than the TP degree, in which case ranks duplicate rather than
+divide and the saving stops; and sharding moves the cost to interconnect, so the
+win is real on NVLink and much less so across nodes.
 
 **"Support 128k context" and "serve N concurrent users" are one budget.** The
 most common planning failure is treating them as separate requirements owned by
@@ -738,4 +757,6 @@ workload that fills this cache fastest — a 32k reasoning chain is 32k of KV ·
 layer under rows 9 and 10: the sparse-attention schemes that decide which scores
 get computed at all ·
 [KV reuse beyond the exact prefix](kv-reuse.html) for what to do when row 8 does
-not fire — shifting, correction, infill, and pinning.
+not fire — shifting, correction, infill, and pinning ·
+[Reading a model config](model-shape.html) for the architectures that break the
+formula above: cross-layer KV sharing, K=V, and variable width.

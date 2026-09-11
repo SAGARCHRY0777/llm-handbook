@@ -1,0 +1,396 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reading a model config · LLM Handbook</title>
+<meta name="description" content="Every field in config.json is an inference cost you inherit and cannot tune. What the modern non-uniform ones mean — gated attention, per-layer embeddings, variable width, partial RoPE, cross-layer KV sharing — and how to read a config as a bill.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li><li><a href="reasoning-models.html">Reasoning models & test-time compute</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="text2sql.html">Text2SQL & structured data</a></li><li><a href="graphrag.html">GraphRAG & knowledge graphs</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li><li><a href="kv-cache.html">KV cache optimization</a></li><li><a href="reasoning-inference-optimization.html">Reasoning inference optimization</a></li><li><a href="kernel-and-attention-optimization.html">Kernel & attention optimization</a></li><li><a href="kv-reuse.html">KV reuse beyond the exact prefix</a></li><li><a href="model-shape.html" class="active">Reading a model config</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li><li><a href="synthetic-data.html">Synthetic data generation</a></li><li><a href="training-methods.html">The 20 ways to train a model</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li><li><a href="caching.html">Caching strategies</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li><li><a href="learning-paths.html">Learning paths</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="reading-a-model-config"><a class="anchor" href="#reading-a-model-config">#</a>Reading a model config</h1><blockquote>
+<p><strong>The one sentence:</strong> you can tune the server, but you inherit the
+architecture — so the highest-leverage optimisation decision most teams make
+is which checkpoint they pick, and it is usually made without reading the
+config file.</p>
+</blockquote>
+<p>Every other page in this module is about a knob. This one is about the numbers
+that were fixed before you arrived. <a href="kv-cache.html">KV cache optimization</a>
+already tells you to check <code>num_key_value_heads</code> against
+<code>num_attention_heads</code> — this is the full version of that advice, including the
+fields that are new enough that most people skip them.</p>
+<p>The reason it matters now specifically: <strong>the uniformity assumption is
+breaking.</strong> For eight years a transformer was N identical blocks, and you could
+describe one and multiply. Recent architectures vary width by depth, apply RoPE
+to a fraction of dimensions, share KV between layers, keep some experts always
+on, and hold embeddings per layer. A config read as &quot;N identical blocks&quot; now
+gives the wrong cost.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>  WHAT A CONFIG COSTS YOU, AND WHERE IT LANDS
+
+  FIELD                           WHAT IT DECIDES                LANDS ON
+  ------------------------------  -----------------------------  -----------
+  num_attention_heads             attention compute              TTFT
+  num_key_value_heads             KV CACHE SIZE (GQA/MQA)        concurrency
+  head_dim x num_key_value_heads  bytes per token per layer      concurrency
+  num_hidden_layers               depth, serial decode steps     TPOT
+  intermediate_size               most of the weights            VRAM
+  vocab_size                      unembed + draft LM head cost   TPOT
+  max_position_embeddings         what it was TRAINED at         quality
+  rope_scaling                    how far it has been STRETCHED  quality
+
+  ...and the newer ones that break the &quot;N identical blocks&quot; read:
+
+  partial rotary factor    RoPE on a FRACTION of head dims   -&gt; smaller rope cache
+  per-layer embeddings     embeddings per layer, offloadable -&gt; VRAM != params
+  variable width           intermediate_size differs by depth-&gt; cannot multiply
+  cross-layer KV sharing   some layers have no KV at all     -&gt; cache != layers
+  shared / dense experts   some experts always active        -&gt; active != total
+  attention gate           a sigmoid gate after SDPA         -&gt; quality, ~2% cost
+
+
+  THE READ THAT MATTERS MOST
+
+     total parameters  is a marketing number
+     ACTIVE parameters is your compute bill
+     KV bytes/token    is your concurrency bill
+     none of the three can be derived from the other two</code></pre><hr>
+<h2 id="2-design-the-six-that-are-new"><a class="anchor" href="#2-design-the-six-that-are-new">#</a>2 · Design — the six that are new</h2><h3 id="gated-attention"><a class="anchor" href="#gated-attention">#</a>Gated attention</h3><p>A head-specific, elementwise <strong>sigmoid gate applied to the SDPA output</strong>. One
+line of architecture; the 2025 NeurIPS best-paper result, and shipped in
+Qwen3-Next.</p>
+<p>What it buys is not speed — it costs <strong>under 2% latency</strong>. It buys training
+stability at higher learning rates, better behaviour at very long context, and,
+most interestingly for this module, it <strong>removes the attention sink</strong>. The
+gate gives the model somewhere to put surplus attention mass, so it stops
+dumping it on the first few tokens.</p>
+<p>That has a direct consequence for everything on the <a href="kv-cache.html">KV cache</a>
+and <a href="kv-reuse.html">KV reuse</a> pages: <strong>sink-preservation logic is tuned for
+models that have sinks.</strong> An eviction policy that religiously protects the first
+four tokens is protecting nothing in particular on a gated-attention model. Not
+a bug, but worth knowing before you port a policy between architectures.</p>
+<h3 id="per-layer-embeddings"><a class="anchor" href="#per-layer-embeddings">#</a>Per-layer embeddings</h3><p>Gemma 3n&#39;s answer to running a 5B model in a 2B memory budget. Instead of one
+embedding table consumed at the input, each layer has embeddings of its own —
+and crucially, <strong>they can live somewhere other than the accelerator.</strong> PLE data
+is generated separately, cached to fast storage, and streamed per layer: load
+from cache into CPU memory, compute the enhancement, pass the enhanced input to
+the layer on the accelerator, discard, move on.</p>
+<p>The number that makes the point: <strong>E2B has 5B real parameters and occupies about
+as much accelerator memory as a 2B model.</strong> Parameter count and VRAM have come
+apart, which breaks the oldest sizing heuristic in the book.</p>
+<h3 id="variable-width-bulging-attention-and-ffns"><a class="anchor" href="#variable-width-bulging-attention-and-ffns">#</a>Variable width — "bulging" attention and FFNs</h3><p>The assumption that every layer is the same width was never load-bearing, and
+recent work is dismantling it. Two findings, and they do not fully agree:</p>
+<ul>
+<li><strong>Variable-Width Transformers</strong> use a bowtie profile — wide at the start and
+end, narrow in the middle — and report parameter-matched models beating
+uniform baselines while <em>reducing</em> both FLOPs and KV memory.</li>
+<li><strong>Tapered language models</strong> report that wider-early is best (perplexity 15.96,
+0.32 better than uniform) and that <strong>wider-late substantially hurts</strong> — over a
+full point of perplexity.</li>
+</ul>
+<p>The consistent part is <strong>wide early</strong>; the disagreement is about the tail. Work
+on geometry-guided FFN width allocation lands on the same side: capacity demand
+is front-loaded, highest in the earliest layers and decreasing through the
+middle.</p>
+<p>For an inference engineer the takeaway is not which profile wins. It is that
+<strong>you can no longer compute a model&#39;s cost from one layer times N.</strong> A config
+with per-layer <code>intermediate_size</code> has to be summed, and any capacity tool that
+assumes uniformity will be wrong in a direction you cannot predict.</p>
+<h3 id="partial-rope"><a class="anchor" href="#partial-rope">#</a>Partial RoPE</h3><p>Rotate only a fraction of each head&#39;s dimensions and pass the rest through
+unchanged. The fraction is a real dial: 0% is NoPE, 100% is standard RoPE.</p>
+<p>The finding that makes it interesting: <strong>around 10% converges comparably to full
+RoPE</strong>, with up to 10× savings on the rotary cache. DeepSeek-V3&#39;s MLA is a
+production instance — <code>qk_rope_head_dim = 64</code> inside a 192-dimension head, so
+two thirds of each head is a scaled passthrough.</p>
+<p>It also interacts with <a href="kv-reuse.html">KV reuse</a> in a pleasant way: the fewer
+dimensions carry position, the less of a cached block is position-locked, and
+the cheaper a shift is.</p>
+<h3 id="cross-layer-kv-sharing-and-k-v"><a class="anchor" href="#cross-layer-kv-sharing-and-k-v">#</a>Cross-layer KV sharing, and K = V</h3><p>Two separate ideas that get filed together.</p>
+<p><strong>Sharing across layers</strong> is CLA and MLKV: compute KV projections for only some
+layers and have the others reuse them. MLKV pushes it far enough that total KV
+heads can be <em>fewer than the number of layers</em>, reporting up to 6× smaller cache
+than MQA at a reasonable quality trade.</p>
+<p><strong>K = V</strong> is the more radical claim — that maintaining three distinct
+projections per token is mathematically redundant, and keys and values can share
+one. It halves the cache by construction, since the leading 2 in the size
+formula becomes a 1.</p>
+<p>The practical consequence is a warning about the formula on the
+<a href="kv-cache.html">KV cache page</a>: it assumes every layer has its own K and V. On a
+cross-layer-sharing model, <strong><code>num_hidden_layers</code> is not the number of caches</strong>,
+and using it will overstate your memory by whatever the sharing factor is.</p>
+<h3 id="hybrid-moe-a-dense-ffn-alongside-the-routed-experts"><a class="anchor" href="#hybrid-moe-a-dense-ffn-alongside-the-routed-experts">#</a>Hybrid MoE — a dense FFN alongside the routed experts</h3><p>The generalisation of <a href="transformers.html">shared experts</a>. A hybrid MoE keeps a
+dense FFN path that every token traverses, with routed experts on top. Same
+reasoning as shared experts: the dense path carries what every token needs so
+the routed ones can specialise, rather than each expert independently relearning
+the basics.</p>
+<p>For costing, this is the field that makes <strong>active parameters</strong> diverge hardest
+from total. The dense path is always on and always paid; the routed path is paid
+per-token at the top-k rate. A config that reports only a total is telling you
+about VRAM and nothing about compute.</p>
+<hr>
+<h2 id="3-flow-reading-a-config-as-a-bill"><a class="anchor" href="#3-flow-reading-a-config-as-a-bill">#</a>3 · Flow — reading a config as a bill</h2><pre class="code"><code>  1. KV bytes per token   -&gt; 2 x layers_with_kv x num_key_value_heads
+     |                         x head_dim x dtype_bytes
+     |                      CHECK: is layers_with_kv the same as
+     |                      num_hidden_layers? Cross-layer sharing says no.
+     v
+  2. Active parameters    -&gt; dense path + (top_k x expert size) + shared experts
+     |                      NOT total parameters. This is your compute bill.
+     v
+  3. Accelerator memory   -&gt; total params MINUS anything offloadable
+     |                      Per-layer embeddings live off-accelerator.
+     v
+  4. Is the width uniform?-&gt; if intermediate_size varies by depth, SUM it.
+     |                      Do not multiply one layer by N.
+     v
+  5. Trained length vs    -&gt; max_position_embeddings AND rope_scaling.
+     |  advertised length     A model trained at 8k and stretched to 128k
+     |                        is a different risk from one trained long.
+     v
+  6. Anything unusual?    -&gt; partial rotary factor, attention gates,
+                             PLE, hybrid MoE. Each one breaks a default
+                             assumption in some tool you are using.</code></pre><p>Step 1 is the one that decides concurrency and the one most often computed
+wrong. Step 2 is the one that decides throughput. Neither is on the model card.</p>
+<hr>
+<h2 id="4-uml-where-each-field-lands"><a class="anchor" href="#4-uml-where-each-field-lands">#</a>4 · UML — where each field lands</h2><pre class="mermaid">flowchart LR
+    CFG[&quot;config.json&quot;] --&gt; KVG[&quot;num_key_value_heads&lt;br/&gt;head_dim&quot;]
+    CFG --&gt; LAY[&quot;num_hidden_layers&quot;]
+    CFG --&gt; FFN[&quot;intermediate_size&lt;br/&gt;(may vary by depth)&quot;]
+    CFG --&gt; ROPE[&quot;rope scaling&lt;br/&gt;partial rotary factor&quot;]
+    CFG --&gt; MOE[&quot;experts: total / active / shared&quot;]
+    CFG --&gt; PLE[&quot;per-layer embeddings&quot;]
+    CFG --&gt; GATE[&quot;attention gating&quot;]
+
+    KVG --&gt; CACHE[(&quot;KV bytes per token&quot;)]
+    LAY --&gt; CACHE
+    LAY --&gt; SERIAL[&quot;serial depth per token&quot;]
+    FFN --&gt; WEIGHTS[(&quot;weight VRAM&quot;)]
+    MOE --&gt; WEIGHTS
+    MOE --&gt; ACTIVE[&quot;active params per token&quot;]
+    PLE --&gt;|offloadable| HOST[(&quot;CPU memory&quot;)]
+    PLE --&gt; WEIGHTS
+
+    CACHE --&gt; CONC[&quot;CONCURRENCY&lt;br/&gt;how many users fit&quot;]
+    WEIGHTS --&gt; CONC
+    ACTIVE --&gt; TPOT[&quot;TPOT&lt;br/&gt;bandwidth per token&quot;]
+    SERIAL --&gt; TPOT
+    ROPE --&gt; QUAL[&quot;long-context QUALITY&quot;]
+    GATE --&gt; QUAL
+    GATE --&gt; SINK[&quot;no attention sink&lt;br/&gt;-&gt; retune eviction policy&quot;]</pre><p>The two sinks at the bottom are the only things you actually sell: how many
+people fit on the card, and how fast each of them gets a token. Every field
+routes to one of them, or to a quality risk.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">&quot;&quot;&quot;Cost a checkpoint from its config, including the non-uniform cases.
+
+The naive version of this function -- layers x heads x dim -- is wrong on every
+architecture in section 2. Each keyword below exists because some real model
+broke the assumption it replaces.
+&quot;&quot;&quot;
+
+
+def kv_bytes_per_token(layers, kv_heads, head_dim, dtype_bytes=2,
+                       kv_share_factor=1, k_equals_v=False):
+    &quot;&quot;&quot;
+    kv_share_factor: layers per KV cache. 1 = every layer has its own,
+                     2 = CLA2, higher for MLKV-style sharing.
+    k_equals_v:      keys and values share one tensor, so the leading 2 -&gt; 1.
+    &quot;&quot;&quot;
+    caches = layers / kv_share_factor
+    kv_multiplier = 1 if k_equals_v else 2
+    return kv_multiplier * caches * kv_heads * head_dim * dtype_bytes
+
+
+def active_params(dense_ffn, expert_size, top_k, shared_experts, attn, layers):
+    &quot;&quot;&quot;Active parameters per token -- the compute bill, not the VRAM bill.&quot;&quot;&quot;
+    per_layer = attn + dense_ffn + (top_k + shared_experts) * expert_size
+    return per_layer * layers
+
+
+GiB = 1024 ** 3
+CONFIGS = [
+    # name,                layers, kv_heads, head_dim, share, k=v
+    (&quot;Llama-3-8B (GQA)&quot;,       32,        8,      128,     1, False),
+    (&quot;Llama-2-7B (MHA)&quot;,       32,       32,      128,     1, False),
+    (&quot;+ CLA2&quot;,                 32,        8,      128,     2, False),
+    (&quot;+ MLKV-style (4x)&quot;,      32,        8,      128,     4, False),
+    (&quot;+ K=V on top&quot;,           32,        8,      128,     4, True),
+]
+
+print(f&quot;{&#39;config&#39;:&lt;22}{&#39;KiB/token&#39;:&gt;11}{&#39;@32k ctx&#39;:&gt;11}{&#39;x64 users&#39;:&gt;12}&quot;)
+print(&quot;-&quot; * 56)
+for name, L, kvh, hd, share, kv in CONFIGS:
+    b = kv_bytes_per_token(L, kvh, hd, kv_share_factor=share, k_equals_v=kv)
+    print(f&quot;{name:&lt;22}{b / 1024:&gt;10.0f} {b * 32_768 / GiB:&gt;9.2f} GiB&quot;
+          f&quot;{b * 32_768 * 64 / GiB:&gt;8.1f} GiB&quot;)
+
+# The read that catches people out: total vs active on a hybrid MoE.
+total = 235e9
+act = active_params(dense_ffn=0.06e9, expert_size=0.04e9, top_k=8,
+                    shared_experts=1, attn=0.05e9, layers=48)
+print(f&quot;\n{&#39;hybrid MoE: total params&#39;:&lt;34}{total / 1e9:&gt;7.0f} B   &lt;- VRAM&quot;)
+print(f&quot;{&#39;            active per token&#39;:&lt;34}{act / 1e9:&gt;7.1f} B   &lt;- compute&quot;)
+print(f&quot;{&#39;            ratio&#39;:&lt;34}{total / act:&gt;7.1f}x&quot;)</code></pre><pre class="code"><code>config                  KiB/token   @32k ctx   x64 users
+--------------------------------------------------------
+Llama-3-8B (GQA)             128      4.00 GiB   256.0 GiB
+Llama-2-7B (MHA)             512     16.00 GiB  1024.0 GiB
++ CLA2                        64      2.00 GiB   128.0 GiB
++ MLKV-style (4x)             32      1.00 GiB    64.0 GiB
++ K=V on top                  16      0.50 GiB    32.0 GiB
+
+hybrid MoE: total params              235 B   &lt;- VRAM
+            active per token         22.6 B   &lt;- compute
+            ratio                    10.4x</code></pre><p>Two things that do not come across in prose. <strong>The sharing techniques stack
+multiplicatively</strong> — GQA, then cross-layer sharing, then K=V, each dividing a
+different factor, taking the same model from 512 to 16 KiB per token, a 32×
+range on the number that sets your concurrency. And on the hybrid MoE, <strong>total
+and active differ by about 10×</strong>: you buy VRAM for 235B and compute for 23B.
+A capacity plan built on either number alone is wrong, in opposite directions.</p>
+<hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>The formula on the KV cache page assumes uniformity, and that assumption is
+now optional.</strong> <code>2 × layers × kv_heads × head_dim × bytes</code> presumes every layer
+holds its own K and V, at the same width, with both tensors present. Cross-layer
+sharing breaks the first, variable width breaks the second, K=V breaks the
+third. The formula is still right; you just have to feed it the real numbers
+rather than the ones on the model card.</p>
+<p><strong>Parameter count stopped predicting VRAM, and nobody updated the heuristic.</strong>
+Per-layer embeddings are offloadable, MoE weights are resident but mostly
+inactive, and quantized weights are stored at a width that is not their compute
+width. &quot;How much GPU do I need for a 5B model&quot; no longer has an answer that
+depends only on the 5.</p>
+<p><strong>A quality feature can invalidate a serving policy, silently.</strong> Gated attention
+is the clean example: it exists to improve training stability and long-context
+behaviour, and one of its effects is that the model no longer produces attention
+sinks. Every eviction and streaming policy that carefully preserves the first
+four tokens is, on such a model, preserving four ordinary tokens. Nothing
+crashes; you just paid for a protection that protects nothing, and a policy you
+validated on one architecture does not transfer.</p>
+<p><strong>&quot;Wide early&quot; is the part of the variable-width literature you can rely on.</strong>
+Bowtie and taper disagree about the last few layers, and the honest summary is
+that the tail is unsettled. Front-loaded capacity is the consistent finding
+across three independent lines of work. If you are evaluating a non-uniform
+model, that is the shape to expect and the claim to be suspicious of when a
+config does the opposite.</p>
+<p><strong>Partial RoPE quietly makes reuse cheaper.</strong> If only 10% of each head carries
+position, then 90% of a cached block is position-independent, and the correction
+needed to move it is proportionally smaller. Nobody markets it this way, but for
+a workload built on <a href="kv-reuse.html">KV reuse</a> it is a genuine selection
+criterion.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure</th><th>Looks like</th><th>Actual cause</th></tr></thead><tbody><tr><td>Capacity plan overstates KV by 2–4×</td><td>Provisioned too much, wondering why</td><td>Used <code>num_hidden_layers</code>; model shares KV across layers</td></tr><tr><td>MoE &quot;needs 8× the GPU&quot;</td><td>Sticker shock on a config</td><td>Read total params as compute; active is a fraction</td></tr><tr><td>Eviction policy transferred and helped nothing</td><td>Worked on the old model</td><td>Gated attention — the sinks it protected do not exist</td></tr><tr><td>Cost model wrong on a non-uniform model</td><td>Off by an unpredictable amount</td><td>Multiplied one layer by N instead of summing</td></tr><tr><td>5B model does not fit a 2B budget, or does</td><td>VRAM does not track params</td><td>Per-layer embeddings are offloadable</td></tr><tr><td>Extended-context model degrades at length</td><td>Fine at 8k, poor at 100k</td><td><code>rope_scaling</code> present — stretched, not trained</td></tr></tbody></table></div><hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What reading the config means here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Nothing directly — but it is why two models with the same advertised size cost wildly different amounts to serve, and why one of them forgets the middle of a long document.</td></tr><tr><td><strong>Coder</strong></td><td>Open <code>config.json</code> before you benchmark. <code>num_key_value_heads</code>, <code>rope_scaling</code>, and whether <code>intermediate_size</code> is a scalar or a list will tell you more in a minute than an afternoon of profiling.</td></tr><tr><td><strong>Tester</strong></td><td>Architecture changes invalidate policies, not just weights. A gated-attention model needs its eviction policy re-validated, not ported. Re-run the long-context probe on every architecture change, not just every fine-tune.</td></tr><tr><td><strong>System designer</strong></td><td>Two numbers set capacity: KV bytes per token and active parameters per token. Neither is on the model card and neither derives from the other. Compute both before committing to hardware.</td></tr><tr><td><strong>Architect</strong></td><td>This is where the leverage is. Choosing a checkpoint is choosing a KV budget, a compute bill and a long-context risk profile for the life of the deployment — a far larger decision than any serving flag.</td></tr><tr><td><strong>CEO</strong></td><td>The same capability at 4× lower serving cost is usually an architecture choice made at procurement, not an engineering win found later. Ask which checkpoint, and why, before funding an optimisation programme.</td></tr><tr><td><strong>Market</strong></td><td>Parameter counts are marketing and increasingly meaningless — active parameters and KV bytes per token are the honest numbers. A vendor quoting only a total is quoting the one that flatters.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><p><strong>&quot;Two 8B models, same benchmark scores. One costs 4× more to serve. Why?&quot;</strong>
+Almost certainly <code>num_key_value_heads</code> — MHA versus GQA is a 4× difference in KV
+cache at identical parameter count, and KV cache is what caps concurrency. After
+that, check cross-layer sharing, since <code>num_hidden_layers</code> may not be the number
+of caches, and check whether it is MoE, where total and active parameters can
+differ by an order of magnitude.</p>
+<p><strong>&quot;What breaks the standard KV cache size formula?&quot;</strong>
+It assumes every layer holds its own K and V, at uniform width, with both
+tensors present. Cross-layer sharing means fewer caches than layers. Variable
+width means you have to sum rather than multiply. K=V means the leading 2 becomes
+a 1. The formula is fine — the inputs are what people get wrong.</p>
+<p><strong>&quot;Why might a good eviction policy stop working on a new model?&quot;</strong>
+If the new model uses gated attention it may have no attention sinks. The gate
+gives the model somewhere to put surplus attention mass, so it stops dumping it
+on the first few tokens — and a policy built to protect those tokens is now
+protecting nothing. It is a quality feature that silently invalidates a serving
+assumption, which is a category worth naming.</p>
+<p><strong>&quot;What does partial RoPE buy, and what does it cost?&quot;</strong>
+Rotating only a fraction of head dimensions. Around 10% converges comparably to
+full RoPE with up to 10× savings on the rotary cache — DeepSeek-V3&#39;s MLA is a
+shipped example at 64 of 192 dimensions. The second-order benefit is that less
+of a cached block is position-locked, so reuse at a shifted position is cheaper.</p>
+<p><strong>&quot;A 5B model that fits in 2B of VRAM — how?&quot;</strong>
+Per-layer embeddings, offloaded. Each layer&#39;s embeddings are cached outside the
+accelerator, streamed in, used, and discarded, so only the core transformer
+weights stay resident. It is the clearest example of parameter count and VRAM
+coming apart, and it breaks the sizing heuristic most people still use.</p>
+<hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done with this page when you can:</p>
+<ul>
+<li>Name the two numbers that set capacity, and say why neither is on the model card</li>
+<li>List three architectural features that break the standard KV size formula</li>
+<li>Explain why gated attention can invalidate an eviction policy</li>
+<li>Say what partial RoPE buys, in both memory and reuse terms</li>
+<li>Separate total, active and resident parameters without hesitating</li>
+<li>Read an unfamiliar <code>config.json</code> and say where the cost will land</li>
+</ul>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><ul>
+<li><strong>Gated attention</strong> — <a href="https://github.com/qiuzh20/gated_attention"><em>Gated Attention for Large Language Models: Non-linearity, Sparsity, and Attention-Sink-Free</em></a> (NeurIPS 2025 best paper) — and note the sink-free property, which is the operationally relevant one.</li>
+<li><strong>Per-layer embeddings</strong> — <a href="https://ai.google.dev/gemma/docs/gemma-3n">Gemma 3n model overview</a> — PLE offload, and the 5B-params-in-2B-VRAM claim.</li>
+<li><strong>Variable width</strong> — <a href="https://arxiv.org/abs/2606.18246"><em>Variable-Width Transformers</em></a> for the bowtie, <a href="https://arxiv.org/abs/2606.23670"><em>Tapered Language Models</em></a> for the wider-early result, <a href="https://arxiv.org/abs/2608.02064"><em>Geometry-Guided Layerwise FFN Width Allocation</em></a> for where capacity demand actually sits.</li>
+<li><strong>Partial RoPE</strong> — <a href="https://arxiv.org/abs/2603.11611"><em>Fractional Rotation, Full Potential?</em></a> (2026) — the 10% finding.</li>
+<li><strong>Cross-layer KV sharing</strong> — <a href="https://arxiv.org/abs/2405.12981">CLA</a> and <a href="https://arxiv.org/abs/2406.09297">MLKV</a>.</li>
+</ul>
+<p>Related: <a href="kv-cache.html">KV cache optimization</a> for the formula this page keeps
+qualifying · <a href="kv-reuse.html">KV reuse</a> for why partial RoPE matters to reuse ·
+<a href="transformers.html">Transformers</a> for GQA, MoE and shared experts ·
+<a href="model-selection.html">LLM APIs &amp; model selection</a> for choosing a vendor rather
+than a shape · <a href="long-context.html">Long context</a> for <code>rope_scaling</code> risk.</p>
+</article>
+    <div class="pager-row"><a class="pager previous" href="kv-reuse.html"><span>previous</span>KV reuse beyond the exact prefix</a><a class="pager next" href="orchestration-frameworks.html"><span>next</span>Orchestration frameworks</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-the-six-that-are-new">2 · Design — the six that are new</a></li><li class="d3"><a href="#gated-attention">Gated attention</a></li><li class="d3"><a href="#per-layer-embeddings">Per-layer embeddings</a></li><li class="d3"><a href="#variable-width-bulging-attention-and-ffns">Variable width — &quot;bulging&quot; attention and FFNs</a></li><li class="d3"><a href="#partial-rope">Partial RoPE</a></li><li class="d3"><a href="#cross-layer-kv-sharing-and-k-v">Cross-layer KV sharing, and K = V</a></li><li class="d3"><a href="#hybrid-moe-a-dense-ffn-alongside-the-routed-experts">Hybrid MoE — a dense FFN alongside the routed experts</a></li><li class="d2"><a href="#3-flow-reading-a-config-as-a-bill">3 · Flow — reading a config as a bill</a></li><li class="d2"><a href="#4-uml-where-each-field-lands">4 · UML — where each field lands</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

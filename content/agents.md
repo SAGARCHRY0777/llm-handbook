@@ -288,6 +288,29 @@ SEARCH_TOOL = {
 
 ## 6 · Depth — the senior layer
 
+**Tool latency is where agent budgets actually go, and it is mostly not the
+model.** A tool-calling turn is: generate a call, execute it, feed the result
+back, generate again. The generations are bounded by TPOT; the execution is
+bounded by whatever you called; and the *re-prefill* of the growing transcript
+is bounded by prompt length, which grows with every step. On a ten-step loop the
+transcript is re-processed ten times, so prompt growth costs quadratically even
+though nothing about the model changed.
+
+Three optimisations follow directly, and they are cheap:
+
+1. **Keep the transcript prefix stable.** Tool results appended at the end are a
+   prefix-cache hit; a system prompt that interpolates a timestamp or reorders
+   tool definitions per call is a miss every step. This is the single most
+   common self-inflicted agent latency bug — see [KV reuse](kv-reuse.html).
+2. **Issue independent calls in parallel.** Agents serialise tool calls by
+   default because the loop is written as a loop. Calls with no data dependency
+   between them should be dispatched together; on a research or retrieval agent
+   this is often the difference between seconds and tens of seconds.
+3. **Trim results, not history.** Tool output is usually the largest and least
+   information-dense part of the transcript. Truncating a 50k-token API response
+   to the fields the model needs is worth more than summarising the reasoning,
+   and unlike summarising it loses nothing the model was using.
+
 **Evaluating agents needs different metrics than evaluating answers**, because a
 correct answer reached by a wasteful or dangerous route is not a success:
 
