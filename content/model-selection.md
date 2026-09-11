@@ -203,6 +203,13 @@ latency or data-residency decision, and it should be argued on those grounds.
 
 ## 6 · Depth — the senior layer
 
+**Choosing one model is often the wrong frame.** Most production traffic does
+not need your best model, and the cheapest large win available is usually to
+send the easy majority somewhere cheaper — a cascade, a big-little pair, or a
+router on task type. See [Ensembles, cascades & routing](ensembles-and-routing.html)
+for the break-even arithmetic, which decides whether that is worth building
+before you build it.
+
 **Benchmark scores are the weakest signal you will be given.** Contamination is
 widespread, benchmarks measure averages over distributions unlike yours, and a
 two-point MMLU difference predicts nothing about your task. A 50-item eval set

@@ -232,6 +232,14 @@ def route(query: str, budget_ms: int) -> str:
 
 ## 6 · Depth — the senior layer
 
+**A model too large for one GPU is a topology problem before it is a serving
+problem.** Which axis you split on — tensor, pipeline, expert or sequence —
+decides how much traffic crosses which link, and the wrong choice for your
+interconnect cannot be fixed anywhere above it. See
+[Parallelism & distributed inference](parallelism.html); the short version is
+tensor parallel inside a node, pipeline parallel between them, and never the
+other way round.
+
 **Cold start is four phases, and the weights are rarely the slowest one.**
 The instinct is that loading a big model is the cost; measured, the profile is
 usually: container image pull (minutes, for a multi-gigabyte image), weight

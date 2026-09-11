@@ -236,6 +236,29 @@ repetition loop.
 | **Asserting exact output in tests** | Flaky suite | Score, do not assert equality |
 | **High temperature with a schema** | Occasional invalid JSON | Low temperature plus constrained decoding |
 
+**Speculative decoding is one member of a family**, and the others are worth
+recognising because they trade the draft *model* for something cheaper:
+
+| Method | Where the guess comes from | Needs a second model? |
+|---|---|---|
+| **Prompt / lookup decoding** | n-grams copied out of the prompt or the history — excellent when output repeats input, as in editing, summarising or code refactoring | No |
+| **Blockwise parallel decoding** | Extra output heads predicting several positions at once | No — extra heads |
+| **Medusa** | Multiple decoding heads on the same backbone, verified as a tree | No — extra heads |
+| **Lookahead decoding** | Jacobi-style parallel refinement plus an n-gram pool built as it goes | No |
+| **Eagle** | A small trained draft head over the backbone's own features | A head, not a model |
+| **Self-speculative** | The model's own shallower layers as the drafter | No |
+| **Tree speculative** | Several candidate continuations verified in one pass | Either |
+
+What they all share is the property that makes speculative decoding safe in the
+first place: **the large model verifies, so the output distribution is
+unchanged.** Guessing badly costs throughput, never correctness — which is why
+this family is unusually safe to deploy and why lookup decoding, requiring no
+model at all, is worth trying before anything with a draft model in it.
+
+The one to reach for first is **prompt lookup**: on any task where the output
+substantially quotes the input, copying n-grams from the prompt is a
+near-free 2–3×, and it needs nothing but a dictionary.
+
 **Speculative decoding** deserves a mention here because it is a decoding-time
 optimisation that changes nothing about the output distribution. A small draft
 model proposes several tokens; the large model verifies them in one forward pass

@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ensembles, cascades &amp; routing · LLM Handbook</title>
+<meta name="description" content="Most traffic does not need your best model. Cascades, big-little pairs and learned routers exploit that — and the whole design turns on one number nobody measures first.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li><li><a href="reasoning-models.html">Reasoning models & test-time compute</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="text2sql.html">Text2SQL & structured data</a></li><li><a href="graphrag.html">GraphRAG & knowledge graphs</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li><li><a href="kv-cache.html">KV cache optimization</a></li><li><a href="reasoning-inference-optimization.html">Reasoning inference optimization</a></li><li><a href="kernel-and-attention-optimization.html">Kernel & attention optimization</a></li><li><a href="kv-reuse.html">KV reuse beyond the exact prefix</a></li><li><a href="model-shape.html">Reading a model config</a></li><li><a href="ensembles-and-routing.html" class="active">Ensembles, cascades & routing</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li><li><a href="synthetic-data.html">Synthetic data generation</a></li><li><a href="training-methods.html">The 20 ways to train a model</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li><li><a href="caching.html">Caching strategies</a></li><li><a href="parallelism.html">Parallelism & distributed inference</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li><li><a href="learning-paths.html">Learning paths</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="ensembles-cascades-routing"><a class="anchor" href="#ensembles-cascades-routing">#</a>Ensembles, cascades & routing</h1><blockquote>
+<p><strong>The one sentence:</strong> send the easy queries somewhere cheap — the entire
+field is that idea, and the only hard part is deciding what &quot;easy&quot; means
+before you have the answer.</p>
+</blockquote>
+<p>Every other page in this module makes <em>one</em> model cheaper. This one accepts the
+model as given and asks a different question: <strong>does this request need that
+model at all?</strong> On most production traffic the honest answer is no, and the gap
+between a small model&#39;s cost and a frontier model&#39;s is large enough that
+routing beats nearly everything else on this list.</p>
+<p>It is also the cheapest thing here to get wrong, because a router that is
+confident and mistaken does not degrade gracefully — it sends a hard query to a
+model that cannot answer it and returns a fluent wrong answer at low cost.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>  THREE SHAPES, AND THEY ARE NOT THE SAME THING
+
+  ROUTING — decide BEFORE, on the query alone
+    query -&gt; [classifier] -&gt; small model        cheap, one inference
+                          \-&gt; large model       risk: you guessed wrong
+    cost  = router + one model
+    needs : a way to predict difficulty from the question
+
+  CASCADE — try cheap first, ESCALATE on low confidence
+    query -&gt; small model -&gt; confident? -&gt; answer
+                          \-&gt; not? -&gt; large model -&gt; answer
+    cost  = small + (escalation rate x large)
+    needs : a usable confidence signal. This is the whole problem.
+
+  ENSEMBLE — ask SEVERAL, combine
+    query -&gt; model A ┐
+          -&gt; model B ┼-&gt; vote / average -&gt; answer
+          -&gt; model C ┘
+    cost  = ALL of them. This buys accuracy, not savings.
+    needs : genuine diversity, or you paid 3x for correlated errors
+
+
+  THE NUMBER THAT DECIDES EVERYTHING
+
+    cascade cost = small + (escalation_rate x large)
+
+    at a 20x price ratio, cost relative to using the large model alone:
+
+      escalate 10%  -&gt;   3.0 vs 20.0    6.7x cheaper    clearly worth it
+      escalate 50%  -&gt;  11.0 vs 20.0    1.8x cheaper    thin for the effort
+      escalate 95%  -&gt;  20.0 vs 20.0    BREAK-EVEN      pointless
+      escalate 99%  -&gt;  20.8 vs 20.0    worse           actively harmful</code></pre><p>The bottom block is the page, and it is more forgiving than intuition suggests:
+the break-even is <code>(large - small) / large</code>, so at a 20x ratio you can escalate
+<strong>95%</strong> of requests before a cascade costs more than not having one. The wasted
+small-model call is only a twentieth of what you were going to spend anyway.</p>
+<p>The trap is not the break-even, it is the middle of that table. <strong>The savings
+collapse long before the cascade becomes harmful</strong> — and 1.8x is a poor return
+for a router, a threshold, two models to operate and a new way to be wrong.</p>
+<hr>
+<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><h3 id="routing-decide-up-front"><a class="anchor" href="#routing-decide-up-front">#</a>Routing — decide up front</h3><p>A classifier looks at the query and picks a model. Cheapest shape, because you
+pay for exactly one inference plus a router that is usually tiny.</p>
+<p>The difficulty is that you are predicting <em>answer</em> difficulty from the
+<em>question</em>, and the two are only loosely related. &quot;What is the capital of
+France&quot; and &quot;What is the capital of the country with the third-largest GDP in
+2019&quot; look similar to an embedding model and are not similar at all.</p>
+<p>What works in practice is narrower than a general difficulty classifier:</p>
+<ul>
+<li><strong>Task type</strong>, which is often visible from the request path — a summarisation
+endpoint and a code-debugging endpoint do not need the same model, and you
+already know which is which.</li>
+<li><strong>Length and structure</strong> — a request with a 40k-token document attached is
+retrieval-shaped, not reasoning-shaped.</li>
+<li><strong>Explicit user signal</strong> — a &quot;think harder&quot; affordance moves the decision to
+the person who knows what they asked.</li>
+</ul>
+<h3 id="cascades-try-cheap-escalate"><a class="anchor" href="#cascades-try-cheap-escalate">#</a>Cascades — try cheap, escalate</h3><p>Run the small model. If it is confident, return. If not, escalate. The appeal is
+that you no longer predict difficulty — you <em>observe</em> the small model failing,
+which is far more reliable than guessing in advance.</p>
+<p>The catch is the word &quot;confident&quot;. Options, in increasing order of honesty:</p>
+<div class="table-scroll"><table><thead><tr><th>Signal</th><th>How good it is</th></tr></thead><tbody><tr><td>Token logprobs / sequence probability</td><td>Cheap, and weakly correlated with correctness. Models are confidently wrong.</td></tr><tr><td>A trained verifier over the answer</td><td>Better, and it is another model to serve and maintain</td></tr><tr><td><strong>Actually checking the answer</strong></td><td>Best by a wide margin, where it is possible</td></tr></tbody></table></div><p>That last row is the one to reach for first. If the answer is code, run the
+tests. If it is arithmetic, evaluate it. If it is a claim about a document, check
+the span exists. <strong>Verification is cheap relative to generation and turns a
+probabilistic escalation signal into a deterministic one</strong> — and where you can
+do it, the cascade stops being a gamble.</p>
+<h3 id="big-little-pairs"><a class="anchor" href="#big-little-pairs">#</a>Big-little pairs</h3><p>The cascade&#39;s specific case, and the one with the best economics: a small model
+and a large one <em>from the same family</em>, so they share a tokenizer and often a
+prompt format. Same prompt, same tooling, no per-model adaptation. The small
+model handles the bulk; the large one handles what escalates.</p>
+<p>It pairs naturally with <a href="decoding.html">speculative decoding</a>, where a draft
+model already exists — although note the two are doing different jobs. Speculative
+decoding uses the small model&#39;s tokens and <em>verifies every one</em>; a cascade uses
+the small model&#39;s whole answer and verifies none of them unless it escalates.
+One is exact, the other is a quality trade.</p>
+<h3 id="ensembles-several-models-combined"><a class="anchor" href="#ensembles-several-models-combined">#</a>Ensembles — several models, combined</h3><p>Ask multiple models, vote or average. This belongs on an optimisation page only
+to say clearly: <strong>it is not an optimisation.</strong> It multiplies cost by the number
+of members to buy accuracy and variance reduction.</p>
+<p>The condition for it working at all is <strong>diversity</strong> — members that make
+<em>different</em> mistakes. Three checkpoints from the same base fine-tuned on the same
+data will agree confidently and wrongly together, and you will have paid 3× for
+correlated errors. If you cannot articulate why your members fail differently,
+you do not have an ensemble; you have an expensive single model.</p>
+<p>Related shapes worth knowing by name: <strong>committee</strong> (fixed members vote),
+<strong>swarm</strong> (many cheap members, aggregate), <strong>consensus decoding</strong> (agreement at
+the token level rather than the answer level), and <strong>collaborative inference</strong>
+(members with different roles rather than the same role).</p>
+<hr>
+<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="code"><code>  1. Can you verify the answer cheaply?
+     |    yes -&gt; CASCADE with verification as the escalation signal.
+     |           Best shape available. Stop looking.
+     v    no
+  2. Is task type visible from the request?
+     |    yes -&gt; ROUTE on it. You already know; do not learn it.
+     v    no
+  3. Do you have a usable confidence signal?
+     |    yes -&gt; CASCADE, and MEASURE THE ESCALATION RATE before
+     |           committing. Above the break-even it costs more.
+     v    no
+  4. Is accuracy the goal, and is budget available?
+     |    yes -&gt; ENSEMBLE, if and only if the members fail differently.
+     v    no
+  5. Use one model. A router you cannot trust is worse than no router.</code></pre><p>Step 1 first, always. Everything downstream is an attempt to approximate a
+signal that step 1 gives you exactly.</p>
+<hr>
+<h2 id="4-example"><a class="anchor" href="#4-example">#</a>4 · Example</h2><pre class="code"><code class="language-python">&quot;&quot;&quot;When does a cascade actually save money?
+
+The break-even is the whole decision and it is one line of algebra. Compute it
+before building anything -- a cascade above its break-even escalation rate is
+strictly worse than using the large model directly.
+&quot;&quot;&quot;
+
+
+def cascade_cost(escalation_rate, small=1.0, large=20.0, verify=0.0):
+    &quot;&quot;&quot;Cost per request, in units of one small-model call.
+
+    Every request pays the small model. Escalated ones pay the large model
+    ON TOP -- the small-model call is not refunded.
+    &quot;&quot;&quot;
+    return small + verify + escalation_rate * large
+
+
+def break_even(small=1.0, large=20.0, verify=0.0):
+    &quot;&quot;&quot;Escalation rate above which the cascade costs more than large-only.&quot;&quot;&quot;
+    return (large - small - verify) / large
+
+
+for ratio in (5, 20, 100):
+    be = break_even(large=ratio)
+    print(f&quot;large/small = {ratio:&gt;3}x   break-even escalation = {be*100:&gt;5.1f}%&quot;)
+
+print(f&quot;\n{&#39;escalation&#39;:&lt;12}{&#39;cascade&#39;:&gt;10}{&#39;vs large-only&#39;:&gt;15}&quot;)
+print(&quot;-&quot; * 38)
+for r in (0.05, 0.10, 0.25, 0.50, 0.80):
+    c = cascade_cost(r)
+    print(f&quot;{r*100:&gt;8.0f}%   {c:&gt;9.2f}{20.0/c:&gt;14.2f}x&quot;)
+
+# A verifier is not free, and it runs on EVERY request.
+print(&quot;\nwith a verifier at 0.5x small-model cost, run on every request:&quot;)
+for r in (0.05, 0.10, 0.25):
+    c = cascade_cost(r, verify=0.5)
+    print(f&quot;  escalation {r*100:&gt;3.0f}%  -&gt;  {c:&gt;5.2f}   ({20.0/c:&gt;4.2f}x vs large-only)&quot;)</code></pre><pre class="code"><code>large/small =   5x   break-even escalation =  80.0%
+large/small =  20x   break-even escalation =  95.0%
+large/small = 100x   break-even escalation =  99.0%
+
+escalation     cascade  vs large-only
+--------------------------------------
+       5%        2.00         10.00x
+      10%        3.00          6.67x
+      25%        6.00          3.33x
+      50%       11.00          1.82x
+      80%       17.00          1.18x
+
+with a verifier at 0.5x small-model cost, run on every request:
+  escalation   5%  -&gt;   2.50   (8.00x vs large-only)
+  escalation  10%  -&gt;   3.50   (5.71x vs large-only)
+  escalation  25%  -&gt;   6.50   (3.08x vs large-only)</code></pre><p>The break-even is far more forgiving than intuition suggests — at a 20× price
+ratio you can escalate <strong>95%</strong> of requests and still break even, because the
+wasted small-model call is only 1/20th of the large one. That is the genuinely
+encouraging result here, and it is the opposite of what most people guess.</p>
+<p>But read the second table with it: <strong>the savings collapse long before the
+break-even.</strong> At 50% escalation you are still &quot;winning&quot; at 1.8×, which is a poor
+return for a system with a router, a confidence threshold, two models to
+maintain and a new failure mode. The break-even tells you when a cascade is
+catastrophic; the middle of the table tells you when it is merely not worth
+building.</p>
+<p>The verifier row is the part people forget: <strong>it runs on every request, including
+the ones that never escalate.</strong> A verifier at half the small model&#39;s cost pushes
+the 5% case from 10× to 8× — still excellent, but it is a real line item and it
+belongs in the arithmetic rather than in the footnotes.</p>
+<hr>
+<h2 id="5-depth-the-senior-layer"><a class="anchor" href="#5-depth-the-senior-layer">#</a>5 · Depth — the senior layer</h2><p><strong>Measure the escalation rate on real traffic before you build anything.</strong> It is
+the only input that matters and it is knowable in advance: run the small model
+over a sample of logged production requests, apply the confidence rule you intend
+to use, and count. Teams routinely build the cascade first and discover the rate
+afterwards, at which point the architecture is committed.</p>
+<p><strong>A router&#39;s errors are silent and asymmetric.</strong> Sending an easy query to the
+large model costs money. Sending a hard query to the small model returns a wrong
+answer that nobody flags, because it reads exactly like a right one. Those are
+not comparable failures, and a router tuned to minimise average cost will make
+the second kind freely. Tune the threshold on the <em>cost of being wrong</em>, not on
+the cost of the inference.</p>
+<p><strong>Verification beats confidence, and it is under-used.</strong> Logprobs are a weak
+proxy that fails hardest on exactly the confident-and-wrong cases you built the
+cascade to catch. Running the tests, evaluating the arithmetic, checking the
+cited span exists — these are deterministic, cheap relative to generation, and
+turn escalation from a guess into a fact. If your task admits verification and
+you are using logprobs instead, that is the first thing to change.</p>
+<p><strong>Ensembles need diversity you can name.</strong> &quot;We run three models and vote&quot; is only
+an ensemble if the three fail differently. Same base, same fine-tuning data,
+different seeds — that is one model with extra steps, and it will be confidently
+wrong in unison. Before funding an ensemble, write down the mechanism by which
+member B catches what member A misses. If you cannot, it does not exist.</p>
+<p><strong>This composes with, and is often confused for, adaptive compute.</strong> Routing by
+difficulty across <em>models</em> and
+<a href="reasoning-inference-optimization.html">adaptive inference-time compute</a> within
+one model attack the same waste from two sides, and they stack. What they share
+is the finding that most traffic is easy; what differs is whether you respond by
+changing the model or the thinking budget.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure</th><th>Looks like</th><th>Actual cause</th></tr></thead><tbody><tr><td>Cascade costs more than before</td><td>Bill up after a cost-reduction project</td><td>Escalation rate above break-even; small-model call is never refunded</td></tr><tr><td>Cascade saves money, quality drops</td><td>Cheaper and subtly worse</td><td>Threshold tuned on cost, not on the cost of being wrong</td></tr><tr><td>Escalation signal useless</td><td>Escalates randomly</td><td>Logprob confidence on a task where the model is confidently wrong</td></tr><tr><td>Ensemble no better than one model</td><td>3× the cost, same accuracy</td><td>Correlated members — same base, same data</td></tr><tr><td>Router great offline, poor live</td><td>Benchmarks did not transfer</td><td>Difficulty predicted from the query; live traffic has a different mix</td></tr><tr><td>Verifier ate the savings</td><td>Modest gain, lots of machinery</td><td>It runs on every request, not only escalated ones</td></tr></tbody></table></div><hr>
+<h2 id="6-from-each-seat"><a class="anchor" href="#6-from-each-seat">#</a>6 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What routing means here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Most answers arrive faster and cost less. The risk they cannot see: a question that looked easy and was not may have been answered by the cheap model.</td></tr><tr><td><strong>Coder</strong></td><td>Verify before you escalate, wherever the task allows it. Logprob thresholds are the fallback, not the design. And log which model answered — you cannot debug what you cannot attribute.</td></tr><tr><td><strong>Tester</strong></td><td>Evaluate the <em>system</em>, not the members. A cascade&#39;s quality is the small model&#39;s quality on what it keeps, which is not its quality on the full distribution. Stratify by whether the request escalated.</td></tr><tr><td><strong>System designer</strong></td><td>Two models is two capacity plans, two sets of KV memory and a router on the critical path. The break-even calculation belongs in the design doc, with the measured escalation rate, not an assumed one.</td></tr><tr><td><strong>Architect</strong></td><td>Big-little from one family buys you a shared tokenizer and prompt format, which is worth more operationally than a slightly better small model from elsewhere.</td></tr><tr><td><strong>CEO</strong></td><td>This is usually the largest single cost lever available, because most traffic does not need the best model. It is also the one that trades cost for quality most directly, so the threshold is a business decision, not an engineering one.</td></tr><tr><td><strong>Market</strong></td><td>Vendor &quot;routing&quot; features are this, run by the vendor, with the threshold chosen by the party that bills you. Ask what the escalation rate is and who can see it.</td></tr></tbody></table></div><hr>
+<h2 id="7-interview-questions"><a class="anchor" href="#7-interview-questions">#</a>7 · Interview questions</h2><p><strong>&quot;When does a cascade cost more than just using the big model?&quot;</strong>
+Above the break-even escalation rate, <code>(large - small) / large</code>. Every request
+pays the small model whether or not it escalates, so the wasted calls accumulate.
+At a 20× price ratio the break-even is 95%, which is generous — but the savings
+collapse well before it: at 50% escalation you are only 1.8× better off, which is
+a thin return for a router, a threshold, and a second model to operate.</p>
+<p><strong>&quot;What is the best escalation signal?&quot;</strong>
+Verification, wherever the task allows it — run the tests, evaluate the
+arithmetic, check the cited span exists. It is deterministic and cheap relative
+to generation. Logprob confidence is the common fallback and it is weak, because
+it fails hardest on confidently-wrong answers, which is the exact case the
+cascade exists to catch.</p>
+<p><strong>&quot;Why might an ensemble of three models be no better than one?&quot;</strong>
+Correlated errors. Ensembles buy variance reduction, which requires members that
+fail <em>differently</em>. Three checkpoints from the same base on the same data agree
+confidently and wrongly together, so you pay 3× for one model&#39;s judgement. The
+test is whether you can state the mechanism by which one member catches what
+another misses.</p>
+<p><strong>&quot;How is model routing different from adaptive inference-time compute?&quot;</strong>
+Same observation, different lever. Both start from &quot;most traffic is easy&quot;.
+Routing changes <em>which model</em> answers; adaptive compute changes <em>how long</em> one
+model thinks. They stack, because they attack different terms — and confusing
+them leads to building a router when a reasoning-effort parameter would have
+done.</p>
+<hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done when you can:</p>
+<ul>
+<li>State the cascade break-even formula and compute it from a price ratio</li>
+<li>Explain why savings collapse well before the break-even</li>
+<li>Rank escalation signals, and say why logprobs fail where it matters most</li>
+<li>Say what makes an ensemble real rather than three correlated models</li>
+<li>Distinguish routing from adaptive compute, and say why they stack</li>
+<li>Name the asymmetry in a router&#39;s two failure modes</li>
+</ul>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><ul>
+<li><strong>Cascades</strong> — <a href="https://arxiv.org/abs/2305.05176"><em>FrugalGPT</em></a> (2023) — the cascade formulation and the cost arithmetic.</li>
+<li><strong>Verification over confidence</strong> — <a href="https://arxiv.org/abs/2305.20050"><em>Let&#39;s Verify Step by Step</em></a> (2023) — process supervision, and why checking beats asking.</li>
+<li><strong>Self-consistency</strong> — <a href="https://arxiv.org/abs/2203.11171">Wang et al.</a> (2022) — ensembling one model&#39;s own samples, the cheapest form of diversity.</li>
+</ul>
+<p>Related: <a href="model-selection.html">LLM APIs &amp; model selection</a> for choosing the
+members · <a href="reasoning-inference-optimization.html">Reasoning inference optimization</a>
+for adaptive compute within one model · <a href="decoding.html">Decoding</a> for speculative
+decoding, the exact cousin of a cascade · <a href="regression-gates.html">Regression gates</a>
+for evaluating a system rather than a model.</p>
+</article>
+    <div class="pager-row"><a class="pager previous" href="model-shape.html"><span>previous</span>Reading a model config</a><a class="pager next" href="orchestration-frameworks.html"><span>next</span>Orchestration frameworks</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d3"><a href="#routing-decide-up-front">Routing — decide up front</a></li><li class="d3"><a href="#cascades-try-cheap-escalate">Cascades — try cheap, escalate</a></li><li class="d3"><a href="#big-little-pairs">Big-little pairs</a></li><li class="d3"><a href="#ensembles-several-models-combined">Ensembles — several models, combined</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-example">4 · Example</a></li><li class="d2"><a href="#5-depth-the-senior-layer">5 · Depth — the senior layer</a></li><li class="d2"><a href="#6-from-each-seat">6 · From each seat</a></li><li class="d2"><a href="#7-interview-questions">7 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

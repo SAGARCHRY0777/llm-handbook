@@ -412,6 +412,79 @@ about blocks as though clusters were not there.
 
 ---
 
+### Normalization, and the cost of the small operations
+
+RMSNorm is arithmetically trivial and operationally annoying, for the same
+reason softmax became a bottleneck: it is a **memory-bound elementwise pass
+between two compute-bound matmuls**. Unfused, each norm is a full read and write
+of the activation tensor for a handful of flops per element.
+
+So it gets fused — folded into the epilogue of the matmul before it or the
+prologue of the one after, so the values are normalised while still in registers.
+`fused LayerNorm` and its RMSNorm equivalent are in every serious kernel library,
+and the win is entirely in trips to memory rather than in arithmetic.
+
+Two related choices sit alongside it:
+
+- **Pre-norm versus post-norm** is a training-stability decision that every
+  modern model resolved the same way (pre-norm), and it changes where the fusion
+  boundary falls.
+- **Approximate and integer-only normalization** exist for the same reason
+  approximate exp does — avoiding a slow operation on a unit that is not the
+  fast path. RMSNorm needs a reciprocal square root; on hardware where that is a
+  special-function instruction, the same substitution argument applies.
+
+The general lesson is the one this page keeps repeating from a different angle:
+**in a bandwidth-bound regime the cheap operations are the expensive ones**, and
+an elementwise pass that does almost no arithmetic still costs a full trip to
+HBM unless something fuses it away.
+
+### Structured matrices — butterfly and Monarch
+
+A dense matmul is `O(n²)` in the weights it must read. Structured matrices
+replace the dense weight matrix with a product of sparse factors that has
+`O(n log n)` parameters and a hardware-friendly access pattern — butterfly
+matrices (the FFT's structure, generalised) and **Monarch** matrices, which are
+block-diagonal factors with a permutation between them, chosen specifically
+because they are expressible as batched dense matmuls rather than as irregular
+sparsity.
+
+That last point is what separates them from ordinary sparsity: **a Monarch
+factorisation is fast on a GPU, where an unstructured sparse matrix of the same
+density is not.** They remain more a training-time architectural choice than a
+serving knob — you cannot factorise a dense checkpoint into one for free — but
+they are the structured end of the same spectrum as
+[low-rank factorisation](distillation-and-pruning.html), and the reason to know
+them is that "sparse" and "fast" are not synonyms on this hardware.
+
+### The exotica, and an honest verdict on it
+
+Inference-optimization taxonomies carry a long tail of number systems and
+multiplication-free architectures: posit, residue and logarithmic number
+systems, dyadic and double-base representations, tropical/max-plus and lattice
+algebra, and the zero-multiplication family — adder networks, XNOR networks,
+bitshift-add, morphological and log-sum-exp networks, table-lookup
+multiplication.
+
+They share a premise worth understanding, because it is the same one behind
+BF16xN and native FP4: **multiplication is the expensive primitive, so represent
+numbers such that you need less of it.** In a logarithmic number system
+multiplication becomes addition. In a residue system large-integer arithmetic
+decomposes into independent small ones. Adder and XNOR networks remove the
+multiply from the network rather than from the number system.
+
+The honest verdict for an inference engineer in 2026 is that **almost none of
+this has a path onto the hardware you have.** Tensor cores implement
+floating-point and integer MMA; a number system the silicon does not implement is
+emulated, and emulation gives back what the representation saved. The techniques
+that crossed over — low-bit integer quantization, power-of-two/bitshift scaling,
+block-scaled formats — crossed over precisely because vendors put them in
+hardware.
+
+Know the family, know why it is attractive, and treat a specific scheme as
+deployable only when you can name the instruction that executes it. Same test as
+the algebraic integer note below.
+
 ## 3c · A note on the algebraic integer number system
 
 It appears on inference-optimization taxonomies and it is worth being clear:
