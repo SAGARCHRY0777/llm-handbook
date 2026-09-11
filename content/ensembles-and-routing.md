@@ -175,6 +175,12 @@ signal that step 1 gives you exactly.
 
 ## 4 · Example
 
+Two things to try. Push **escalation** to 95% at the default ratio and watch the saving reach exactly 1× — that is the break-even, and it is far more forgiving than it sounds. Then drag it back to 50% and notice the return is only 1.8×, which is the number that should actually decide whether you build this.
+
+```widget
+cascade
+```
+
 ```python
 """When does a cascade actually save money?
 

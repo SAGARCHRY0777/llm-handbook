@@ -230,7 +230,8 @@ so latency goes up and nothing else changes.</p>
 hide, an activation handoff you can, and an all-to-all whose size you do not
 control.</p>
 <hr>
-<h2 id="6-example"><a class="anchor" href="#6-example">#</a>6 · Example</h2><pre class="code"><code class="language-python">&quot;&quot;&quot;Communication volume and pipeline bubbles, from model shape.
+<h2 id="6-example"><a class="anchor" href="#6-example">#</a>6 · Example</h2><p>Leave the stages at 4 and pull <strong>microbatches</strong> down to 1: three quarters of the cluster goes idle. That single move is why pipeline parallelism is a throughput technique and not a latency one.</p>
+<div class="widget" data-widget="bubble"><p class="widget__fallback">Interactive calculator — needs JavaScript. The code beside it computes the same numbers.</p></div><pre class="code"><code class="language-python">&quot;&quot;&quot;Communication volume and pipeline bubbles, from model shape.
 
 The point of this is step 2 of the flow: TP traffic is per LAYER and blocking,
 PP traffic is per STAGE BOUNDARY and hideable. Those two facts decide which
@@ -419,5 +420,6 @@ GQA, quantization, paging, eviction.</p>
   });
 </script>
 <script src="app.js"></script>
+<script src="widgets.js"></script>
 </body>
 </html>

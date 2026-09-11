@@ -80,6 +80,30 @@ switches theme. Flowcharts, sequence diagrams and state diagrams all work.
 ASCII diagrams in plain code fences are used where a hand-drawn layout carries
 more than a generated one.
 
+### Interactive calculators
+
+A fenced ` ```widget ` block naming a calculator mounts one:
+
+```markdown
+```widget
+kv-cache
+```
+```
+
+Five are registered in `site/widgets.js`: `kv-cache`, `prefill-share`,
+`cascade`, `bubble`, `softmax`. Adding one is a function plus a line in the
+`WIDGETS` registry — no build change.
+
+**The rule they follow:** every widget is the live twin of a Python block on the
+same page, and the two must agree. The reader moves a slider to build intuition,
+then reads the code to see exactly how the number was produced. A widget that
+disagrees with the code beside it is worse than no widget, so the defaults are
+checked against the page's own tables.
+
+They are progressive enhancement. Without JavaScript the fence renders a short
+line pointing at the code block, which is the real content; nothing is lost but
+the slider.
+
 ---
 
 ## Publishing

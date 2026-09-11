@@ -408,6 +408,12 @@ without changing what is stored. That layering is why they compose.
 
 ## 5 · Example
 
+Move the sliders before reading the code. The one to reach for first is **KV heads** — take it from 32 to 8 and three quarters of the memory disappears. That is GQA, that is row 2, and no amount of paging or eviction below it comes close.
+
+```widget
+kv-cache
+```
+
 ```python
 """KV cache sizing, and what each technique does to it.
 

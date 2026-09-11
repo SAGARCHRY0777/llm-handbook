@@ -270,6 +270,102 @@ h2:hover .anchor, h3:hover .anchor { color: var(--ink-3); }
 }
 .claim { transform-box: fill-box; transform-origin: center; }
 
+
+/* ============================================================================
+   WIDGETS
+   Every one is the live twin of a Python block on the same page, so it is
+   styled as a sibling of pre.code rather than as a feature: same surface, same
+   border, same corner. The interaction is the only thing that differs.
+   ========================================================================== */
+.widget {
+  background: var(--panel-2);
+  border: var(--hair) solid var(--rule-2);
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin: 0 0 18px;
+}
+.widget__fallback { margin: 0; font-size: 14px; color: var(--ink-3); }
+
+.widget__head {
+  display: flex; align-items: baseline; gap: 10px;
+  padding-bottom: 12px; margin-bottom: 14px;
+  border-bottom: var(--hair) solid var(--rule-2);
+}
+.widget__tag {
+  font-family: var(--mono); font-size: 9.5px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--signal);
+  border: var(--hair) solid var(--signal); border-radius: 99px;
+  padding: 2px 7px; flex: none;
+}
+.widget__title { font-weight: 600; font-size: 15px; }
+
+.widget__controls { display: grid; gap: 12px 22px; }
+@media (min-width: 620px) { .widget__controls { grid-template-columns: 1fr 1fr; } }
+
+.widget__ctl { display: grid; gap: 4px; min-width: 0; }
+.widget__lab {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  font-family: var(--mono); font-size: 11px; letter-spacing: .06em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.widget__val { color: var(--ink); font-weight: 500; font-variant-numeric: tabular-nums; }
+
+.widget__input { width: 100%; accent-color: var(--signal); }
+select.widget__input {
+  font-family: var(--mono); font-size: 12px;
+  background: var(--panel); color: var(--ink);
+  border: var(--hair) solid var(--rule); border-radius: 5px; padding: 4px 6px;
+}
+.widget__input:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+
+.widget__out {
+  margin-top: 16px; padding-top: 14px;
+  border-top: var(--hair) solid var(--rule-2);
+}
+.widget__big {
+  display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.widget__big b {
+  font-family: var(--display); font-size: 30px; line-height: 1;
+  letter-spacing: .01em; color: var(--signal); font-variant-numeric: tabular-nums;
+}
+.widget__big span { font-size: 13.5px; color: var(--ink-3); }
+.widget__big.is-ok  b { color: var(--good); }
+.widget__big.is-warn b { color: var(--caution); }
+.widget__big.is-bad b { color: var(--bad); }
+
+.widget__row {
+  display: flex; justify-content: space-between; gap: 14px;
+  padding: 4px 0; font-size: 13.5px; color: var(--ink-2);
+  border-bottom: var(--hair) solid var(--rule-2);
+}
+.widget__row:last-child { border-bottom: 0; }
+.widget__row b { font-family: var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.widget__row.is-ok  b { color: var(--good); }
+.widget__row.is-warn b { color: var(--caution); }
+.widget__row.is-bad b { color: var(--bad); }
+
+/* the pipeline-bubble bar: work vs idle */
+.widget__bar { display: flex; height: 12px; border-radius: 3px; overflow: hidden; margin: 10px 0 12px; }
+.widget__bar i { background: var(--signal); }
+.widget__bar u { background: var(--bad); opacity: .55; }
+
+/* the softmax weight bars */
+.widget__wrow {
+  display: grid; grid-template-columns: 52px 1fr 56px;
+  align-items: center; gap: 10px; padding: 3px 0; font-size: 13.5px;
+}
+.widget__wrow span { font-family: var(--mono); color: var(--ink-3); }
+.widget__wrow b { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+.widget__wbar { background: var(--rule-2); border-radius: 3px; height: 10px; overflow: hidden; }
+.widget__wbar i { display: block; height: 100%; background: var(--signal); }
+
+.widget--failed { display: none; }
+
+@media (prefers-reduced-motion: reduce) { .widget__wbar i, .widget__bar i { transition: none; } }
+@media print { .widget { display: none; } }
+
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: .01ms !important; transition-duration: .01ms !important; }
   html { scroll-behavior: auto; }

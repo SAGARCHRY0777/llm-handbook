@@ -337,7 +337,8 @@ to change the requirement instead.</p>
 eviction happens under memory pressure, and sparse reads happen at read time
 without changing what is stored. That layering is why they compose.</p>
 <hr>
-<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">&quot;&quot;&quot;KV cache sizing, and what each technique does to it.
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><p>Move the sliders before reading the code. The one to reach for first is <strong>KV heads</strong> — take it from 32 to 8 and three quarters of the memory disappears. That is GQA, that is row 2, and no amount of paging or eviction below it comes close.</p>
+<div class="widget" data-widget="kv-cache"><p class="widget__fallback">Interactive calculator — needs JavaScript. The code beside it computes the same numbers.</p></div><pre class="code"><code class="language-python">&quot;&quot;&quot;KV cache sizing, and what each technique does to it.
 
 The formula is the whole topic. Run this against your own model config before
 reaching for any optimisation -- most capacity arguments are settled by
@@ -645,5 +646,6 @@ formula above: cross-layer KV sharing, K=V, and variable width.</p>
   });
 </script>
 <script src="app.js"></script>
+<script src="widgets.js"></script>
 </body>
 </html>

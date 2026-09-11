@@ -144,6 +144,13 @@ Attention does produce a probability distribution — over *positions*. It is no
 the next-token distribution, and no amount of staring at attention weights will
 show you the model's output probabilities.
 
+Worth two experiments. Spread the three scores apart and watch the distribution collapse toward a hard lookup — that saturation is what the `√d` divisor exists to prevent, so raise **head_dim** and see it soften again. And note the length of what you are adjusting: three positions, not 128,256 vocabulary entries. That is the whole distinction between the two softmaxes.
+
+```widget
+softmax
+```
+
+
 **Multi-head** attention runs several of these in parallel with different
 projections, so different heads can specialise — some track syntax, some track
 position, some appear to do very little at all, which is what makes pruning

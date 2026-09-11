@@ -157,7 +157,8 @@ the token level rather than the answer level), and <strong>collaborative inferen
   5. Use one model. A router you cannot trust is worse than no router.</code></pre><p>Step 1 first, always. Everything downstream is an attempt to approximate a
 signal that step 1 gives you exactly.</p>
 <hr>
-<h2 id="4-example"><a class="anchor" href="#4-example">#</a>4 · Example</h2><pre class="code"><code class="language-python">&quot;&quot;&quot;When does a cascade actually save money?
+<h2 id="4-example"><a class="anchor" href="#4-example">#</a>4 · Example</h2><p>Two things to try. Push <strong>escalation</strong> to 95% at the default ratio and watch the saving reach exactly 1× — that is the break-even, and it is far more forgiving than it sounds. Then drag it back to 50% and notice the return is only 1.8×, which is the number that should actually decide whether you build this.</p>
+<div class="widget" data-widget="cascade"><p class="widget__fallback">Interactive calculator — needs JavaScript. The code beside it computes the same numbers.</p></div><pre class="code"><code class="language-python">&quot;&quot;&quot;When does a cascade actually save money?
 
 The break-even is the whole decision and it is one line of algebra. Compute it
 before building anything -- a cascade above its break-even escalation rate is
@@ -333,5 +334,6 @@ for evaluating a system rather than a model.</p>
   });
 </script>
 <script src="app.js"></script>
+<script src="widgets.js"></script>
 </body>
 </html>

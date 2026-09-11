@@ -142,7 +142,8 @@ questions.</strong> This is the single most common confusion in the topic.</p>
 <div class="table-scroll"><table><thead><tr><th></th><th>Attention softmax</th><th>Output softmax</th></tr></thead><tbody><tr><td>Where</td><td>Inside every head of every layer — 1,024 times per pass in a 32×32 model</td><td>Once, at the very end of the stack</td></tr><tr><td>Over what</td><td>The <code>seq_len</code> past positions</td><td>The <code>vocab</code> possible next tokens</td></tr><tr><td>Length</td><td>Grows with the sequence</td><td>128,256, always</td></tr><tr><td>Means</td><td>&quot;How much of each earlier token do I mix into myself?&quot;</td><td>&quot;How likely is each vocabulary entry to be next?&quot;</td></tr><tr><td>Consumed by</td><td>The weighted sum over <code>V</code></td><td>The sampler</td></tr></tbody></table></div><p>Attention does produce a probability distribution — over <em>positions</em>. It is not
 the next-token distribution, and no amount of staring at attention weights will
 show you the model&#39;s output probabilities.</p>
-<p><strong>Multi-head</strong> attention runs several of these in parallel with different
+<p>Worth two experiments. Spread the three scores apart and watch the distribution collapse toward a hard lookup — that saturation is what the <code>√d</code> divisor exists to prevent, so raise <strong>head_dim</strong> and see it soften again. And note the length of what you are adjusting: three positions, not 128,256 vocabulary entries. That is the whole distinction between the two softmaxes.</p>
+<div class="widget" data-widget="softmax"><p class="widget__fallback">Interactive calculator — needs JavaScript. The code beside it computes the same numbers.</p></div><p><strong>Multi-head</strong> attention runs several of these in parallel with different
 projections, so different heads can specialise — some track syntax, some track
 position, some appear to do very little at all, which is what makes pruning
 possible.</p>
@@ -408,5 +409,6 @@ baseline. Same per-token compute, better division of labour.</p>
   });
 </script>
 <script src="app.js"></script>
+<script src="widgets.js"></script>
 </body>
 </html>

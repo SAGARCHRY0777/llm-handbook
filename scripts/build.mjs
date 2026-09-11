@@ -68,6 +68,16 @@ function makeRenderer(headings) {
     if (lang === "mermaid") {
       return `<pre class="mermaid">${escapeHtml(text)}</pre>`;
     }
+    // A ```widget fence names a calculator in site/widgets.js. The fallback
+    // paragraph is what a reader without JavaScript sees, and it points at the
+    // code block that computes the same thing -- so nothing is lost, only the
+    // slider. widgets.js replaces the whole node when it runs.
+    if (lang === "widget") {
+      const name = escapeHtml(text.trim().split(/\s+/)[0]);
+      return `<div class="widget" data-widget="${name}">` +
+        `<p class="widget__fallback">Interactive calculator \u2014 needs JavaScript. ` +
+        `The code beside it computes the same numbers.</p></div>`;
+    }
     const cls = lang ? ` class="language-${lang}"` : "";
     return `<pre class="code"><code${cls}>${escapeHtml(text)}</code></pre>`;
   };
@@ -205,7 +215,7 @@ function build() {
     )
   );
 
-  for (const asset of ["style.css", "app.js"]) {
+  for (const asset of ["style.css", "app.js", "widgets.js"]) {
     if (existsSync(join(SITE, asset))) cpSync(join(SITE, asset), join(OUT, asset));
   }
   // Pages would otherwise run the output through Jekyll and drop _-prefixed paths.

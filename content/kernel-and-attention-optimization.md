@@ -539,6 +539,12 @@ BF16xN are consequences of that flip.
 The arithmetic that decides whether sparsity is worth anything to you. It is
 short because the conclusion is blunt.
 
+Set this to your own prompt and output lengths before reading any further. A chat-shaped workload caps out under 2× however good the selector is, and that answer takes ten seconds to get.
+
+```widget
+prefill-share
+```
+
 ```python
 """Where sparse attention pays, and where it does not.
 

@@ -269,6 +269,12 @@ control.
 
 ## 6 · Example
 
+Leave the stages at 4 and pull **microbatches** down to 1: three quarters of the cluster goes idle. That single move is why pipeline parallelism is a throughput technique and not a latency one.
+
+```widget
+bubble
+```
+
 ```python
 """Communication volume and pipeline bubbles, from model shape.
 

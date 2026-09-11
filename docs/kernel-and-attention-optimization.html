@@ -432,7 +432,8 @@ BF16xN are consequences of that flip.</p>
 <hr>
 <h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><p>The arithmetic that decides whether sparsity is worth anything to you. It is
 short because the conclusion is blunt.</p>
-<pre class="code"><code class="language-python">&quot;&quot;&quot;Where sparse attention pays, and where it does not.
+<p>Set this to your own prompt and output lengths before reading any further. A chat-shaped workload caps out under 2× however good the selector is, and that answer takes ten seconds to get.</p>
+<div class="widget" data-widget="prefill-share"><p class="widget__fallback">Interactive calculator — needs JavaScript. The code beside it computes the same numbers.</p></div><pre class="code"><code class="language-python">&quot;&quot;&quot;Where sparse attention pays, and where it does not.
 
 Attention cost is quadratic in PREFILL and linear in DECODE. Sparsity attacks
 the quadratic term, so the whole question is what fraction of your tokens are
@@ -631,5 +632,6 @@ demanding.</p>
   });
 </script>
 <script src="app.js"></script>
+<script src="widgets.js"></script>
 </body>
 </html>
