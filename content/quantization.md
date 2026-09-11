@@ -235,6 +235,28 @@ def calibration_samples(production_logs, n: int = 256) -> list[str]:
 
 ## 6 · Depth — the senior layer
 
+**"Lossless" is used for two different things, and only one of them is.**
+Worth separating before the word appears in a vendor deck.
+
+*Bit-exact* lossless is compression, not quantization. DFloat11 is the clearest
+example: BF16 weights have low entropy in their exponent bits, so Huffman-coding
+those bits shrinks a model by about 30% with outputs **bit-for-bit identical**
+to the original. Weights stay compressed in VRAM and are decompressed on the fly
+before each matmul by a custom kernel using lookup tables in SRAM. There is no
+accuracy question to ask, because there is no accuracy change — the only costs
+are decode latency and kernel complexity. Against CPU offloading, the reported
+throughput gain is 2.3–46.2×, which is the comparison that matters: the real
+alternative to "model does not fit" is usually offload, not a smaller model.
+
+*Statistically* lossless is a different and weaker claim: the output
+distribution is preserved within some tolerance, not reproduced exactly. That is
+often a perfectly good trade, but it is not the same promise, and it needs the
+same evaluation any lossy method needs.
+
+The practical rule: if someone says lossless, ask whether they mean
+**bit-identical** or **statistically indistinguishable**. The first needs no
+eval. The second needs all of them.
+
 **Perplexity is a bad acceptance test and it is the one everybody uses.**
 Quantization papers report perplexity because it is cheap and comparable, but a
 0.1 perplexity increase can hide a large drop in a specific capability. The

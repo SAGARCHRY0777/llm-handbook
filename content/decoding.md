@@ -245,6 +245,18 @@ decode is bandwidth-bound, this is often a two-to-three-times speedup with
 deploy without re-running your evals — worth saying explicitly, because it is
 unusual among optimisations.
 
+**FR-Spec is the refinement worth knowing**, because it fixes a bottleneck that
+only appears at modern vocabulary sizes. Methods like EAGLE compress the draft
+model down to roughly one layer plus an LM head — at which point, with a 128k
+vocabulary, *the LM head is most of the draft cost*. FR-Spec shrinks the
+**draft's** vocabulary to a frequency-ranked shortlist, exploiting the long tail
+of token frequency: a small high-frequency subset covers most of what a drafter
+proposes. Reported: LM-head compute down about 75%, and roughly 1.12× over
+EAGLE-2. The property that makes it safe is the same one that makes speculative
+decoding safe — **verification still runs over the full vocabulary**, so the
+output distribution is unchanged. The draft is allowed to be narrow because the
+draft is only ever a guess.
+
 **Logprobs are underused.** Most APIs can return per-token log-probabilities,
 which give you a free confidence signal: low mean logprob on a generated answer
 correlates with the model being unsure. It is not calibrated and should not be

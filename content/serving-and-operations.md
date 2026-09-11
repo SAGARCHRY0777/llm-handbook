@@ -232,6 +232,28 @@ def route(query: str, budget_ms: int) -> str:
 
 ## 6 · Depth — the senior layer
 
+**Cold start is four phases, and the weights are rarely the slowest one.**
+The instinct is that loading a big model is the cost; measured, the profile is
+usually: container image pull (minutes, for a multi-gigabyte image), weight
+transfer into VRAM (tens of seconds — a 70B at FP16 over NVMe at 3–4 GB/s),
+**CUDA context init and CUDA-graph capture (10–30 seconds)**, and optionally a
+KV warmup. The third one surprises people, and it is the one that responds best
+to a fix: graph capture and `torch.compile` output can be persisted to disk and
+reused, so later starts on the same model and GPU skip the capture entirely.
+
+That is also why warm start is worth more than it sounds. The gain is not faster
+weight loading — it is **not rebuilding the infrastructure**: contexts, captured
+graphs, compiled kernels, allocator state. vLLM's sleep mode keeps that standing
+and reports waking a sleeping model as roughly 18–20× faster than starting a
+fresh instance, which turns model switching from a deployment event into a
+request-time one.
+
+The planning consequence: **scale-to-zero is a pricing decision with a latency
+price tag, and the tag is mostly fixed cost.** If your cold start is four
+minutes and 80% of it is image pull and graph capture, a bigger GPU does not
+help and a smaller model barely does. Shrinking the image, caching the compiled
+graphs, and keeping one warm replica are the levers — in that order.
+
 **Monitor these, in this order.** The list is short on purpose; a dashboard with
 forty panels is one nobody reads.
 

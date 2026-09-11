@@ -262,6 +262,20 @@ fails.
 | 11 | **Quantization** — FP16 → FP8 → 4-bit KV | `bytes_per_value` | 2–4× | Recall degradation at long context, and it hits the early tokens hardest |
 | 12 | **Low-rank projection (Palu)** — cache a compressed latent, reconstruct K/V on the fly | `head_dim` | Reported >90% at the aggressive end | Reconstruction compute per attention step; needs fused kernels to be a net win |
 
+**OSCAR is the current answer to "is INT2 KV actually possible?"** and it is
+worth knowing because of *why* it works. Rotating the cache before quantizing is
+standard — a Hadamard transform spreads outliers so they stop dominating the
+scale. But a Hadamard is chosen to flatten the cache, and flattening the cache
+is not the objective; surviving *attention* is. OSCAR estimates attention-aware
+covariance offline and derives fixed rotations aligned to `QᵀQ` for keys and
+`VᵀSᵀSV` for values, rather than to raw cache reconstruction. Naive rotation at
+INT2 collapses to near-zero accuracy; OSCAR reports a BF16 gap of 1.42 points on
+Qwen3-8B, roughly 8× less KV memory, up to 7× throughput at large batch, and up
+to 3× faster batch-1 decode because decode is bandwidth-bound. It keeps sink and
+recent tokens in BF16 and applies the rotate–clip–INT2 path only to history,
+inside the paged cache — which is the shape every serious eviction and
+quantization scheme converges on, for the attention-sink reason above.
+
 **KV quantization is not weight quantization** and the intuition does not
 transfer. INT8 KV is generally safe. **INT4 KV degrades long-context recall
 specifically** — the model still scores well on short prompts and falls apart on
@@ -719,4 +733,7 @@ Related: [Transformers](transformers.html) for what the cache is ·
 [Long context](long-context.html) for what breaks at length ·
 [Serving & operations](serving-and-operations.html) for the latency budget it sits in ·
 [Reasoning inference optimization](reasoning-inference-optimization.html) for the
-workload that fills this cache fastest — a 32k reasoning chain is 32k of KV.
+workload that fills this cache fastest — a 32k reasoning chain is 32k of KV ·
+[Kernel & attention optimization](kernel-and-attention-optimization.html) for the
+layer under rows 9 and 10: the sparse-attention schemes that decide which scores
+get computed at all.

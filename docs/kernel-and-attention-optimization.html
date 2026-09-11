@@ -1,0 +1,426 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kernel &amp; attention optimization · LLM Handbook</title>
+<meta name="description" content="The layer below the serving stack — sparse attention that skips work, and kernel numerics that make the remaining work cheaper. What each one is, and which of them you can act on.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li><li><a href="reasoning-models.html">Reasoning models & test-time compute</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="text2sql.html">Text2SQL & structured data</a></li><li><a href="graphrag.html">GraphRAG & knowledge graphs</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li><li><a href="kv-cache.html">KV cache optimization</a></li><li><a href="reasoning-inference-optimization.html">Reasoning inference optimization</a></li><li><a href="kernel-and-attention-optimization.html" class="active">Kernel & attention optimization</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li><li><a href="synthetic-data.html">Synthetic data generation</a></li><li><a href="training-methods.html">The 20 ways to train a model</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li><li><a href="caching.html">Caching strategies</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li><li><a href="learning-paths.html">Learning paths</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="kernel-attention-optimization"><a class="anchor" href="#kernel-attention-optimization">#</a>Kernel & attention optimization</h1><blockquote>
+<p><strong>The one sentence:</strong> everything else in this module changes <em>how much</em> work
+the model does; this layer changes <em>which arithmetic runs and how</em> — and
+almost none of it is yours to implement, which is exactly why you need to
+know what your server already does for you.</p>
+</blockquote>
+<p><a href="kv-cache.html">KV cache optimization</a> is about bytes. <a href="reasoning-inference-optimization.html">Reasoning inference
+optimization</a> is about tokens. This page
+is about the two layers underneath both: <strong>which attention scores get computed
+at all</strong>, and <strong>what instructions compute them</strong>.</p>
+<p>The reason it earns a page rather than a section: these are the techniques
+where the honest advice is usually <em>&quot;upgrade your server and read the release
+notes&quot;</em>, and knowing that is worth more than a tuning guide. You will be asked
+about them anyway — they are where the 2025–2026 gains actually came from.</p>
+<p><strong>A warning specific to this page.</strong> Half of these are less than a year old, and
+the vendor claims are ahead of the independent replications. Every number below
+is attributed. Where a result is a company&#39;s own benchmark and nobody else has
+reproduced it, this page says so rather than repeating the figure flat.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>  WHAT A DECODE STEP ACTUALLY SPENDS
+
+  ┌─────────────────────────────────────────────────────────────────┐
+  │ 1. WHICH SCORES TO COMPUTE            &lt;- sparse attention       │
+  │    dense: every query x every key, O(n^2)                       │
+  │    sparse: pick blocks first, then attend only to those         │
+  │       Top-k approximation ... the primitive under all of them   │
+  │       MSA / SSA / DHSA ...... three ways to choose the blocks   │
+  │       Morton / Z-order ...... make the chosen blocks contiguous │
+  ├─────────────────────────────────────────────────────────────────┤
+  │ 2. HOW TO COMPUTE THEM                &lt;- kernel numerics        │
+  │    exp() for softmax: SFU unit, or polynomial on the FMA/TC?    │
+  │    FP32 accuracy: native FP32 units, or N x BF16 tensor cores?  │
+  │       approximate exp ....... skip the special-function unit    │
+  │       polynomial approx ..... FlashAttention-4&#39;s version of it  │
+  │       BF16x9 / BF16x6 ....... FP32 accuracy on BF16 hardware    │
+  ├─────────────────────────────────────────────────────────────────┤
+  │ 3. HOW MANY BYTES TO MOVE             &lt;- the KV cache page      │
+  │    OSCAR (2-bit KV), quantization, paging, prefix reuse         │
+  ├─────────────────────────────────────────────────────────────────┤
+  │ 4. WHETHER TO RUN AT ALL              &lt;- elsewhere in the module│
+  │    shared experts, FR-Spec, warm start, caching                 │
+  └─────────────────────────────────────────────────────────────────┘
+
+
+  WHY LAYER 2 SUDDENLY MATTERS — Blackwell is lopsided
+
+    tensor core throughput      ~2x per generation
+    exponential unit (MUFU.EX2) roughly flat
+    shared memory bandwidth     roughly flat
+                                ^^^^^^^^^^^^
+       softmax used to be &quot;the bit between the two matmuls&quot;.
+       On Blackwell it is a bottleneck, because the matmuls got
+       faster and the thing between them did not.</code></pre><p>That asymmetry is the single idea that makes this page cohere. When one unit on
+the die doubles and its neighbours do not, work migrates <em>toward</em> the fast unit
+even when that means doing more arithmetic — a polynomial on the tensor cores
+beats one instruction on a unit that is now the bottleneck. Nearly every
+kernel-level result of the last two years is a variation on that trade.</p>
+<hr>
+<h2 id="2-design-sparse-attention"><a class="anchor" href="#2-design-sparse-attention">#</a>2 · Design — sparse attention</h2><p>Dense attention computes every query against every key. Sparse attention
+computes a <strong>selection</strong> first, then attends only to what it selected. Every
+scheme here is that same two-step shape; they differ in who does the selecting
+and when.</p>
+<h3 id="the-primitive-top-k-approximation"><a class="anchor" href="#the-primitive-top-k-approximation">#</a>The primitive: top-k approximation</h3><p>All of them reduce to <em>find the k most relevant blocks, cheaply</em>. Exact top-k
+over a long sequence is itself expensive, so implementations approximate it —
+score coarse summaries rather than tokens, accept an occasional wrong pick,
+and rely on attention&#39;s own softmax to forgive a near-miss. Two consequences
+worth holding on to:</p>
+<ul>
+<li><strong>The selector is the accuracy risk, not the attention.</strong> Once a block is
+selected, the attention over it is usually exact. What you lose is whatever
+the selector failed to select — so failures are <em>retrieval</em> failures, and
+they are invisible to perplexity.</li>
+<li><strong>Sparsity buys prefill more than decode.</strong> Prefill is where the quadratic
+term lives. At decode you attend to one query against the whole cache, which
+is already linear, so sparsity there saves bandwidth rather than compute.</li>
+</ul>
+<h3 id="the-three-named-schemes"><a class="anchor" href="#the-three-named-schemes">#</a>The three named schemes</h3><div class="table-scroll"><table><thead><tr><th></th><th><strong>MSA</strong> (MiniMax)</th><th><strong>DHSA</strong></th><th><strong>SSA</strong> (Subquadratic)</th></tr></thead><tbody><tr><td>Selects with</td><td>A lightweight <strong>Index Branch</strong> that scores KV blocks and picks a top-<em>k</em> per GQA group</td><td>A trained predictor over <strong>variable-length chunks</strong>, importance propagated chunk → token</td><td>Learned content-dependent selection</td></tr><tr><td>Trained in?</td><td>Yes — native to the model</td><td><strong>No.</strong> Backbone stays frozen, no retraining</td><td>Yes — own architecture</td></tr><tr><td>Then</td><td>Main Branch does <em>exact</em> block-sparse attention over the selected blocks</td><td>Dense attention over routed chunks</td><td>—</td></tr><tr><td>Reported</td><td>On par with GQA, <strong>28.4× less per-token attention compute at 1M context</strong> on a 109B multimodal model</td><td>Matches dense on NIAH/LongBench; prefill latency −20–60%, peak memory −35%; <strong>up to 10× prefill speedup at 128K</strong></td><td>7.2× prefill at 128K, 52.2× at 1M, a 12M-token window</td></tr><tr><td>Evidence</td><td>Paper + a released production model</td><td>Paper, NeurIPS 2025, code public</td><td><strong>Vendor blog only.</strong> Researchers have publicly asked for independent proof</td></tr></tbody></table></div><p><strong>MSA is the one to understand first</strong>, because it is the cleanest statement of
+the pattern: a cheap index branch chooses blocks, an exact branch attends over
+them. It also sits <em>on top of GQA</em> rather than replacing it, which is why it
+composes with everything on the KV cache page — the selection is per GQA group,
+so the cache layout is unchanged.</p>
+<p><strong>DHSA is the one you could actually deploy</strong>, and for a specific reason: it
+does not retrain the backbone. Everything else in this table is a property of
+a checkpoint you either have or do not. DHSA is a predictor bolted onto a
+frozen model, which makes it the only row here that is a <em>decision</em> rather than
+a model-selection criterion.</p>
+<p><strong>SSA is the one to be careful about.</strong> The numbers in that column are the
+company&#39;s own, the model is theirs, and the public response from researchers
+has been a request for independent evaluation rather than agreement. The
+underlying idea — content-dependent selection instead of fixed patterns — is
+sound and shared with the other two. The 52× and the 12M-token window are not
+yet things you should repeat in a design review without saying whose numbers
+they are.</p>
+<h3 id="morton-codes-making-the-selected-blocks-addressable"><a class="anchor" href="#morton-codes-making-the-selected-blocks-addressable">#</a>Morton codes — making the selected blocks addressable</h3><p>Selection produces a <em>scattered</em> set of blocks, and scattered is the worst
+possible shape for a GPU. Morton order (Z-order curves) interleaves the bits of
+multi-dimensional indices so that points near each other in 2-D stay near each
+other in the 1-D memory layout.</p>
+<pre class="code"><code>  ROW-MAJOR                     MORTON / Z-ORDER
+  0  1  2  3                    0  1  4  5
+  4  5  6  7                    2  3  6  7
+  8  9 10 11                    8  9 12 13
+ 12 13 14 15                   10 11 14 15
+
+ a 2x2 tile touches 4 rows      a 2x2 tile is 4 consecutive addresses</code></pre><p>Two uses, and they are different jobs:</p>
+<ul>
+<li><strong>Locality for tiled kernels.</strong> Memory swizzling with Morton ordering keeps
+2-D locality in a 1-D layout and spreads accesses across memory banks, which
+is a bank-conflict fix. AMD&#39;s Composable Kernel documents it as exactly that.</li>
+<li><strong>Indexing for top-k selection.</strong> ZETA uses Z-order curves to turn key/query
+matching into a 1-D locality problem, so candidate keys can be found by
+proximity in Morton space rather than by scoring everything.</li>
+</ul>
+<p>It is worth knowing by name because it explains <em>why</em> a sparse attention kernel
+is fast — selection alone would not be, if every selected block landed in a
+different memory bank.</p>
+<hr>
+<h2 id="3-design-kernel-numerics"><a class="anchor" href="#3-design-kernel-numerics">#</a>3 · Design — kernel numerics</h2><p>Same mathematics, different instructions. This is the layer that exists because
+of the hardware asymmetry in the diagram.</p>
+<h3 id="approximate-exponential-and-flashattention-4"><a class="anchor" href="#approximate-exponential-and-flashattention-4">#</a>Approximate exponential, and FlashAttention-4</h3><p>Softmax needs <code>exp()</code>. On NVIDIA hardware the natural way to get it is the
+special function unit (<code>MUFU.EX2</code>) — one instruction, low throughput, and on
+Blackwell it did not get faster while the tensor cores did. So softmax stopped
+being free.</p>
+<p><strong>FlashAttention-4&#39;s answer is to stop using that unit.</strong> It evaluates <code>exp()</code>
+as a <strong>polynomial approximation</strong> on the FMA/tensor-core path instead — more
+arithmetic, on hardware that has arithmetic to spare, rather than fewer
+instructions on the unit that is now the constraint. Reported: up to
+<strong>1605 TFLOP/s BF16 on B200 (≈71% utilisation), 1.3× faster than cuDNN 9.13 and
+2.7× faster than Triton.</strong></p>
+<p>The generalisation is worth more than the specific kernel: <strong>&quot;approximate
+exponential&quot; and &quot;polynomial approximation&quot; are the same technique at two
+levels of ambition.</strong> Any time a special-function unit is the bottleneck, you
+can trade it for a polynomial on the units that are not.</p>
+<h3 id="bf16x9-and-bf16x6-fp32-accuracy-on-bf16-silicon"><a class="anchor" href="#bf16x9-and-bf16x6-fp32-accuracy-on-bf16-silicon">#</a>BF16x9 and BF16x6 — FP32 accuracy on BF16 silicon</h3><p>The same trade, applied to precision rather than to transcendentals.</p>
+<p>Peak BF16 matrix throughput on GB200 is roughly <strong>28× peak FP32 matrix
+throughput</strong>. So it is worth doing <em>several</em> BF16 matrix multiplies to
+reconstruct one FP32-accurate result:</p>
+<pre class="code"><code>  split each FP32 matrix into BF16 pieces (high / mid / low),
+  multiply the pieces pairwise, accumulate in FP32
+
+  BF16x9   all 9 cross products      -&gt; FP32-comparable accuracy
+  BF16x6   6 of them                 -&gt; cheaper, valid when the exponent
+                                        range is known to be well behaved
+                                        (roughly [-110, 111])
+
+  9x the multiplies, but each is 28x cheaper -&gt; up to ~3x net speedup</code></pre><p>Three things to keep straight:</p>
+<ul>
+<li><strong>This is library emulation, not an instruction.</strong> BF16x9 is built out of
+ordinary hardware BF16 tensor-core MMAs; it shipped in CUDA 12.9 for
+Blackwell and PyTorch exposes it as an FP32-matmul precision mode.</li>
+<li><strong>It is the Ozaki scheme</strong>, the long-standing technique of splitting a
+high-precision mantissa into several low-precision pieces. The same idea is
+being used to emulate FP64 on FP8 tensor cores.</li>
+<li><strong>BF16x6 is the approximate one.</strong> It drops the cross products that only
+matter for extreme exponents, so it is correct <em>conditionally</em> — which is
+fine inside a kernel that knows its own value range and wrong as a global
+default.</li>
+</ul>
+<hr>
+<h2 id="4-uml-where-each-one-intervenes"><a class="anchor" href="#4-uml-where-each-one-intervenes">#</a>4 · UML — where each one intervenes</h2><pre class="mermaid">flowchart TB
+    REQ[&quot;Prompt arrives&quot;] --&gt; SEL{&quot;Sparse attention?&quot;}
+    SEL --&gt;|dense| ALLQ[&quot;Score every query x every key&lt;br/&gt;O(n^2) — the thing being avoided&quot;]
+    SEL --&gt;|sparse| IDX[&quot;SELECTOR&lt;br/&gt;MSA index branch · DHSA chunk router&lt;br/&gt;top-k approximation over block summaries&quot;]
+    IDX --&gt; MORTON[&quot;Morton / Z-order layout&lt;br/&gt;scattered blocks -&gt; contiguous addresses&quot;]
+    MORTON --&gt; BLK[&quot;Exact attention over the SELECTED blocks only&quot;]
+    ALLQ --&gt; SOFT
+    BLK --&gt; SOFT{&quot;softmax — needs exp()&quot;}
+
+    SOFT --&gt;|&quot;SFU path&quot;| EX2[&quot;MUFU.EX2&lt;br/&gt;one instruction, flat throughput,&lt;br/&gt;now the bottleneck on Blackwell&quot;]
+    SOFT --&gt;|&quot;FA4 path&quot;| POLY[&quot;Polynomial approximation&lt;br/&gt;on FMA / tensor cores&quot;]
+
+    EX2 --&gt; ACC
+    POLY --&gt; ACC{&quot;accumulate&quot;}
+    ACC --&gt;|&quot;native FP32&quot;| F32[&quot;FP32 units — 1/28th the matrix throughput&quot;]
+    ACC --&gt;|&quot;emulated&quot;| OZ[&quot;BF16x9 / BF16x6&lt;br/&gt;N BF16 MMAs, FP32 accumulate&quot;]
+
+    F32 --&gt; KV[(&quot;KV cache — the other page&quot;)]
+    OZ --&gt; KV
+    KV --&gt; OUT[&quot;Logits&quot;]</pre><p>Read the two forks in the middle as the same decision twice: <strong>is the dedicated
+unit still the fast path, or has the general-purpose one overtaken it?</strong> On
+Hopper the answer was &quot;dedicated&quot;; on Blackwell it flipped, and both FA4 and
+BF16xN are consequences of that flip.</p>
+<hr>
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><p>The arithmetic that decides whether sparsity is worth anything to you. It is
+short because the conclusion is blunt.</p>
+<pre class="code"><code class="language-python">&quot;&quot;&quot;Where sparse attention pays, and where it does not.
+
+Attention cost is quadratic in PREFILL and linear in DECODE. Sparsity attacks
+the quadratic term, so the whole question is what fraction of your tokens are
+prompt tokens. Run this before reading another sparse-attention paper.
+&quot;&quot;&quot;
+
+
+def attn_cost(prompt, generated, sparsity=1.0):
+    &quot;&quot;&quot;Relative attention work, in query-key pair units.
+
+    sparsity: fraction of keys actually attended. 1.0 = dense.
+
+    Prefill is the triangle over the prompt: ~p^2/2 pairs.
+    Decode is one query against a growing cache: ~p*g + g^2/2 pairs.
+    &quot;&quot;&quot;
+    prefill = prompt * prompt / 2
+    decode = prompt * generated + generated * generated / 2
+    return prefill * sparsity, decode * sparsity
+
+
+SHAPES = [
+    (&quot;chat turn&quot;,        600,    400),
+    (&quot;RAG answer&quot;,     8_000,    500),
+    (&quot;doc analysis&quot;,  64_000,  1_000),
+    (&quot;repo-scale&quot;,   500_000,  2_000),
+]
+
+print(f&quot;{&#39;workload&#39;:&lt;16}{&#39;prefill %&#39;:&gt;10}{&#39;dense&#39;:&gt;12}{&#39;@10% sparse&#39;:&gt;13}{&#39;saving&#39;:&gt;9}&quot;)
+print(&quot;-&quot; * 60)
+for name, p, g in SHAPES:
+    dpf, ddc = attn_cost(p, g)
+    spf, sdc = attn_cost(p, g, sparsity=0.10)
+    dense, sparse = dpf + ddc, spf + ddc      # sparsity helps prefill, not decode
+    share = dpf / dense * 100
+    print(f&quot;{name:&lt;16}{share:&gt;9.0f}%{dense:&gt;12.3e}{sparse:&gt;13.3e}{dense / sparse:&gt;8.1f}x&quot;)</code></pre><pre class="code"><code>workload         prefill %       dense  @10% sparse   saving
+------------------------------------------------------------
+chat turn              36%   5.000e+05    3.380e+05     1.5x
+RAG answer             89%   3.612e+07    7.325e+06     4.9x
+doc analysis           97%   2.112e+09    2.693e+08     7.8x
+repo-scale             99%   1.260e+11    1.350e+10     9.3x</code></pre><p><strong>The column that decides everything is &quot;prefill %&quot;.</strong> On a chat turn, 36% of
+attention work is prefill, so even 10× sparsity returns 1.5× — and you have
+taken on a retrieval-failure risk for it. At 64K context, prefill is 97% of the
+work and the identical technique returns 7.8×.</p>
+<p>This is why every sparse-attention paper reports prefill latency and why every
+one of them benchmarks at 128K and above. It is also the fastest way to decide
+whether the field applies to you: <strong>if your prompts are short, none of §2 is for
+you, and the KV cache page is where your wins are.</strong></p>
+<p>Note the second-order point hiding in the code: <code>sparsity</code> multiplies <code>prefill</code>
+only. Sparse attention at decode saves <em>bandwidth</em> — fewer KV bytes read — not
+arithmetic, because decode was already linear. Papers that quote one number
+usually quote the prefill one.</p>
+<hr>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Sparse attention fails at retrieval, and perplexity cannot see it.</strong> The
+selector is a learned or heuristic guess about which blocks matter. When it
+guesses wrong the model does not produce noise — it produces a fluent answer
+computed without the one block that contained the answer. Average-case metrics
+are unaffected because the average case did not need that block. This is the
+same failure shape as KV eviction, and it needs the same gate: a needle probe at
+your real context length, in CI. See <a href="regression-gates.html">regression gates</a>.</p>
+<p><strong>Distinguish &quot;no retraining&quot; from &quot;no evaluation&quot;.</strong> DHSA&#39;s headline property
+is that the backbone stays frozen, which removes the training cost. It does not
+remove the evaluation cost, because the predictor still changes which tokens the
+model can see. The pitch &quot;drop-in, no retraining&quot; is true and routinely
+misheard as &quot;drop-in, no risk&quot;.</p>
+<p><strong>Vendor benchmarks and independent replication are different evidence, and the
+gap is currently wide.</strong> SSA&#39;s numbers come from the company that sells SSA, on
+their own model, and the public researcher response has been a request for
+proof. That is not an accusation — it is the normal state of a result that is
+three months old. The professional move is to quote the source with the number
+every time, and to treat anything unreplicated as a hypothesis about your
+workload rather than a property of the technique.</p>
+<p><strong>Kernel numerics are not yours, and pretending otherwise is expensive.</strong> You
+will not hand-write a polynomial exp approximation; you will get it by moving
+from FlashAttention-3 to FlashAttention-4, which is a version bump in a
+dependency. The actionable form of this whole section is: <em>know which kernel
+your server uses, know what hardware it was tuned for, and read the release
+notes</em>. A team that upgrades its GPU generation without upgrading its attention
+kernel leaves most of the generational gain unclaimed — the hardware got
+lopsided, and only the new kernel knows that.</p>
+<p><strong>BF16x6 is conditionally correct, which is a category of bug worth naming.</strong>
+It drops the cross products that only matter when exponents are extreme. Inside
+a kernel that knows its value range, that is a sound optimisation. Applied
+globally as &quot;the fast FP32 mode&quot;, it is a silent accuracy cliff that appears
+only on inputs with unusual dynamic range — which, in an inference stack, means
+it appears in production and not in testing.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure</th><th>Looks like</th><th>Actual cause</th></tr></thead><tbody><tr><td>Sparse model loses facts from long documents</td><td>Fluent, confident, wrong</td><td>Selector missed the block; perplexity unchanged</td></tr><tr><td>Sparsity gave 1.3× not 10×</td><td>&quot;The paper said 10×&quot;</td><td>Short prompts — prefill was never the dominant term</td></tr><tr><td>New GPU, same throughput</td><td>Generational upgrade did nothing</td><td>Old attention kernel, tuned for symmetric hardware</td></tr><tr><td>Accuracy cliff on rare inputs</td><td>Fine in eval, wrong in production</td><td>BF16x6 applied outside its valid exponent range</td></tr><tr><td>2-bit KV collapsed the model</td><td>Near-zero accuracy at INT2</td><td>Rotation not aligned to attention — see <a href="kv-cache.html">OSCAR</a></td></tr><tr><td>Long-context latency fine, cost unchanged</td><td>Faster, not cheaper</td><td>Sparsity cut prefill compute; the KV cache is still full size</td></tr></tbody></table></div><hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What this layer means here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>A long document gets answered in seconds instead of minutes. The risk they cannot see is that a sparse model may never have looked at the paragraph their question was about.</td></tr><tr><td><strong>Coder</strong></td><td>You consume this, you do not write it. Know your kernel version and what it was tuned for. Before chasing any of it, compute what fraction of your attention work is prefill — for most chat workloads the answer ends the conversation.</td></tr><tr><td><strong>Tester</strong></td><td>Sparse attention and 2-bit KV both fail as retrieval, silently, on the hard tail. Needle probes at production context length, stratified, gated. Aggregate accuracy is structurally blind to this class of failure.</td></tr><tr><td><strong>System designer</strong></td><td>Sparsity buys prefill latency and therefore TTFT; it does not shrink the KV cache, so it does not buy concurrency. Those are different budgets and conflating them is the usual planning error.</td></tr><tr><td><strong>Architect</strong></td><td>MSA and SSA are checkpoint properties — model-selection criteria, not knobs. DHSA is the rare one you can adopt against a model you already run. Write down which of your wins are inherited and which you chose.</td></tr><tr><td><strong>CEO</strong></td><td>The 2025–26 inference gains came mostly from this layer, and almost none of them required a research team — they required upgrading a dependency and a GPU generation together. The cheapest efficiency programme available is usually &quot;stay current&quot;.</td></tr><tr><td><strong>Market</strong></td><td>Long-context claims are now made in millions of tokens on vendor benchmarks. The questions that separate a real capability from a press release: whose numbers, at what context, replicated by whom, and what does recall look like in the middle.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><p><strong>&quot;Why did softmax suddenly become an attention bottleneck?&quot;</strong>
+Asymmetric hardware scaling. Tensor core throughput roughly doubled per
+generation while the special function unit that computes <code>exp()</code> did not, so on
+Blackwell the exponential is the constraint rather than the matmuls.
+FlashAttention-4&#39;s response is to evaluate <code>exp()</code> as a polynomial on the
+FMA/tensor-core path — more arithmetic, on the units that have headroom. The
+general principle is the answer they want: when one unit doubles and its
+neighbours do not, move work toward the fast unit even at the cost of doing more
+of it.</p>
+<p><strong>&quot;How can nine BF16 multiplies be faster than one FP32 multiply?&quot;</strong>
+Because on GB200 peak BF16 matrix throughput is about 28× peak FP32 matrix
+throughput, so 9× the multiplies at 1/28th the cost is still a net win — up to
+about 3×. That is BF16x9, library emulation built from ordinary BF16 tensor-core
+MMAs, shipped in CUDA 12.9. It is the Ozaki scheme: split the mantissa into
+low-precision pieces, multiply pairwise, accumulate in FP32. BF16x6 drops three
+cross products and is cheaper but only valid when the exponent range is known to
+be well behaved.</p>
+<p><strong>&quot;You enabled sparse attention and got 1.3×. The paper said 10×. What happened?&quot;</strong>
+Your prompts are short. Sparsity attacks the quadratic prefill term; decode was
+already linear in the cache. If prefill is a third of your attention work the
+ceiling is about 1.5× no matter how good the selector is. The papers benchmark
+at 128K and above because that is where prefill is 99% of the work. Compute your
+prefill share before adopting anything in this area.</p>
+<p><strong>&quot;What is the failure mode of sparse attention, and how would you catch it?&quot;</strong>
+Retrieval failure. The selector decides which blocks the model may see; when it
+chooses wrong the model answers fluently without the block that mattered.
+Perplexity and aggregate accuracy cannot see this because the average case did
+not need that block. You need needle-in-a-haystack probing at your real context
+length, stratified, and gated in CI — the same gate KV eviction needs, for the
+same reason.</p>
+<p><strong>&quot;MSA, DHSA and SSA — what actually separates them?&quot;</strong>
+Who selects, and whether the backbone has to be retrained. MSA has a lightweight
+index branch trained into the model, picking a top-<em>k</em> of KV blocks per GQA
+group, and then does exact block-sparse attention over them. DHSA predicts
+sparsity online over variable-length chunks with the backbone <strong>frozen</strong>, which
+makes it the only one of the three you can adopt against a model you already
+serve. SSA is a startup&#39;s own architecture, and the honest thing to add is that
+its headline numbers are unreplicated so far.</p>
+<p><strong>&quot;Is any of this actionable for an application engineer?&quot;</strong>
+Mostly not directly, and saying so is the right answer. You get FA4 by upgrading
+FlashAttention, BF16x9 by upgrading CUDA, sparse attention by choosing a model
+that has it. The two decisions you genuinely own are keeping the kernel and the
+hardware generation in step — a new GPU with an old attention kernel leaves most
+of the generational gain on the table — and evaluating anything that changes
+what the model can see.</p>
+<hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done with this page when you can:</p>
+<ul>
+<li>Explain asymmetric hardware scaling, and use it to derive both FA4&#39;s
+polynomial exp and BF16x9 from the same principle</li>
+<li>Say why nine BF16 multiplies beat one FP32 multiply, and what BF16x6 trades</li>
+<li>Compute your own prefill share and decide from it whether sparse attention
+applies to you</li>
+<li>Separate MSA, DHSA and SSA by who selects and whether the backbone is frozen</li>
+<li>Name the failure mode sparse attention shares with KV eviction, and the gate
+that catches it</li>
+<li>State which claims on this page are replicated and which are vendor-only,
+without having to look it up</li>
+</ul>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><ul>
+<li><strong>MSA</strong> — <a href="https://arxiv.org/abs/2606.13392"><em>MiniMax Sparse Attention</em></a> (2026) — index branch plus exact block-sparse main branch, on top of GQA.</li>
+<li><strong>DHSA</strong> — <a href="https://arxiv.org/abs/2510.24606">Xiong et al., <em>Long-Context Modeling with Dynamic Hierarchical Sparse Attention for On-Device LLMs</em></a> (NeurIPS 2025) — online sparsity prediction with a frozen backbone; <a href="https://github.com/xiongsiheng/DHSA">code</a>.</li>
+<li><strong>SSA</strong> — the vendor&#39;s own material, and <a href="https://venturebeat.com/technology/miami-startup-subquadratic-claims-1-000x-ai-efficiency-gain-with-subq-model-researchers-demand-independent-proof">VentureBeat&#39;s report of the researcher response</a> asking for independent proof. Read both, in that order.</li>
+<li><strong>FlashAttention-4</strong> — <a href="https://arxiv.org/abs/2603.05451">Dao et al., <em>Algorithm and Kernel Pipelining Co-Design for Asymmetric Hardware Scaling</em></a> (2026) — the polynomial exp, and the clearest statement of the asymmetry argument.</li>
+<li><strong>Morton / Z-order</strong> — <a href="https://arxiv.org/abs/2501.14577"><em>ZETA: Leveraging Z-order Curves for Efficient Top-k Attention</em></a> for the indexing use; AMD&#39;s Composable Kernel docs for the memory-swizzling use.</li>
+<li><strong>BF16xN emulation</strong> — <a href="https://arxiv.org/abs/2605.16617"><em>Exceeding the Numerical and Performance Characteristics of IEEE-754 SGEMM with BFloat16 Tensor Cores</em></a> (2026), and the <a href="https://github.com/pytorch/pytorch/pull/195301">PyTorch BF16x9 precision mode</a>.</li>
+<li><strong>Ozaki scheme</strong> — <a href="https://arxiv.org/abs/2508.00441"><em>DGEMM without FP64 Arithmetic</em></a> — the same splitting idea one precision further down.</li>
+</ul>
+<p>Related: <a href="kv-cache.html">KV cache optimization</a> for the bytes, including OSCAR ·
+<a href="quantization.html">Quantization</a> for the weight side and for what &quot;lossless&quot;
+means · <a href="transformers.html">Transformers</a> for why attention is quadratic in the
+first place · <a href="long-context.html">Long context</a> for what breaks at length ·
+<a href="regression-gates.html">Regression gates</a> for the needle probe this page keeps
+demanding.</p>
+</article>
+    <div class="pager-row"><a class="pager previous" href="reasoning-inference-optimization.html"><span>previous</span>Reasoning inference optimization</a><a class="pager next" href="orchestration-frameworks.html"><span>next</span>Orchestration frameworks</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-sparse-attention">2 · Design — sparse attention</a></li><li class="d3"><a href="#the-primitive-top-k-approximation">The primitive: top-k approximation</a></li><li class="d3"><a href="#the-three-named-schemes">The three named schemes</a></li><li class="d3"><a href="#morton-codes-making-the-selected-blocks-addressable">Morton codes — making the selected blocks addressable</a></li><li class="d2"><a href="#3-design-kernel-numerics">3 · Design — kernel numerics</a></li><li class="d3"><a href="#approximate-exponential-and-flashattention-4">Approximate exponential, and FlashAttention-4</a></li><li class="d3"><a href="#bf16x9-and-bf16x6-fp32-accuracy-on-bf16-silicon">BF16x9 and BF16x6 — FP32 accuracy on BF16 silicon</a></li><li class="d2"><a href="#4-uml-where-each-one-intervenes">4 · UML — where each one intervenes</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+</body>
+</html>

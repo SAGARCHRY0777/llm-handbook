@@ -450,6 +450,15 @@ route each token to a few expert MLPs instead of all of them, so total parameter
 grow while per-token compute stays flat. It is the main reason a "several hundred
 billion parameter" model can serve at reasonable cost.
 
+**Shared experts** are the refinement that made MoE routing work better. In a
+plain MoE every expert is routed to, so each one has to independently relearn
+the common knowledge every token needs — the same basic competence duplicated
+across dozens of experts, which is capacity spent on redundancy. The DeepSeekMoE
+answer is to keep one or more experts **always active** for every token,
+alongside the routed ones. The shared expert absorbs what is common; the routed
+experts are then free to specialise, because they no longer have to carry the
+baseline. Same per-token compute, better division of labour.
+
 ---
 
 ## 7 · From each seat
