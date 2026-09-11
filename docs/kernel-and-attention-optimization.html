@@ -190,8 +190,13 @@ reconstruct one FP32-accurate result:</p>
 ordinary hardware BF16 tensor-core MMAs; it shipped in CUDA 12.9 for
 Blackwell and PyTorch exposes it as an FP32-matmul precision mode.</li>
 <li><strong>It is the Ozaki scheme</strong>, the long-standing technique of splitting a
-high-precision mantissa into several low-precision pieces. The same idea is
-being used to emulate FP64 on FP8 tensor cores.</li>
+high-precision mantissa into several low-precision pieces. The same idea runs
+one precision further down: <strong>FP64 emulation on FP8 tensor cores</strong>, DGEMM
+without any FP64 arithmetic at all. That direction matters because FP64 units
+are the ones vendors are least motivated to grow — an AI-optimised die spends
+its area on low precision, so scientific workloads increasingly reach FP64
+accuracy by composition rather than by hardware. Same trade as everything else
+on this page, at the opposite end of the number line.</li>
 <li><strong>BF16x6 is the approximate one.</strong> It drops the cross products that only
 matter for extreme exponents, so it is correct <em>conditionally</em> — which is
 fine inside a kernel that knows its own value range and wrong as a global
@@ -249,7 +254,89 @@ first token is also, on most models, the attention sink that nothing may evict.<
 <p>The general shape is worth more than the three items: <strong>prefill is a batch
 computation being used for one scalar answer, so ask what is discarded.</strong> Most
 of the easy wins in prefill are the things that were computed and thrown away.</p>
-<h3 id="a-note-on-the-algebraic-integer-number-system"><a class="anchor" href="#a-note-on-the-algebraic-integer-number-system">#</a>A note on the algebraic integer number system</h3><p>It appears on inference-optimization taxonomies and it is worth being clear:
+<hr>
+<h2 id="3b-the-hardware-underneath"><a class="anchor" href="#3b-the-hardware-underneath">#</a>3b · The hardware underneath</h2><p>Everything above assumes a machine. Three properties of the current one decide
+what a kernel can do, and all three are new enough that libraries are still
+catching up.</p>
+<h3 id="native-fp4-and-what-native-buys"><a class="anchor" href="#native-fp4-and-what-native-buys">#</a>Native FP4, and what "native" buys</h3><p>Blackwell&#39;s fifth-generation tensor cores execute <strong>FP4 matrix
+multiply-accumulate natively</strong> — not emulated, not upconverted. Paired with a
+second-generation Transformer Engine that manages the format with <strong>micro-tensor
+scaling</strong>, adjusting precision below the tensor level, the headline is a
+doubling against FP8 on three axes at once: tensor-core throughput, parameter
+bandwidth, and model size per GPU.</p>
+<p>The reason that third one matters most: <strong>4-bit weights halve what you stream
+per decode step</strong>, and decode is bandwidth-bound. Native FP4 is not primarily a
+compute win; it is a bandwidth win that happens to also be a compute win.</p>
+<p>Rubin continues the same line — dense FP4 and FP8 throughput roughly 3.5×
+GB200 by NVIDIA&#39;s figures, plus an adaptive compression engine that computes
+sparsity in flight rather than requiring it to be baked into the checkpoint.
+Treat pre-release throughput multipliers as vendor numbers until independently
+measured; the <em>direction</em> is the reliable part, and the direction has been
+consistent for four generations: <strong>low precision gets faster, everything else
+roughly stands still.</strong></p>
+<h3 id="block-scaled-versus-block-floating-point"><a class="anchor" href="#block-scaled-versus-block-floating-point">#</a>Block-scaled versus block floating point</h3><p>This is the distinction that makes 4-bit work at all, and it is routinely
+blurred.</p>
+<pre class="code"><code>  PER-TENSOR SCALE        one scale for millions of values.
+                          One outlier sets it, everything else
+                          collapses toward zero. Useless at 4 bits.
+
+  BLOCK FLOATING POINT    a block shares ONE EXPONENT; the elements
+                          are integer mantissas. Classic DSP.
+                          Cheap, but the block&#39;s dynamic range is
+                          whatever its largest element allows.
+
+  BLOCK-SCALED (MX, NVFP4) each small block carries its own SCALE, and
+                          the elements are still floating point.
+                          Two levels of exponent, so an outlier costs
+                          you its block rather than the tensor.</code></pre><p>The two shipped block-scaled formats differ in exactly the way that matters:</p>
+<div class="table-scroll"><table><thead><tr><th></th><th><strong>MXFP4</strong></th><th><strong>NVFP4</strong></th></tr></thead><tbody><tr><td>Standard</td><td>Open — OCP, supported by AMD, Intel, ARM</td><td>NVIDIA proprietary</td></tr><tr><td>Block</td><td>32 elements</td><td>16 elements — finer</td></tr><tr><td>Scale</td><td>power-of-two (E8M0)</td><td>floating point (E4M3) — more expressive</td></tr><tr><td>Portability</td><td>checkpoints move between vendors</td><td><strong>do not</strong></td></tr></tbody></table></div><p>NVIDIA&#39;s argument for NVFP4 is lower quantization error from the finer, more
+expressive scaling; the counter-argument is a checkpoint you cannot move. That
+is a procurement decision wearing a numerics costume, and it should be made by
+whoever owns the hardware commitment rather than by whoever runs the quantizer.</p>
+<p>Note how this connects upward: <strong><a href="quantization.html">outlier handling</a> —
+LLM.int8(), AWQ, SmoothQuant — is what you do when the format cannot express
+outliers.</strong> Block scaling attacks the same problem in the number system instead
+of in the algorithm, which is why 4-bit became practical when the formats
+arrived rather than when the algorithms did. The two still compose; they are
+just no longer both mandatory.</p>
+<h3 id="fused-epilogues-and-prologues"><a class="anchor" href="#fused-epilogues-and-prologues">#</a>Fused epilogues and prologues</h3><p>A GEMM kernel is a <strong>mainloop</strong> that does the tiled multiply-accumulate and an
+<strong>epilogue</strong> that transforms the output tile and writes it to memory. Anything
+the epilogue can absorb — bias, activation, scaling, and above all
+<strong>dequantization</strong> — happens while the result is still in registers or shared
+memory, instead of in a second kernel that reads the whole tensor back.</p>
+<p>That matters disproportionately for low-bit serving. Quantize and dequantize are
+elementwise operations that run on the CUDA cores while the GEMM runs on the
+tensor cores, so unfused they are a full round trip to HBM for arithmetic that
+is almost free. Fusing them is how a W4A8 or W4A16 kernel gets to be worth
+having at all: dequantization folded into the mainloop, scaling folded into the
+epilogue, one launch, one pass over the data. CUTLASS exposes this as <strong>epilogue
+visitor trees</strong>, which is the vocabulary to know if you ever read one.</p>
+<p>The prologue is the mirror image and gets less attention: transforming inputs on
+the way <em>in</em> — layout swizzles, unpacking 4-bit weights, applying rotations of
+the kind <a href="kv-cache.html">OSCAR</a> needs — rather than materialising a converted
+copy first.</p>
+<p><strong>The engineering point is the same one this page keeps making.</strong> Fusion does
+not reduce arithmetic; it removes trips to memory, which is the scarce resource.
+A quantization scheme with no fused kernel is a paper, not a deployment.</p>
+<h3 id="thread-block-clusters-and-distributed-shared-memory"><a class="anchor" href="#thread-block-clusters-and-distributed-shared-memory">#</a>Thread block clusters and distributed shared memory</h3><p>Hopper added a level to the CUDA hierarchy and Blackwell keeps it: between the
+thread block and the grid sits the <strong>cluster</strong>, a set of blocks guaranteed
+co-resident on nearby SMs. Within a cluster, a block can read, write and do
+atomics in <em>another block&#39;s</em> shared memory — <strong>distributed shared memory</strong>.</p>
+<p>Why it exists: the gap between shared memory (fast, tiny) and global memory
+(large, slow) had nothing in it. Data that did not fit in one block&#39;s shared
+memory had to go to global, at global&#39;s cost. DSMEM is the missing middle, and
+because it can be used <em>simultaneously</em> with L2, a kernel can draw on the
+combined bandwidth of both rather than choosing.</p>
+<p>For LLM kernels this is the enabling feature behind larger cooperative tiles —
+a single B200 thread block can address up to 227 KB of shared memory, and a
+cluster extends the working set further without leaving the SM neighbourhood.
+It is also part of why the megakernels above are practical: cross-block
+coordination that used to need a kernel boundary can now happen in hardware.</p>
+<p>If you write kernels, the one operational note is to compute occupancy with
+<code>cudaOccupancyMaxActiveClusters</code> and launch accordingly, rather than reasoning
+about blocks as though clusters were not there.</p>
+<hr>
+<h2 id="3c-a-note-on-the-algebraic-integer-number-system"><a class="anchor" href="#3c-a-note-on-the-algebraic-integer-number-system">#</a>3c · A note on the algebraic integer number system</h2><p>It appears on inference-optimization taxonomies and it is worth being clear:
 this is a <strong>digital signal processing</strong> technique, not an LLM one. Algebraic
 integer quantization represents values in a ring of algebraic integers so that
 transforms like the DCT can be computed <strong>error-free</strong>, with rounding deferred
@@ -455,7 +542,7 @@ demanding.</p>
     <div class="pager-row"><a class="pager previous" href="reasoning-inference-optimization.html"><span>previous</span>Reasoning inference optimization</a><a class="pager next" href="kv-reuse.html"><span>next</span>KV reuse beyond the exact prefix</a></div>
   </main>
 
-  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-sparse-attention">2 · Design — sparse attention</a></li><li class="d3"><a href="#the-primitive-top-k-approximation">The primitive: top-k approximation</a></li><li class="d3"><a href="#the-three-named-schemes">The three named schemes</a></li><li class="d3"><a href="#morton-codes-making-the-selected-blocks-addressable">Morton codes — making the selected blocks addressable</a></li><li class="d2"><a href="#3-design-kernel-numerics">3 · Design — kernel numerics</a></li><li class="d3"><a href="#approximate-exponential-and-flashattention-4">Approximate exponential, and FlashAttention-4</a></li><li class="d3"><a href="#bf16x9-and-bf16x6-fp32-accuracy-on-bf16-silicon">BF16x9 and BF16x6 — FP32 accuracy on BF16 silicon</a></li><li class="d3"><a href="#whole-layer-fused-kernels-megakernels">Whole-layer fused kernels — megakernels</a></li><li class="d3"><a href="#kernel-synthesis">Kernel synthesis</a></li><li class="d3"><a href="#prefill-micro-optimisations">Prefill micro-optimisations</a></li><li class="d3"><a href="#a-note-on-the-algebraic-integer-number-system">A note on the algebraic integer number system</a></li><li class="d2"><a href="#4-uml-where-each-one-intervenes">4 · UML — where each one intervenes</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-sparse-attention">2 · Design — sparse attention</a></li><li class="d3"><a href="#the-primitive-top-k-approximation">The primitive: top-k approximation</a></li><li class="d3"><a href="#the-three-named-schemes">The three named schemes</a></li><li class="d3"><a href="#morton-codes-making-the-selected-blocks-addressable">Morton codes — making the selected blocks addressable</a></li><li class="d2"><a href="#3-design-kernel-numerics">3 · Design — kernel numerics</a></li><li class="d3"><a href="#approximate-exponential-and-flashattention-4">Approximate exponential, and FlashAttention-4</a></li><li class="d3"><a href="#bf16x9-and-bf16x6-fp32-accuracy-on-bf16-silicon">BF16x9 and BF16x6 — FP32 accuracy on BF16 silicon</a></li><li class="d3"><a href="#whole-layer-fused-kernels-megakernels">Whole-layer fused kernels — megakernels</a></li><li class="d3"><a href="#kernel-synthesis">Kernel synthesis</a></li><li class="d3"><a href="#prefill-micro-optimisations">Prefill micro-optimisations</a></li><li class="d2"><a href="#3b-the-hardware-underneath">3b · The hardware underneath</a></li><li class="d3"><a href="#native-fp4-and-what-native-buys">Native FP4, and what &quot;native&quot; buys</a></li><li class="d3"><a href="#block-scaled-versus-block-floating-point">Block-scaled versus block floating point</a></li><li class="d3"><a href="#fused-epilogues-and-prologues">Fused epilogues and prologues</a></li><li class="d3"><a href="#thread-block-clusters-and-distributed-shared-memory">Thread block clusters and distributed shared memory</a></li><li class="d2"><a href="#3c-a-note-on-the-algebraic-integer-number-system">3c · A note on the algebraic integer number system</a></li><li class="d2"><a href="#4-uml-where-each-one-intervenes">4 · UML — where each one intervenes</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
 </div>
 
 <script type="module">

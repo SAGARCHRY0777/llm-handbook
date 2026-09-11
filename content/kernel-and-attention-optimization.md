@@ -214,8 +214,13 @@ Three things to keep straight:
   ordinary hardware BF16 tensor-core MMAs; it shipped in CUDA 12.9 for
   Blackwell and PyTorch exposes it as an FP32-matmul precision mode.
 - **It is the Ozaki scheme**, the long-standing technique of splitting a
-  high-precision mantissa into several low-precision pieces. The same idea is
-  being used to emulate FP64 on FP8 tensor cores.
+  high-precision mantissa into several low-precision pieces. The same idea runs
+  one precision further down: **FP64 emulation on FP8 tensor cores**, DGEMM
+  without any FP64 arithmetic at all. That direction matters because FP64 units
+  are the ones vendors are least motivated to grow — an AI-optimised die spends
+  its area on low precision, so scientific workloads increasingly reach FP64
+  accuracy by composition rather than by hardware. Same trade as everything else
+  on this page, at the opposite end of the number line.
 - **BF16x6 is the approximate one.** It drops the cross products that only
   matter for extreme exponents, so it is correct *conditionally* — which is
   fine inside a kernel that knows its own value range and wrong as a global
@@ -286,7 +291,128 @@ The general shape is worth more than the three items: **prefill is a batch
 computation being used for one scalar answer, so ask what is discarded.** Most
 of the easy wins in prefill are the things that were computed and thrown away.
 
-### A note on the algebraic integer number system
+---
+
+## 3b · The hardware underneath
+
+Everything above assumes a machine. Three properties of the current one decide
+what a kernel can do, and all three are new enough that libraries are still
+catching up.
+
+### Native FP4, and what "native" buys
+
+Blackwell's fifth-generation tensor cores execute **FP4 matrix
+multiply-accumulate natively** — not emulated, not upconverted. Paired with a
+second-generation Transformer Engine that manages the format with **micro-tensor
+scaling**, adjusting precision below the tensor level, the headline is a
+doubling against FP8 on three axes at once: tensor-core throughput, parameter
+bandwidth, and model size per GPU.
+
+The reason that third one matters most: **4-bit weights halve what you stream
+per decode step**, and decode is bandwidth-bound. Native FP4 is not primarily a
+compute win; it is a bandwidth win that happens to also be a compute win.
+
+Rubin continues the same line — dense FP4 and FP8 throughput roughly 3.5×
+GB200 by NVIDIA's figures, plus an adaptive compression engine that computes
+sparsity in flight rather than requiring it to be baked into the checkpoint.
+Treat pre-release throughput multipliers as vendor numbers until independently
+measured; the *direction* is the reliable part, and the direction has been
+consistent for four generations: **low precision gets faster, everything else
+roughly stands still.**
+
+### Block-scaled versus block floating point
+
+This is the distinction that makes 4-bit work at all, and it is routinely
+blurred.
+
+```
+  PER-TENSOR SCALE        one scale for millions of values.
+                          One outlier sets it, everything else
+                          collapses toward zero. Useless at 4 bits.
+
+  BLOCK FLOATING POINT    a block shares ONE EXPONENT; the elements
+                          are integer mantissas. Classic DSP.
+                          Cheap, but the block's dynamic range is
+                          whatever its largest element allows.
+
+  BLOCK-SCALED (MX, NVFP4) each small block carries its own SCALE, and
+                          the elements are still floating point.
+                          Two levels of exponent, so an outlier costs
+                          you its block rather than the tensor.
+```
+
+The two shipped block-scaled formats differ in exactly the way that matters:
+
+| | **MXFP4** | **NVFP4** |
+|---|---|---|
+| Standard | Open — OCP, supported by AMD, Intel, ARM | NVIDIA proprietary |
+| Block | 32 elements | 16 elements — finer |
+| Scale | power-of-two (E8M0) | floating point (E4M3) — more expressive |
+| Portability | checkpoints move between vendors | **do not** |
+
+NVIDIA's argument for NVFP4 is lower quantization error from the finer, more
+expressive scaling; the counter-argument is a checkpoint you cannot move. That
+is a procurement decision wearing a numerics costume, and it should be made by
+whoever owns the hardware commitment rather than by whoever runs the quantizer.
+
+Note how this connects upward: **[outlier handling](quantization.html) —
+LLM.int8(), AWQ, SmoothQuant — is what you do when the format cannot express
+outliers.** Block scaling attacks the same problem in the number system instead
+of in the algorithm, which is why 4-bit became practical when the formats
+arrived rather than when the algorithms did. The two still compose; they are
+just no longer both mandatory.
+
+### Fused epilogues and prologues
+
+A GEMM kernel is a **mainloop** that does the tiled multiply-accumulate and an
+**epilogue** that transforms the output tile and writes it to memory. Anything
+the epilogue can absorb — bias, activation, scaling, and above all
+**dequantization** — happens while the result is still in registers or shared
+memory, instead of in a second kernel that reads the whole tensor back.
+
+That matters disproportionately for low-bit serving. Quantize and dequantize are
+elementwise operations that run on the CUDA cores while the GEMM runs on the
+tensor cores, so unfused they are a full round trip to HBM for arithmetic that
+is almost free. Fusing them is how a W4A8 or W4A16 kernel gets to be worth
+having at all: dequantization folded into the mainloop, scaling folded into the
+epilogue, one launch, one pass over the data. CUTLASS exposes this as **epilogue
+visitor trees**, which is the vocabulary to know if you ever read one.
+
+The prologue is the mirror image and gets less attention: transforming inputs on
+the way *in* — layout swizzles, unpacking 4-bit weights, applying rotations of
+the kind [OSCAR](kv-cache.html) needs — rather than materialising a converted
+copy first.
+
+**The engineering point is the same one this page keeps making.** Fusion does
+not reduce arithmetic; it removes trips to memory, which is the scarce resource.
+A quantization scheme with no fused kernel is a paper, not a deployment.
+
+### Thread block clusters and distributed shared memory
+
+Hopper added a level to the CUDA hierarchy and Blackwell keeps it: between the
+thread block and the grid sits the **cluster**, a set of blocks guaranteed
+co-resident on nearby SMs. Within a cluster, a block can read, write and do
+atomics in *another block's* shared memory — **distributed shared memory**.
+
+Why it exists: the gap between shared memory (fast, tiny) and global memory
+(large, slow) had nothing in it. Data that did not fit in one block's shared
+memory had to go to global, at global's cost. DSMEM is the missing middle, and
+because it can be used *simultaneously* with L2, a kernel can draw on the
+combined bandwidth of both rather than choosing.
+
+For LLM kernels this is the enabling feature behind larger cooperative tiles —
+a single B200 thread block can address up to 227 KB of shared memory, and a
+cluster extends the working set further without leaving the SM neighbourhood.
+It is also part of why the megakernels above are practical: cross-block
+coordination that used to need a kernel boundary can now happen in hardware.
+
+If you write kernels, the one operational note is to compute occupancy with
+`cudaOccupancyMaxActiveClusters` and launch accordingly, rather than reasoning
+about blocks as though clusters were not there.
+
+---
+
+## 3c · A note on the algebraic integer number system
 
 It appears on inference-optimization taxonomies and it is worth being clear:
 this is a **digital signal processing** technique, not an LLM one. Algebraic

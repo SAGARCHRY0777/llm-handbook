@@ -186,7 +186,19 @@ for bits in (16, 8, 4):
     for texts in by_intent.values():
         out.extend(texts[:per_bucket])
     return out[:n]</code></pre><hr>
-<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>&quot;Lossless&quot; is used for two different things, and only one of them is.</strong>
+<h2 id="6-depth-the-senior-layer"><a class="anchor" href="#6-depth-the-senior-layer">#</a>6 · Depth — the senior layer</h2><p><strong>Outlier handling and number formats are two answers to one problem, and the
+formats are winning.</strong> Everything in the outlier table above — LLM.int8(), AWQ,
+SmoothQuant — exists because a single scale factor for a whole tensor cannot
+express a distribution with extreme values in it. Block-scaled formats attack
+that in the number system instead: give every small block its own scale, and an
+outlier costs you its block rather than the tensor. That is why 4-bit became
+practical when NVFP4 and MXFP4 arrived rather than when the algorithms did. The
+two still compose — a rotation before a block-scaled quantizer still helps —
+but the algorithmic work is no longer carrying the whole burden. See
+<a href="kernel-and-attention-optimization.html">kernel &amp; attention optimization</a> for
+the formats themselves, and for why a quantization scheme without a fused kernel
+is a paper rather than a deployment.</p>
+<p><strong>&quot;Lossless&quot; is used for two different things, and only one of them is.</strong>
 Worth separating before the word appears in a vendor deck.</p>
 <p><em>Bit-exact</em> lossless is compression, not quantization. DFloat11 is the clearest
 example: BF16 weights have low entropy in their exponent bits, so Huffman-coding

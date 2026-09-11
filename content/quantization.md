@@ -235,6 +235,19 @@ def calibration_samples(production_logs, n: int = 256) -> list[str]:
 
 ## 6 · Depth — the senior layer
 
+**Outlier handling and number formats are two answers to one problem, and the
+formats are winning.** Everything in the outlier table above — LLM.int8(), AWQ,
+SmoothQuant — exists because a single scale factor for a whole tensor cannot
+express a distribution with extreme values in it. Block-scaled formats attack
+that in the number system instead: give every small block its own scale, and an
+outlier costs you its block rather than the tensor. That is why 4-bit became
+practical when NVFP4 and MXFP4 arrived rather than when the algorithms did. The
+two still compose — a rotation before a block-scaled quantizer still helps —
+but the algorithmic work is no longer carrying the whole burden. See
+[kernel & attention optimization](kernel-and-attention-optimization.html) for
+the formats themselves, and for why a quantization scheme without a fused kernel
+is a paper rather than a deployment.
+
 **"Lossless" is used for two different things, and only one of them is.**
 Worth separating before the word appears in a vendor deck.
 
