@@ -87,7 +87,8 @@ adapter. Compare with a full fine-tune, which is a new checkpoint.</li>
    target modules  attention projections is the usual default; adding the MLP
                    projections increases capacity and cost
    learning rate   1e-4 to 2e-4 typical -- much higher than full fine-tuning
-   epochs          1-3. More overfits fast on small sets</code></pre><p><strong>Advanced — data quality dominates everything else.</strong> A thousand carefully
+   epochs          1-3. More overfits fast on small sets</code></pre><p>Rank is the knob everyone reaches for and the one that matters least. This lab computes the LoRA parameter count from the actual layer shapes of a Llama-shaped model — no rules of thumb — so you can watch a 32× change in rank move training memory by two gigabytes while switching target modules moves it more.</p>
+<div class="lab" data-lab="lora"><p class="lab__fallback">Interactive experiment — needs JavaScript.</p></div><p><strong>Advanced — data quality dominates everything else.</strong> A thousand carefully
 curated, consistent examples beat fifty thousand scraped ones, reliably and by a
 lot. The failure is almost never &quot;not enough data&quot;; it is inconsistent data.
 If two examples show different formats for the same input type, you have taught
@@ -269,5 +270,6 @@ decision.</p>
 </script>
 <script src="app.js"></script>
 <script src="widgets.js"></script>
+<script src="labs.js"></script>
 </body>
 </html>

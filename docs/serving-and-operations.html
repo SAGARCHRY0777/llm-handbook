@@ -101,7 +101,8 @@ with hysteresis</strong> — a high-water mark to start shedding, a lower one to
 is the pattern that survives contact with real traffic. The hysteresis gap stops
 the system flapping around a single threshold.</p>
 <hr>
-<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
+<p>The high-water mark in that first decision node is a number, and queueing theory says where to put it. Move the sliders and find the knee yourself.</p>
+<div class="lab" data-lab="queue"><p class="lab__fallback">Interactive experiment — needs JavaScript.</p></div><h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
   A[Request] --&gt; B{Queue depth&lt;br/&gt;above high-water mark?}
   B --&gt;|yes| C[429 + Retry-After]
   B --&gt;|no| D{Result cache hit?}
@@ -303,5 +304,6 @@ to genuinely stateless queries.</p>
 </script>
 <script src="app.js"></script>
 <script src="widgets.js"></script>
+<script src="labs.js"></script>
 </body>
 </html>

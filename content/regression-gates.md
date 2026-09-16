@@ -84,6 +84,12 @@ comparing two aggregates ever could.
 
 ---
 
+The gate most teams write first is a 1-point drop on a 200-item set. Every statistic behind that decision is below, computed live — and the interval it produces is the reason the gate gets switched off three months later.
+
+```lab
+gate
+```
+
 ## 3 · Flow
 
 1. A change lands — new prompt, new chunk size, new embedding model, or the

@@ -74,7 +74,8 @@ disruption.</p>
    cross-encoder  model(query + passage together)   -&gt; full attention across both
                   nothing precomputable              -&gt; one pass PER PAIR
                   100x more accurate on hard cases   -&gt; 100x too slow for a corpus</code></pre><hr>
-<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — the options, in ascending cost.</strong></p>
+<p>BM25 is three terms multiplied together, and you can break each one by hand. Type documents, drag k1 and b, and watch the two failures that put a second stage in the pipeline.</p>
+<div class="lab" data-lab="bm25"><p class="lab__fallback">Interactive experiment — needs JavaScript.</p></div><h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — the options, in ascending cost.</strong></p>
 <div class="table-scroll"><table><thead><tr><th>Reranker</th><th>Latency for 50 docs</th><th>Notes</th></tr></thead><tbody><tr><td><strong>Cross-encoder</strong> (ms-marco MiniLM)</td><td>~50–100ms on GPU</td><td>The workhorse. Small, fast, strong</td></tr><tr><td><strong>ColBERT / late interaction</strong></td><td>~20–40ms</td><td>Per-token MaxSim; precomputable doc vectors</td></tr><tr><td><strong>LLM reranker</strong></td><td>500ms–2s</td><td>Most accurate, hardest to justify on latency</td></tr><tr><td><strong>Rule/metadata reordering</strong></td><td>~0ms</td><td>Recency, authority, permissions. Free and underused</td></tr></tbody></table></div><p><strong>Depth-versus-latency is the parameter that matters.</strong> Reranking cost is linear
 in shortlist size, so the retrieve-50-rerank-5 shape is a direct trade:</p>
 <pre class="code"><code>   retrieve 20, rerank 5   fast, but if the answer was at rank 35 it is gone
@@ -251,5 +252,6 @@ fuse, dedupe, rerank, threshold.</p>
 </script>
 <script src="app.js"></script>
 <script src="widgets.js"></script>
+<script src="labs.js"></script>
 </body>
 </html>

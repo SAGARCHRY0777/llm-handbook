@@ -229,6 +229,12 @@ search on the truncated one.
 
 ---
 
+That claim is testable, so test it: the lab below turns whatever you type into real vectors and scores them three ways, and the three metrics disagree until you normalise both sides.
+
+```lab
+similarity
+```
+
 ## 6 · Depth — the senior layer
 
 **Cosine similarity has no absolute meaning, and treating it as though it does

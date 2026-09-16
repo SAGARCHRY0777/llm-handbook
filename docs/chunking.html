@@ -77,7 +77,8 @@ anything interesting starts.</p>
 chunk size C and overlap O, you store and embed roughly <code>C/(C−O)</code> times the
 original text. At 400 tokens with 100 overlap that is 33% more index, embedded
 and stored forever. Overlap buys boundary safety with permanent cost.</p>
-<p><strong>Intermediate — sizing, and the mistake almost everyone makes.</strong> Embedding
+<p>The sizing argument is easy to nod along to and hard to feel, so here it is on text you control — the same document cut three ways, with the sentences that no chunk holds whole named out loud and the storage bill for fixing them shown next to the fix.</p>
+<div class="lab" data-lab="chunker"><p class="lab__fallback">Interactive experiment — needs JavaScript.</p></div><p><strong>Intermediate — sizing, and the mistake almost everyone makes.</strong> Embedding
 models have a <em>stated</em> maximum sequence length and a much shorter <em>effective</em>
 one. Feed 512 tokens to a model whose useful capacity is around 256 and the
 extra content is averaged into mush — the vector stops representing anything in
@@ -283,5 +284,6 @@ someone asks why you spent the week on it.</p>
 </script>
 <script src="app.js"></script>
 <script src="widgets.js"></script>
+<script src="labs.js"></script>
 </body>
 </html>

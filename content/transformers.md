@@ -93,6 +93,10 @@ for the whole rest of the generation:
 
 ---
 
+```lab
+attention
+```
+
 ## 2 · Design
 
 **Basic — what attention computes.** Three vectors are derived from each token:

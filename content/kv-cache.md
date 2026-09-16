@@ -220,6 +220,10 @@ block tables and more indirection per kernel launch; larger blocks (32) are
 kernel-friendlier but waste more and make prefix sharing coarser. vLLM defaults
 to 16.
 
+```lab
+paged
+```
+
 **Paging is bit-exact, and this is worth being firm about**, because "does
 blocking lose data or accuracy?" is the most common misconception on the topic.
 It does not. Paging changes only the *addressing* of the bytes: the same fp16

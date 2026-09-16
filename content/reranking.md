@@ -52,6 +52,12 @@ disruption.
 
 ---
 
+BM25 is three terms multiplied together, and you can break each one by hand. Type documents, drag k1 and b, and watch the two failures that put a second stage in the pipeline.
+
+```lab
+bm25
+```
+
 ## 2 · Design
 
 **Intermediate — the options, in ascending cost.**

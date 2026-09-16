@@ -210,7 +210,7 @@ wrong. Step 2 is the one that decides throughput. Neither is on the model card.<
 people fit on the card, and how fast each of them gets a token. Every field
 routes to one of them, or to a quality risk.</p>
 <hr>
-<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><pre class="code"><code class="language-python">&quot;&quot;&quot;Cost a checkpoint from its config, including the non-uniform cases.
+<h2 id="5-example"><a class="anchor" href="#5-example">#</a>5 · Example</h2><div class="lab" data-lab="config"><p class="lab__fallback">Interactive experiment — needs JavaScript.</p></div><pre class="code"><code class="language-python">&quot;&quot;&quot;Cost a checkpoint from its config, including the non-uniform cases.
 
 The naive version of this function -- layers x heads x dim -- is wrong on every
 architecture in section 2. Each keyword below exists because some real model
@@ -393,5 +393,6 @@ than a shape · <a href="long-context.html">Long context</a> for <code>rope_scal
 </script>
 <script src="app.js"></script>
 <script src="widgets.js"></script>
+<script src="labs.js"></script>
 </body>
 </html>

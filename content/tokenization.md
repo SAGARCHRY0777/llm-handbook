@@ -51,6 +51,10 @@ most otherwise-inexplicable bugs.
 
 ---
 
+```lab
+tokenizer
+```
+
 ## 2 · Design
 
 **Basic — what a tokenizer is.** A fixed vocabulary (typically 32k–200k entries)

@@ -85,7 +85,8 @@ quantization of activations destroys the model, because those outliers dominate
 the scale and everything else collapses into a couple of quantization levels.</p>
 <p>The responses to that discovery <em>are</em> the modern method landscape:</p>
 <div class="table-scroll"><table><thead><tr><th>Method</th><th>Core idea</th><th>Where it fits</th></tr></thead><tbody><tr><td><strong>LLM.int8()</strong></td><td>Keep outlier dimensions in FP16, quantize the rest to INT8</td><td>The original fix; simple, some overhead</td></tr><tr><td><strong>GPTQ</strong></td><td>Layer-by-layer, second-order-informed rounding against calibration data</td><td>Strong 4-bit accuracy, needs calibration</td></tr><tr><td><strong>AWQ</strong></td><td>Protect the ~1% of weights that matter most, guided by activation scale</td><td>Fast, robust, popular for 4-bit serving</td></tr><tr><td><strong>SmoothQuant</strong></td><td>Shift difficulty from activations into weights so both quantize well</td><td>Enables weight+activation INT8</td></tr><tr><td><strong>GGUF / llama.cpp k-quants</strong></td><td>Mixed per-block precision, CPU-friendly</td><td>Local and CPU inference</td></tr><tr><td><strong>FP8</strong></td><td>Hardware-native float8 on H100 and newer</td><td>Near-lossless, needs the silicon</td></tr></tbody></table></div><hr>
-<h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><p>Post-training quantization, in the order it happens:</p>
+<p>Step 4 above says &quot;run the quantizer&quot; in one line. Here it is, actually running: fit a scale and zero-point to a vector you can edit, round every weight to an integer code, and read what the round-trip cost you.</p>
+<div class="lab" data-lab="quantize"><p class="lab__fallback">Interactive experiment — needs JavaScript.</p></div><h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><p>Post-training quantization, in the order it happens:</p>
 <ol>
 <li><strong>Pick the target.</strong> Driven by the memory arithmetic above and the hardware
 you actually have, not by what sounds impressive.</li>
@@ -296,5 +297,6 @@ equal option.</p>
 </script>
 <script src="app.js"></script>
 <script src="widgets.js"></script>
+<script src="labs.js"></script>
 </body>
 </html>

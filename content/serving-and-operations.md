@@ -95,6 +95,12 @@ the system flapping around a single threshold.
 
 ---
 
+The high-water mark in that first decision node is a number, and queueing theory says where to put it. Move the sliders and find the knee yourself.
+
+```lab
+queue
+```
+
 ## 3 · Flow
 
 ```mermaid

@@ -95,7 +95,34 @@ Five are registered in `site/widgets.js`: `kv-cache`, `prefill-share`,
 `WIDGETS` registry — no build change.
 
 **The rule they follow:** every widget is the live twin of a Python block on the
-same page, and the two must agree. The reader moves a slider to build intuition,
+same page, and the two must agree.
+
+### Experiments
+
+A ` ```lab ` block mounts an experiment from `site/labs.js`:
+
+```markdown
+```lab
+bm25
+```
+```
+
+The difference from a widget is the point. A widget moves a slider over a
+formula; a **lab runs the page's actual algorithm, in your browser, on text you
+type**. The tokenizer lab trains a real BPE merge loop on your corpus. The BM25
+lab computes real IDF, k1 saturation and b length-normalisation on your
+documents. The quantizer fits a real scale and zero-point and shows you the
+round-trip error.
+
+That gives one hard rule: **implement the mechanism, do not mimic it.** A
+tokenizer that splits on spaces teaches the wrong thing, so a page whose honest
+experiment will not fit gets no lab.
+
+Fourteen are registered: `tokenizer`, `attention`, `sampler`, `chunker`, `bm25`,
+`similarity`, `quantize`, `paged`, `prefix`, `config`, `needle`, `gate`,
+`queue`, `lora`. Adding one is a function plus a registry line — no build
+change. Labs are progressive enhancement and hidden in print, same as widgets.
+ The reader moves a slider to build intuition,
 then reads the code to see exactly how the number was produced. A widget that
 disagrees with the code beside it is worse than no widget, so the defaults are
 checked against the page's own tables.

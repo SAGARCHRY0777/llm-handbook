@@ -150,6 +150,12 @@ afterwards. That is why its guarantee is absolute rather than probabilistic.
 
 ---
 
+The code above is the order the operations must happen in; the lab below is that order running, with the filters fighting over twelve fixed logits so you can see exactly which token each one takes.
+
+```lab
+sampler
+```
+
 ## 5 · Example
 
 ```python

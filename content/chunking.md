@@ -67,6 +67,12 @@ chunk size C and overlap O, you store and embed roughly `C/(C−O)` times the
 original text. At 400 tokens with 100 overlap that is 33% more index, embedded
 and stored forever. Overlap buys boundary safety with permanent cost.
 
+The sizing argument is easy to nod along to and hard to feel, so here it is on text you control — the same document cut three ways, with the sentences that no chunk holds whole named out loud and the storage bill for fixing them shown next to the fix.
+
+```lab
+chunker
+```
+
 **Intermediate — sizing, and the mistake almost everyone makes.** Embedding
 models have a *stated* maximum sequence length and a much shorter *effective*
 one. Feed 512 tokens to a model whose useful capacity is around 256 and the

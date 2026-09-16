@@ -72,6 +72,15 @@ function makeRenderer(headings) {
     // paragraph is what a reader without JavaScript sees, and it points at the
     // code block that computes the same thing -- so nothing is lost, only the
     // slider. widgets.js replaces the whole node when it runs.
+    // A ```lab fence names an experiment in site/labs.js. Unlike a widget
+    // (which moves a slider over a formula) a lab runs the page's actual
+    // algorithm on text the reader types, so the fallback points at the prose
+    // rather than at a code block -- there may not be one.
+    if (lang === "lab") {
+      const name = escapeHtml(text.trim().split(/\s+/)[0]);
+      return `<div class="lab" data-lab="${name}">` +
+        `<p class="lab__fallback">Interactive experiment \u2014 needs JavaScript.</p></div>`;
+    }
     if (lang === "widget") {
       const name = escapeHtml(text.trim().split(/\s+/)[0]);
       return `<div class="widget" data-widget="${name}">` +
@@ -215,7 +224,7 @@ function build() {
     )
   );
 
-  for (const asset of ["style.css", "app.js", "widgets.js"]) {
+  for (const asset of ["style.css", "app.js", "widgets.js", "labs.js"]) {
     if (existsSync(join(SITE, asset))) cpSync(join(SITE, asset), join(OUT, asset));
   }
   // Pages would otherwise run the output through Jekyll and drop _-prefixed paths.

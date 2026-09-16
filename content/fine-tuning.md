@@ -81,6 +81,12 @@ Two consequences that matter operationally:
    epochs          1-3. More overfits fast on small sets
 ```
 
+Rank is the knob everyone reaches for and the one that matters least. This lab computes the LoRA parameter count from the actual layer shapes of a Llama-shaped model — no rules of thumb — so you can watch a 32× change in rank move training memory by two gigabytes while switching target modules moves it more.
+
+```lab
+lora
+```
+
 **Advanced — data quality dominates everything else.** A thousand carefully
 curated, consistent examples beat fifty thousand scraped ones, reliably and by a
 lot. The failure is almost never "not enough data"; it is inconsistent data.

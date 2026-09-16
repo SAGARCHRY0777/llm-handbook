@@ -65,6 +65,10 @@ less obviously safe. That ordering is the thing to carry away.
 
 ---
 
+```lab
+prefix
+```
+
 ## 2 · Design — position: RoPE is the whole problem
 
 A key is not a property of a token. It is a property of a token **at a

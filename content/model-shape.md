@@ -238,6 +238,10 @@ routes to one of them, or to a quality risk.
 
 ## 5 · Example
 
+```lab
+config
+```
+
 ```python
 """Cost a checkpoint from its config, including the non-uniform cases.
 

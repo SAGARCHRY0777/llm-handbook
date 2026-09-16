@@ -100,6 +100,12 @@ The responses to that discovery *are* the modern method landscape:
 
 ---
 
+Step 4 above says "run the quantizer" in one line. Here it is, actually running: fit a scale and zero-point to a vector you can edit, round every weight to an integer code, and read what the round-trip cost you.
+
+```lab
+quantize
+```
+
 ## 3 · Flow
 
 Post-training quantization, in the order it happens:

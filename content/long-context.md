@@ -200,6 +200,12 @@ no cache  : $0.308/query          <- 100k tokens, every time
 RAG (5 chunks, ~2.5k tokens): $0.015/query
 ```
 
+The grid above is the one you should run. Before you do, here is the grid your own assumptions already imply — state the recall curve you believe in and watch it decide, at every (length, depth), what a needle test would have reported.
+
+```lab
+needle
+```
+
 **The measurement that should decide it:**
 
 ```python

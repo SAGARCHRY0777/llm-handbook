@@ -114,7 +114,7 @@ for the whole rest of the generation:</p>
 </figure>
 
 <hr>
-<h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic — what attention computes.</strong> Three vectors are derived from each token:</p>
+<div class="lab" data-lab="attention"><p class="lab__fallback">Interactive experiment — needs JavaScript.</p></div><h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic — what attention computes.</strong> Three vectors are derived from each token:</p>
 <div class="table-scroll"><table><thead><tr><th>Vector</th><th>Intuition</th></tr></thead><tbody><tr><td><strong>Query</strong></td><td>What this token is looking for</td></tr><tr><td><strong>Key</strong></td><td>What this token offers to others</td></tr><tr><td><strong>Value</strong></td><td>What it actually contributes if selected</td></tr></tbody></table></div><p>Each query is compared against every key (a dot product), the scores are
 softmaxed into weights, and the output is a weighted sum of values.
 <code>softmax(QKᵀ/√d)V</code> — that formula is the whole mechanism, and the <code>√d</code> is there
@@ -410,5 +410,6 @@ baseline. Same per-token compute, better division of labour.</p>
 </script>
 <script src="app.js"></script>
 <script src="widgets.js"></script>
+<script src="labs.js"></script>
 </body>
 </html>

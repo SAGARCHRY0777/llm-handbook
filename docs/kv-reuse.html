@@ -85,7 +85,7 @@ trimmed, a document that appears at a different offset in two different prompts.
 bit-exact and rarely fires; each step down this page fires more often and is
 less obviously safe. That ordering is the thing to carry away.</p>
 <hr>
-<h2 id="2-design-position-rope-is-the-whole-problem"><a class="anchor" href="#2-design-position-rope-is-the-whole-problem">#</a>2 · Design — position: RoPE is the whole problem</h2><p>A key is not a property of a token. It is a property of a token <strong>at a
+<div class="lab" data-lab="prefix"><p class="lab__fallback">Interactive experiment — needs JavaScript.</p></div><h2 id="2-design-position-rope-is-the-whole-problem"><a class="anchor" href="#2-design-position-rope-is-the-whole-problem">#</a>2 · Design — position: RoPE is the whole problem</h2><p>A key is not a property of a token. It is a property of a token <strong>at a
 position</strong>, because RoPE rotates it by an angle derived from that position.
 Move the block and the rotation is wrong; the model reads it as though the text
 were somewhere it is not.</p>
@@ -345,5 +345,6 @@ for the layer below · <a href="transformers.html">Transformers</a> for RoPE its
 </script>
 <script src="app.js"></script>
 <script src="widgets.js"></script>
+<script src="labs.js"></script>
 </body>
 </html>
