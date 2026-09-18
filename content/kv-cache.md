@@ -132,6 +132,11 @@ ones: identical free memory, two allocators, one of which cannot use it.
 </figure>
 
 ---
+```sim
+kvcache
+```
+
+---
 
 ## 2 · Design — the thirteen techniques
 

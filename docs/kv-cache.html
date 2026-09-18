@@ -151,6 +151,7 @@ ones: identical free memory, two allocators, one of which cannot use it.</p>
 </figure>
 
 <hr>
+<div class="sim" data-sim="kvcache"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design-the-thirteen-techniques"><a class="anchor" href="#2-design-the-thirteen-techniques">#</a>2 · Design — the thirteen techniques</h2><p>Counted as thirteen by splitting the two pairs that behave differently in practice:
 MQA and GQA are separate design points (one is a special case of the other, and
 the quality cliff sits between them), and sparse <em>storage</em> is a different
@@ -648,5 +649,7 @@ formula above: cross-layer KV sharing, K=V, and variable width.</p>
 <script src="app.js"></script>
 <script src="widgets.js"></script>
 <script src="labs.js"></script>
+<script src="sims.js"></script>
+<script src="simdefs.js"></script>
 </body>
 </html>

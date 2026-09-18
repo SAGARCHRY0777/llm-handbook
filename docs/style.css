@@ -509,3 +509,302 @@ select.widget__input {
   var(--panel-2) 0 3px, transparent 3px 6px); }
 
 @media print { .lab { display: none; } }
+
+/* ======================================================================
+   SIMULATIONS (sims.js) — a mechanism played forward in time.
+   Shares the lab's frame; adds scenario tabs, a stage, and a transport.
+   ====================================================================== */
+.sim {
+  border: var(--hair) solid var(--rule);
+  border-radius: 10px;
+  background: var(--panel);
+  padding: 18px 20px 16px;
+  margin: 0 0 26px;
+}
+.sim:focus-visible { outline: 2px solid var(--signal); outline-offset: 2px; }
+.sim__fallback { margin: 0; font-size: 14px; color: var(--ink-3); }
+.sim--failed { display: none; }
+
+.sim__head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.sim__tag {
+  font: 600 10.5px/1 var(--mono);
+  letter-spacing: .09em; text-transform: uppercase;
+  color: var(--signal); background: var(--signal-wash);
+  border: var(--hair) solid var(--signal); border-radius: 999px;
+  padding: 4px 8px; flex: none;
+}
+.sim__title { font-weight: 600; font-size: 15.5px; }
+.sim__note {
+  margin: 10px 0 0; font-size: 13.5px; line-height: 1.55;
+  color: var(--ink-2); max-width: 78ch;
+}
+
+/* ---- scenario tabs ---- */
+.sim__tabs { display: flex; align-items: center; gap: 6px; margin-top: 16px; flex-wrap: wrap; }
+.sim__tab {
+  font: 500 12.5px/1 var(--sans);
+  color: var(--ink-2); background: transparent;
+  border: var(--hair) solid var(--rule); border-radius: 6px;
+  padding: 7px 12px; cursor: pointer;
+}
+.sim__tab:hover { color: var(--ink); border-color: var(--ink-3); }
+.sim__tab.is-on {
+  color: var(--panel); background: var(--signal); border-color: var(--signal);
+}
+.sim__reset {
+  font: 400 15px/1 var(--sans); color: var(--ink-3);
+  background: transparent; border: var(--hair) solid transparent; border-radius: 6px;
+  padding: 6px 9px; cursor: pointer; margin-left: 2px;
+}
+.sim__reset:hover { color: var(--ink); border-color: var(--rule); }
+
+/* ---- stage ---- */
+.sim__stage { margin-top: 16px; min-height: 40px; }
+
+.sim__flow {
+  display: flex; align-items: center; gap: 12px;
+  overflow-x: auto; padding-bottom: 4px;
+}
+.sim__flow > * { flex: none; }
+.sim__arrow { color: var(--ink-3); font-size: 17px; flex: none; }
+.sim__stack { display: grid; gap: 10px; }
+.sim__cols { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
+.sim__cols > * { flex: 1 1 200px; min-width: 0; }
+
+/* ---- node card ---- */
+.sim__node {
+  border: 1.5px solid var(--rule); border-radius: 9px;
+  background: var(--panel-2); padding: 12px 14px; min-width: 230px;
+}
+.sim__node--ok   { border-color: var(--good); }
+.sim__node--warn { border-color: var(--caution); }
+.sim__node--bad  { border-color: var(--bad); }
+.sim__node--idle { border-color: var(--rule); opacity: .58; }
+.sim__nhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.sim__ntitle { font: 600 13.5px/1.3 var(--sans); color: var(--ink); }
+.sim__status {
+  font: 600 9.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  border-radius: 4px; padding: 4px 6px; flex: none;
+  color: var(--ink-3); background: var(--panel); border: var(--hair) solid var(--rule);
+}
+.sim__status--ok   { color: var(--good);    background: var(--good-wash);    border-color: var(--good); }
+.sim__status--warn { color: var(--caution); background: var(--caution-wash); border-color: var(--caution); }
+.sim__status--bad  { color: var(--bad);     background: var(--bad-wash);     border-color: var(--bad); }
+.sim__nmeta {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px;
+  font: 400 11px/1.4 var(--mono); color: var(--ink-3);
+}
+.sim__badge {
+  font: 500 11px/1 var(--mono); color: var(--signal);
+  background: var(--signal-wash); border-radius: 4px; padding: 4px 7px;
+}
+.sim__gauges { display: grid; gap: 9px; margin-top: 12px; }
+.sim__gauge { display: grid; gap: 4px; }
+.sim__glabel {
+  display: flex; justify-content: space-between; gap: 10px;
+  font: 400 11.5px/1 var(--mono); color: var(--ink-3);
+}
+.sim__glabel b { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.sim__gtrack { background: var(--panel); border-radius: 3px; height: 7px; overflow: hidden; }
+.sim__gtrack i { display: block; height: 100%; background: var(--good); transition: width .35s ease; }
+.sim__gauge--warn .sim__gtrack i { background: var(--caution); }
+.sim__gauge--bad  .sim__gtrack i { background: var(--bad); }
+.sim__gauge--idle .sim__gtrack i { background: var(--ink-3); }
+.sim__nrows { margin-top: 11px; border-top: var(--hair) solid var(--rule); padding-top: 9px; display: grid; gap: 6px; }
+.sim__nrow {
+  display: flex; justify-content: space-between; gap: 10px;
+  font: 400 11.5px/1.4 var(--mono); color: var(--ink-3);
+}
+.sim__nrow b { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.sim__nrow--ok b   { color: var(--good); }
+.sim__nrow--warn b { color: var(--caution); }
+.sim__nrow--bad b  { color: var(--bad); }
+.sim__nbody { margin-top: 11px; }
+
+/* ---- stat tile ---- */
+.sim__stat {
+  border: var(--hair) solid var(--rule); border-radius: 7px;
+  background: var(--panel-2); padding: 10px 13px; display: grid; gap: 3px; min-width: 112px;
+}
+.sim__stat--ok   { background: var(--good-wash);    border-color: var(--good); }
+.sim__stat--warn { background: var(--caution-wash); border-color: var(--caution); }
+.sim__stat--bad  { background: var(--bad-wash);     border-color: var(--bad); }
+.sim__slabel {
+  font: 600 9.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--ink-3);
+}
+.sim__sval { font: 600 15px/1.2 var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.sim__stat--ok .sim__sval   { color: var(--good); }
+.sim__stat--warn .sim__sval { color: var(--caution); }
+.sim__stat--bad .sim__sval  { color: var(--bad); }
+.sim__ssub { font: 400 10.5px/1.3 var(--mono); color: var(--ink-3); }
+
+/* ---- big figure ---- */
+.sim__big { display: grid; gap: 2px; min-width: 96px; }
+.sim__big b {
+  font: 600 29px/1 var(--display); color: var(--ink);
+  font-variant-numeric: tabular-nums; letter-spacing: .01em;
+}
+.sim__big span {
+  font: 600 9.5px/1.3 var(--mono); letter-spacing: .08em;
+  text-transform: uppercase; color: var(--ink-3);
+}
+.sim__big--ok b   { color: var(--good); }
+.sim__big--warn b { color: var(--caution); }
+.sim__big--bad b  { color: var(--bad); }
+
+/* ---- cell grid ---- */
+.sim__clabel {
+  font: 600 9.5px/1 var(--mono); letter-spacing: .08em; text-transform: uppercase;
+  color: var(--ink-3); margin-bottom: 7px;
+}
+.sim__cells { display: flex; flex-wrap: wrap; gap: 4px; }
+.sim__cell {
+  font: 500 10.5px/1 var(--mono);
+  min-width: 26px; height: 26px; padding: 0 5px;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: var(--hair) solid var(--rule); border-radius: 4px;
+  background: var(--panel-2); color: var(--ink-3);
+  transition: background .25s ease, border-color .25s ease, color .25s ease;
+}
+.sim__cells--dense .sim__cell { min-width: 15px; height: 15px; padding: 0 2px; font-size: 9px; border-radius: 3px; }
+.sim__cell--ok   { background: var(--good-wash);    border-color: var(--good);    color: var(--good); }
+.sim__cell--warn { background: var(--caution-wash); border-color: var(--caution); color: var(--caution); }
+.sim__cell--bad  { background: var(--bad-wash);     border-color: var(--bad);     color: var(--bad); }
+.sim__cell--idle { opacity: .4; }
+
+/* ---- timeline lane ---- */
+.sim__lane { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+.sim__lname {
+  font: 500 11px/1 var(--mono); color: var(--ink-3);
+  flex: none; width: 74px; text-align: right;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.sim__lcells { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 2px; }
+.sim__lcell {
+  font: 500 9.5px/1 var(--mono);
+  min-width: 30px; height: 21px; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: var(--hair) solid var(--rule); border-radius: 3px;
+  background: var(--panel-2); color: var(--ink-3);
+  transition: background .25s ease, border-color .25s ease;
+}
+.sim__lcell--ok   { background: var(--good-wash);    border-color: var(--good);    color: var(--good); }
+.sim__lcell--warn { background: var(--caution-wash); border-color: var(--caution); color: var(--caution); }
+.sim__lcell--bad  { background: var(--bad-wash);     border-color: var(--bad);     color: var(--bad); }
+.sim__lcell--idle { opacity: .32; }
+
+/* ---- load particles ---- */
+.sim__dots {
+  position: relative; width: 106px; height: 58px;
+  border: var(--hair) solid var(--rule); border-radius: 7px;
+  background: var(--panel-2); overflow: hidden;
+}
+.sim__dots i {
+  position: absolute; width: 6px; height: 6px; border-radius: 50%;
+  background: var(--signal); transform: translate(-50%, -50%);
+}
+.sim__dots--warn i { background: var(--caution); }
+.sim__dots--bad i  { background: var(--bad); }
+
+/* ---- bar ---- */
+.sim__bar { display: flex; align-items: center; gap: 10px; font: 400 11.5px/1 var(--mono); }
+.sim__blabel { color: var(--ink-3); flex: none; min-width: 92px; }
+.sim__btrack { flex: 1; background: var(--panel-2); border-radius: 3px; height: 9px; overflow: hidden; min-width: 60px; }
+.sim__btrack i { display: block; height: 100%; background: var(--signal); transition: width .35s ease; }
+.sim__bar--ok .sim__btrack i   { background: var(--good); }
+.sim__bar--warn .sim__btrack i { background: var(--caution); }
+.sim__bar--bad .sim__btrack i  { background: var(--bad); }
+.sim__bar b { color: var(--ink-2); font-variant-numeric: tabular-nums; flex: none; min-width: 42px; text-align: right; }
+
+/* ---- pills / rows / table / mono ---- */
+.sim__pills { display: flex; flex-wrap: wrap; gap: 5px; }
+.sim__pill {
+  font: 500 11px/1 var(--mono); border-radius: 999px; padding: 5px 9px;
+  border: var(--hair) solid var(--rule); background: var(--panel-2); color: var(--ink-3);
+}
+.sim__pill--ok   { color: var(--good);    background: var(--good-wash);    border-color: var(--good); }
+.sim__pill--warn { color: var(--caution); background: var(--caution-wash); border-color: var(--caution); }
+.sim__pill--bad  { color: var(--bad);     background: var(--bad-wash);     border-color: var(--bad); }
+.sim__row {
+  display: flex; justify-content: space-between; gap: 12px;
+  padding: 6px 0; border-bottom: var(--hair) solid var(--rule-2);
+  font-size: 13px; color: var(--ink-2);
+}
+.sim__row:last-child { border-bottom: 0; }
+.sim__row b { font-family: var(--mono); color: var(--ink); font-variant-numeric: tabular-nums; }
+.sim__row--ok b   { color: var(--good); }
+.sim__row--warn b { color: var(--caution); }
+.sim__row--bad b  { color: var(--bad); }
+.sim__table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.sim__table th, .sim__table td {
+  text-align: left; padding: 6px 9px; border-bottom: var(--hair) solid var(--rule-2);
+}
+.sim__table th { font: 600 10px/1 var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); }
+.sim__table td { font-family: var(--mono); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.sim__mono {
+  font: 400 12px/1.6 var(--mono); color: var(--ink-2);
+  background: var(--panel-2); border: var(--hair) solid var(--rule);
+  border-radius: 6px; padding: 9px 12px; white-space: pre-wrap; overflow-x: auto;
+}
+.sim__mono--ok   { color: var(--good);    border-color: var(--good); }
+.sim__mono--warn { color: var(--caution); border-color: var(--caution); }
+.sim__mono--bad  { color: var(--bad);     border-color: var(--bad); }
+.sim__msg { font-size: 13px; line-height: 1.55; color: var(--ink-3); margin: 12px 0 0; max-width: 78ch; }
+.sim__msg--ok   { color: var(--good); }
+.sim__msg--warn { color: var(--caution); }
+.sim__msg--bad  { color: var(--bad); }
+
+/* ---- caption + transport ---- */
+.sim__deck {
+  margin-top: 16px; border: var(--hair) solid var(--rule); border-radius: 8px;
+  background: var(--panel-2); overflow: hidden;
+}
+.sim__caption {
+  margin: 0; padding: 12px 14px; font-size: 13.5px; line-height: 1.5;
+  color: var(--ink-2); min-height: 20px;
+}
+.sim__caption--ok   { color: var(--good); }
+.sim__caption--warn { color: var(--caution); }
+.sim__caption--bad  { color: var(--bad); }
+.sim__transport {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-top: var(--hair) solid var(--rule);
+}
+.sim__ctl {
+  font: 400 14px/1 var(--sans); color: var(--ink-2);
+  background: var(--panel); border: var(--hair) solid var(--rule); border-radius: 6px;
+  min-width: 34px; height: 32px; padding: 0 9px; cursor: pointer; flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sim__ctl:hover:not(:disabled) { color: var(--ink); border-color: var(--ink-3); }
+.sim__ctl:disabled { opacity: .35; cursor: default; }
+.sim__ctl:focus-visible { outline: 2px solid var(--signal); outline-offset: 1px; }
+.sim__play { color: var(--signal); border-color: var(--signal); }
+.sim__play:hover:not(:disabled) { background: var(--signal); color: var(--panel); }
+.sim__speed, .sim__fs { font: 500 11.5px/1 var(--mono); }
+.sim__scrub { flex: 1; min-width: 60px; accent-color: var(--signal); cursor: pointer; }
+.sim__count {
+  font: 500 11.5px/1 var(--mono); color: var(--ink-3);
+  font-variant-numeric: tabular-nums; flex: none; min-width: 44px; text-align: center;
+}
+
+/* ---- fullscreen ---- */
+.sim:fullscreen {
+  background: var(--ground); overflow-y: auto;
+  padding: 32px clamp(20px, 6vw, 80px); border-radius: 0; margin: 0;
+}
+.sim:fullscreen .sim__stage { min-height: 44vh; display: flex; align-items: center; }
+.sim:fullscreen .sim__stage > * { width: 100%; }
+
+/* ---- reduced motion ---- */
+.sim--still .sim__gtrack i,
+.sim--still .sim__btrack i,
+.sim--still .sim__cell,
+.sim--still .sim__lcell { transition: none; }
+
+@media (max-width: 620px) {
+  .sim { padding: 15px 14px 13px; }
+  .sim__lname { width: 54px; }
+  .sim__count { min-width: 38px; }
+}
+.sim__dlabel { font: 600 9px/1.3 var(--mono); letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); margin-top: 6px; }
