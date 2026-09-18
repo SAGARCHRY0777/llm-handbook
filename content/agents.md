@@ -50,6 +50,10 @@ what happens when it calls the wrong one, twelve times, in a row.
    per-tool timeout   one hanging call must not hang the agent
 ```
 
+Getting those bounds right — and adding the one guard that stops a loop for a
+reason rather than on exhaustion — is the subject of
+[harness & loop engineering](harness-and-loops.html).
+
 ---
 
 ## 2 · Design

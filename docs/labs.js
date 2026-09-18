@@ -2300,6 +2300,140 @@
   }
 
   // ======================================================================
+  // LAB · agentloop  (harness-and-loops.md)
+  // A real loop driver with real guards. The agent is a toy, the CONTROL FLOW
+  // is not: guards are evaluated in the order a driver evaluates them, and the
+  // one that fires first is the one that decides your bill.
+  // ======================================================================
+  function agentloop(host, h) {
+    h.panel({
+      title: "Run an agent loop until a guard stops it",
+      note: "The agent is simulated; the loop driver is not. Every step costs tokens, " +
+        "errors cost more than successes because stack traces are long, and the guards are " +
+        "checked in the order a real driver checks them. <b>Try this:</b> set the task to " +
+        "<i>impossible</i> with the no-progress window at 0 and watch it burn the whole budget " +
+        "for nothing. Then set the window to 3. Same task, same agent — a fraction of the cost, " +
+        "because the loop noticed it was not getting anywhere.",
+    });
+
+    var task = h.select({
+      label: "task", value: "flaky",
+      options: [
+        ["easy", "easy — tools mostly work"],
+        ["flaky", "flaky — one tool fails intermittently"],
+        ["impossible", "impossible — a tool that never works"],
+      ],
+    });
+    var seed = h.range({ label: "task seed", min: 1, max: 40, value: 7 });
+    var maxSteps = h.range({ label: "max steps", min: 1, max: 60, value: 24 });
+    var budget = h.range({
+      label: "token budget", min: 4000, max: 200000, step: 2000, value: 60000, unit: " tok",
+    });
+    var window = h.range({ label: "no-progress window (0 = off)", min: 0, max: 10, value: 0 });
+    var maxRetry = h.range({ label: "retries per failing tool", min: 0, max: 5, value: 2 });
+
+    h.on(function () {
+      var PROFILE = {
+        easy:       { pProg: 0.82, pErr: 0.10, ceiling: 100, gain: [14, 26] },
+        flaky:      { pProg: 0.52, pErr: 0.34, ceiling: 100, gain: [10, 22] },
+        impossible: { pProg: 0.22, pErr: 0.56, ceiling: 62,  gain: [6, 14] },
+      };
+      var p = PROFILE[task.value] || PROFILE.flaky;
+      var S = Math.round(Number(maxSteps.value));
+      var B = Math.round(Number(budget.value));
+      var W = Math.round(Number(window.value));
+      var R = Math.round(Number(maxRetry.value));
+      if (!isFinite(S) || S < 1) S = 1;
+      if (!isFinite(B) || B < 1) B = 1;
+
+      // deterministic stream: same controls in, same trajectory out
+      var state = (Math.round(Number(seed.value)) || 1) * 2654435761 >>> 0;
+      function rnd() {
+        state = (state * 1664525 + 1013904223) >>> 0;
+        return state / 4294967296;
+      }
+
+      var progress = 0, tokens = 0, steps = 0, consecErr = 0, sinceProgress = 0;
+      var traj = [], stopped = null, escalated = 0;
+
+      while (true) {
+        // ---- guards, in the order a driver checks them ------------------
+        if (progress >= 100) { stopped = "done"; break; }
+        if (steps >= S) { stopped = "max steps"; break; }
+        if (tokens >= B) { stopped = "token budget"; break; }
+        if (W > 0 && sinceProgress >= W) { stopped = "no progress"; break; }
+
+        steps++;
+        var r = rnd(), kind, cost;
+        if (r < p.pProg && progress < p.ceiling) {
+          var g = p.gain[0] + rnd() * (p.gain[1] - p.gain[0]);
+          progress = Math.min(100, progress + g);
+          kind = "progress"; cost = 900 + Math.round(rnd() * 1400);
+          consecErr = 0; sinceProgress = 0;
+        } else if (r < p.pProg + p.pErr || progress >= p.ceiling) {
+          kind = "error"; cost = 2200 + Math.round(rnd() * 3200);   // stack traces are long
+          consecErr++; sinceProgress++;
+          if (consecErr > R) { kind = "escalate"; escalated++; consecErr = 0; }
+        } else {
+          kind = "repeat"; cost = 800 + Math.round(rnd() * 900);
+          sinceProgress++;
+        }
+        tokens += cost;
+        traj.push({ kind: kind, cost: cost, progress: progress });
+      }
+
+      var FLAG = { done: "ok", "max steps": "warn", "token budget": "bad", "no progress": "warn" };
+      var CHIP = { progress: "ok", error: "bad", escalate: "warn", repeat: "warn" };
+      var MARK = { progress: "+", error: "!", escalate: "^", repeat: "=" };
+
+      var wasted = 0;
+      for (var i = traj.length - 1; i >= 0; i--) {
+        if (traj[i].kind === "progress") break;
+        wasted += traj[i].cost;
+      }
+
+      h.render(
+        h.big(stopped === "done" ? "completed" : "stopped: " + stopped,
+          stopped === "done"
+            ? "in " + h.fmt(steps) + " steps for " + h.fmt(tokens) + " tokens"
+            : "at " + progress.toFixed(0) + "% after " + h.fmt(steps) + " steps",
+          FLAG[stopped]) +
+        h.chips(traj.map(function (t, i) {
+          return {
+            label: MARK[t.kind] + (i + 1),
+            flag: CHIP[t.kind],
+            title: "step " + (i + 1) + ": " + t.kind + ", " + h.fmt(t.cost) +
+                   " tokens, progress " + t.progress.toFixed(0) + "%",
+          };
+        })) +
+        h.note("<b>+</b> made progress &nbsp; <b>!</b> tool error &nbsp; " +
+          "<b>^</b> retries exhausted, escalated &nbsp; <b>=</b> repeated itself without progress. " +
+          "Hover any step for its cost.") +
+        h.row("tokens spent", h.fmt(tokens) + " of " + h.fmt(B),
+          tokens >= B ? "bad" : tokens > B * 0.6 ? "warn" : "ok") +
+        h.row("progress reached", progress.toFixed(0) + "%", progress >= 100 ? "ok" : "warn") +
+        h.row("steps that moved the task forward",
+          h.fmt(traj.filter(function (t) { return t.kind === "progress"; }).length) +
+          " of " + h.fmt(steps)) +
+        h.row("tokens burned after the last real progress", h.fmt(wasted),
+          wasted > tokens * 0.4 ? "bad" : wasted > tokens * 0.2 ? "warn" : "ok") +
+        h.row("escalations", h.fmt(escalated), escalated ? "warn" : "ok") +
+        (stopped === "token budget"
+          ? h.note("The budget guard fired — the most expensive way to stop, because it only " +
+              "notices after the money is gone. Every guard above it in the check order is cheaper.", "bad")
+          : stopped === "no progress"
+          ? h.note("The no-progress guard fired. It is the only guard here that stops for a " +
+              "<i>reason</i> rather than on exhaustion, which is why it is the one worth building.", "warn")
+          : stopped === "max steps"
+          ? h.note("Step cap fired. Safe, blunt, and it tells you nothing about whether one more " +
+              "step would have finished the job.", "warn")
+          : h.note("Finished on its own. Note how many steps did nothing — that gap is what a " +
+              "better tool description or a cheaper error message buys you.", "ok"))
+      );
+    });
+  }
+
+  // ======================================================================
   var LABS = {
     "tokenizer": tokenizer,
     "attention": attention,
@@ -2314,7 +2448,8 @@
     "bm25": bm25,
     "quantize": quantize,
     "needle": needle,
-    "chunker": chunker
+    "chunker": chunker,
+    "agentloop": agentloop
   };
   window.__LABS = LABS;   // later labs register into this
 

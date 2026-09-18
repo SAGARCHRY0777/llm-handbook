@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Harness &amp; loop engineering · LLM Handbook</title>
+<meta name="description" content="The model is the part you cannot change. The harness and the loop are the parts you can — and swapping the harness moves agentic scores as much as swapping the model does.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li><li><a href="reasoning-models.html">Reasoning models & test-time compute</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="text2sql.html">Text2SQL & structured data</a></li><li><a href="graphrag.html">GraphRAG & knowledge graphs</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li><li><a href="kv-cache.html">KV cache optimization</a></li><li><a href="reasoning-inference-optimization.html">Reasoning inference optimization</a></li><li><a href="kernel-and-attention-optimization.html">Kernel & attention optimization</a></li><li><a href="kv-reuse.html">KV reuse beyond the exact prefix</a></li><li><a href="model-shape.html">Reading a model config</a></li><li><a href="ensembles-and-routing.html">Ensembles, cascades & routing</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li><li><a href="harness-and-loops.html" class="active">Harness & loop engineering</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li><li><a href="synthetic-data.html">Synthetic data generation</a></li><li><a href="training-methods.html">The 20 ways to train a model</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li><li><a href="caching.html">Caching strategies</a></li><li><a href="parallelism.html">Parallelism & distributed inference</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li><li><a href="learning-paths.html">Learning paths</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="harness-loop-engineering"><a class="anchor" href="#harness-loop-engineering">#</a>Harness & loop engineering</h1><blockquote>
+<p><strong>The one sentence:</strong> an agent is a model inside a harness running a loop, and
+on every published benchmark the harness and the loop move the score as much
+as the model does — so they deserve the same engineering attention, and almost
+never get it.</p>
+</blockquote>
+<p><a href="agents.html">Agents</a> covers what an agent is and when to build one. This page
+is about the software <em>around</em> the model: the tools it is given, the context it
+is handed, the loop that drives it, and the guards that stop it. Anthropic names
+this layer directly — Claude Code is described as &quot;the agentic harness around
+Claude: it provides the tools, context management, and execution environment
+that turn a language model into a capable coding agent.&quot;</p>
+<p>The reason it earns its own page: <strong>this is the part you control.</strong> You cannot
+retrain the model. You can rewrite every other component, and the measured
+effect of doing so is large.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>  THE HARNESS IS EVERYTHING EXCEPT THE MODEL
+
+  ┌──────────────────────────────────────────────────────────────┐
+  │  HARNESS                                                     │
+  │                                                              │
+  │   system prompt ──┐                                          │
+  │   tool schemas ───┤                                          │
+  │   history ────────┼──► ┌───────────┐                         │
+  │   tool results ───┘    │   MODEL   │  ◄── the part you       │
+  │                        └─────┬─────┘      cannot change      │
+  │                              │                               │
+  │                       tool calls                             │
+  │                              ▼                               │
+  │   permissions ──► sandbox ──► execute ──► format result ──┐  │
+  │                                                           │  │
+  │   ┌───────────────────────────────────────────────────────┘  │
+  │   │                                                          │
+  │   └──► GUARDS: done? max steps? budget? no progress? ─────┐  │
+  │                                                           │  │
+  │        checkpoint · compact · log ◄───────────────────────┘  │
+  └──────────────────────────────────────────────────────────────┘
+
+
+  THE LOOP, AND THE ONLY FOUR WAYS IT ENDS
+
+     model emits tool calls ──► execute ──► feed results back ──┐
+              ▲                                                 │
+              └─────────────────────────────────────────────────┘
+
+     1. the model emits NO tool calls          ← the only clean exit
+     2. a step/turn cap fires                  ← blunt, tells you nothing
+     3. a budget cap fires                     ← the expensive one
+     4. an error the loop cannot recover from
+
+  Anthropic&#39;s Agent SDK types this honestly: a run ends as `success`,
+  `error_max_turns`, `error_max_budget_usd`, `error_during_execution`,
+  or `error_max_structured_output_retries`.
+  Success is ONE OF FIVE outcomes, not the default.</code></pre><hr>
+<h2 id="2-design-the-harness"><a class="anchor" href="#2-design-the-harness">#</a>2 · Design — the harness</h2><h3 id="what-is-actually-in-one"><a class="anchor" href="#what-is-actually-in-one">#</a>What is actually in one</h3><p>The best empirical answer comes from reading source code rather than docs.
+<em>Inside the Scaffold</em> (arXiv:2604.03515) surveys <strong>13 open-source coding agents</strong>
+across three layers — control architecture, tool/environment interface, resource
+management — and twelve dimensions. Two findings are worth carrying:</p>
+<ul>
+<li><strong>Tool counts range from 0 to 37.</strong> Two systems solving the same class of task
+can differ by 37 tools.</li>
+<li><strong>11 of 13 compose multiple loop primitives</strong> rather than using one control
+structure. The five observed: ReAct, generate-test-repair, plan-execute,
+multi-attempt retry, tree search.</li>
+</ul>
+<p>So &quot;the agent loop&quot; is not one thing, and a harness is an enumerable list of
+parts — each of which you can ablate and measure.</p>
+<h3 id="the-leverage-is-in-the-tools-and-mostly-in-their-descriptions"><a class="anchor" href="#the-leverage-is-in-the-tools-and-mostly-in-their-descriptions">#</a>The leverage is in the tools, and mostly in their descriptions</h3><p>A tool definition is a prompt. The schema, the description, the parameter names
+and above all the <strong>error messages</strong> are the model&#39;s entire view of your system.
+An error that says <code>TypeError: NoneType</code> teaches nothing; one that says
+<code>file not found — did you mean src/main.py?</code> changes the next action.</p>
+<p>On tool count, the widely-repeated &quot;accuracy collapses past 10–20 tools&quot; has
+numbers attached to it that are not traceable to any study. The underlying
+effect is real and measured, just differently: <strong>RAG-MCP</strong> (arXiv:2505.03275)
+varied the candidate pool from 1 to 100 with distractors drawn from a
+4,400-server registry and found <strong>&gt;90% selection success at pools of 30 or
+fewer</strong>, degrading beyond. The problem is distractor load, not a magic ceiling.</p>
+<h3 id="permissions-sandboxing-and-checkpoints-are-harness-components-too"><a class="anchor" href="#permissions-sandboxing-and-checkpoints-are-harness-components-too">#</a>Permissions, sandboxing and checkpoints are harness components too</h3><p>Permission modes are a graded control surface, not a boolean — Claude Code ships
+six (<code>default</code>, <code>acceptEdits</code>, <code>plan</code>, <code>dontAsk</code>, <code>auto</code>, <code>bypassPermissions</code>),
+scoped per command (<code>&quot;Bash(npm *)&quot;</code>). A denial is fed back <strong>as a tool result</strong>,
+so the model treats it as information and tries another route.</p>
+<p>Checkpointing has a boundary worth naming: file snapshots before edits, and a
+plaintext JSONL transcript of every message and tool result. But checkpoints
+&quot;only cover file changes&quot; — actions against databases, APIs and deployments
+cannot be undone. <strong>Undo covers the filesystem, not the world</strong>, which is
+precisely why permissions exist as a separate component.</p>
+<h3 id="how-much-does-the-harness-actually-move-the-number"><a class="anchor" href="#how-much-does-the-harness-actually-move-the-number">#</a>How much does the harness actually move the number?</h3><p>This is where the field is loudest and least careful, so here are the numbers
+that survive checking.</p>
+<div class="callout warn">
+
+<p><strong>Three widely-quoted harness results do not mean what they are used to mean.</strong></p>
+<ul>
+<li><strong>SWE-agent&#39;s &quot;3.8% → 12.5%&quot;</strong> is not a same-model ablation. The 3.8% is
+Claude 3 Opus with BM25 retrieval — the paper&#39;s cited previous best. Held at
+GPT-4 Turbo, the honest swing is <strong>1.31% → 12.47%</strong>, which is still a large
+harness effect, just a different comparison.</li>
+<li><strong>A &quot;63.6-point spread&quot; from one harness study</strong> is an integration failure at
+the low end, not a harness-quality result.</li>
+<li><strong>A &quot;7.8× harness-to-model variance ratio&quot;</strong> circulates as a measurement. It
+is not one; do not quote it.</li>
+</ul>
+</div>
+
+<p>The defensible figure: on <strong>Terminal-Bench 2.1</strong> (89 tasks, repeated trials,
+published confidence intervals), the same model under different scaffolds spans
+roughly <strong>3–23 percentage points</strong>:</p>
+<div class="table-scroll"><table><thead><tr><th>Model</th><th>Native harness</th><th>Standardised Terminus 2</th><th>Gap</th></tr></thead><tbody><tr><td>Gemini 3 Flash</td><td>56.9% (Gemini CLI)</td><td>54.2%</td><td>2.7pp</td></tr><tr><td>Claude Opus 4.6</td><td>70.1% (Claude Code)</td><td>63.8%</td><td>6.3pp</td></tr><tr><td>GPT-5.3-Codex</td><td>79.1% (Codex CLI)</td><td>68.5%</td><td>10.6pp</td></tr></tbody></table></div><p>That range is <strong>comparable to or larger than the gap between adjacent frontier
+models</strong> — which is the real claim, and it is strong enough without inflation.
+Note also the direction: it depends on model–harness <em>fit</em>, not on abstract
+harness quality.</p>
+<hr>
+<h2 id="3-design-the-loop"><a class="anchor" href="#3-design-the-loop">#</a>3 · Design — the loop</h2><h3 id="the-plain-while-loop-is-the-recommendation-not-the-shortcut"><a class="anchor" href="#the-plain-while-loop-is-the-recommendation-not-the-shortcut">#</a>The plain while-loop is the recommendation, not the shortcut</h3><p>Anthropic defines agents as &quot;LLMs using tools based on environmental feedback in
+a loop&quot; and says directly that &quot;it&#39;s also common to include stopping conditions
+(such as a maximum number of iterations) to maintain control.&quot; The load-bearing
+requirement is that the agent <strong>gain ground truth from the environment at every
+step</strong> — which is why a loop without real tool results is just a long prompt.</p>
+<p>Four loop shapes, distinguished by <em>who owns the stop condition</em>:</p>
+<div class="table-scroll"><table><thead><tr><th>Shape</th><th>Triggered by</th><th>Stops when</th><th>Who decides &quot;done&quot;</th></tr></thead><tbody><tr><td><strong>Turn-based</strong></td><td>a prompt</td><td>the model judges it finished</td><td><strong>the model</strong></td></tr><tr><td><strong>Goal-based</strong></td><td>a prompt + explicit criteria</td><td>criteria met, or cap</td><td><strong>a deterministic check</strong></td></tr><tr><td><strong>Time-based</strong></td><td>an interval</td><td>you stop it</td><td>you</td></tr><tr><td><strong>Proactive</strong></td><td>an event</td><td>criteria met</td><td>a deterministic check</td></tr></tbody></table></div><p>The distinction that matters is the last column. Anthropic&#39;s stated principle
+for goal-based loops is that with explicit criteria &quot;Claude doesn&#39;t have to make
+a determination on what is &#39;good enough&#39;&quot; — e.g. <em>get the Lighthouse score to 90
+or above, stop after 5 tries</em>. <strong>Every stop condition you can make deterministic
+is one the model cannot get wrong.</strong></p>
+<h3 id="the-framework-defaults-are-not-what-you-think"><a class="anchor" href="#the-framework-defaults-are-not-what-you-think">#</a>The framework defaults are not what you think</h3><p>Three of four commonly-cited values are wrong. These were read from shipped
+packages, not documentation:</p>
+<div class="table-scroll"><table><thead><tr><th>Framework</th><th>Commonly cited</th><th>Actually</th></tr></thead><tbody><tr><td><strong>LangGraph</strong> <code>recursion_limit</code></td><td>25</td><td><strong>25 → 10,000 (v1.1.0) → 10,007 (v1.2.0+)</strong></td></tr><tr><td><strong>CrewAI</strong> <code>max_iter</code></td><td>20</td><td><strong>25</strong> (and <code>LiteAgent.max_iterations</code> is 15)</td></tr><tr><td><strong>OpenAI Agents SDK</strong> <code>DEFAULT_MAX_TURNS</code></td><td>10</td><td>10 ✓ (guard is strict <code>&gt;</code>, so 10 errors on turn 11)</td></tr></tbody></table></div><div class="callout bad">
+
+<p><strong>LangGraph&#39;s recursion limit is effectively gone and almost nobody has
+noticed.</strong> Every blog post and the docs still say 25; the shipped default is
+10,007. A maintainer issue confirms the number was never intended as a safety
+bound — only a placeholder for a sentinel — and notes a config-merge bug that
+can silently reset it to 25. So the value is simultaneously effectively infinite
+and unreliable. <strong>Set it yourself.</strong></p>
+</div>
+
+<p>Frameworks also disagree on what <em>happens</em> at exhaustion — raise, hand off to an
+error handler, or spend one more model call to force a final answer. Three
+shipped behaviours, three different contracts. Know which one you have, because
+it decides whether exhaustion is an exception or a plausible-looking answer.</p>
+<h3 id="the-failure-modes-measured"><a class="anchor" href="#the-failure-modes-measured">#</a>The failure modes, measured</h3><p><strong>MAST</strong> (arXiv:2503.13657) annotated 1,600+ traces across 7 frameworks with
+inter-annotator κ=0.88. Loop control accounts for roughly <strong>a third of all
+observed failures</strong>:</p>
+<ul>
+<li>Step repetition — <strong>15.7%</strong></li>
+<li>Unaware of termination conditions — <strong>12.4%</strong></li>
+<li>Premature termination — <strong>6.2%</strong></li>
+</ul>
+<p>And unbounded loops are a real defect class in shipped code. <em>When Agents Do Not
+Stop</em> (arXiv:2607.01641) scanned <strong>6,549 agent repositories</strong> and confirmed 68
+infinite-loop failures. The two leading causes are the uncomfortable ones:</p>
+<ul>
+<li><strong>retry-feedback-without-bound — 25.0%</strong></li>
+<li><strong>tool-call-iteration-without-bound — 23.5%</strong></li>
+</ul>
+<p><strong>Error recovery is the leading cause of infinite loops.</strong> The code you wrote to
+handle failure is the code that fails to stop. Impact was overwhelmingly
+economic: 95.6% cost exhaustion, 95.6% model denial-of-service.</p>
+<h3 id="the-guard-worth-building"><a class="anchor" href="#the-guard-worth-building">#</a>The guard worth building</h3><p>Caps stop on <em>exhaustion</em>. Only one common guard stops for a <em>reason</em>:
+<strong>no-progress detection</strong>. Track whether the task state actually advanced; if it
+has not in <em>N</em> steps, stop. The lab below makes the difference concrete — on an
+unsolvable task the budget guard spends the entire allowance to reach 32%, while
+a no-progress window of 3 stops at 6 steps for a third of the tokens.</p>
+<p>Watch for <strong>oscillation</strong> specifically: A→B→A→B defeats any guard that only
+compares against the immediately previous action.</p>
+<hr>
+<h2 id="4-experiment"><a class="anchor" href="#4-experiment">#</a>4 · Experiment</h2><p>Run a loop and watch a guard decide the bill. Set the task to <em>impossible</em> with
+the no-progress window at 0, then move the window to 3 — same agent, same task,
+and the cost falls by roughly three times because the loop noticed it was not
+getting anywhere.</p>
+<div class="lab" data-lab="agentloop"><p class="lab__fallback">Interactive experiment — needs JavaScript.</p></div><hr>
+<h2 id="5-depth-context-is-the-other-half"><a class="anchor" href="#5-depth-context-is-the-other-half">#</a>5 · Depth — context is the other half</h2><h3 id="everything-accumulates"><a class="anchor" href="#everything-accumulates">#</a>Everything accumulates</h3><p>The window &quot;does not reset between turns within a session. Everything
+accumulates&quot; — system prompt, tool schemas, history, tool inputs <strong>and tool
+outputs</strong>. Tool results are usually the largest consumer: one 50k-token API
+response can dominate a whole trajectory.</p>
+<h3 id="models-degrade-long-before-the-limit"><a class="anchor" href="#models-degrade-long-before-the-limit">#</a>Models degrade long before the limit</h3><p>This is measured, not folklore. <strong>Chroma&#39;s context-rot study</strong> tested 18
+frontier models across 8 input lengths and found degradation at <em>every</em>
+increment — including on trivial retrieval and text-replication tasks.
+<strong>LOCA-bench</strong> (arXiv:2602.07962) isolates it cleanly by varying only how much
+environment description the same task requires:</p>
+<div class="table-scroll"><table><thead><tr><th>Model</th><th>8K</th><th>32K</th><th>96K</th><th>256K</th></tr></thead><tbody><tr><td>Claude-4.5-Opus</td><td>96.0</td><td>84.0</td><td>45.3</td><td><strong>14.7</strong></td></tr><tr><td>GPT-5.2-Medium</td><td>72.0</td><td>60.0</td><td>44.0</td><td><strong>21.3</strong></td></tr><tr><td>Gemini-3-Flash <em>(1,050K window)</em></td><td>64.0</td><td>40.0</td><td>32.0</td><td><strong>17.3</strong></td></tr></tbody></table></div><p>Note the third row: a model with a <strong>million-token window</strong> loses three quarters
+of its accuracy by 256K. <strong>Window size is not working memory.</strong></p>
+<div class="callout note">
+
+<p><strong>The counterintuitive one.</strong> Chroma found models perform <em>worse</em> when
+surrounding context has coherent logical flow, and that randomly shuffling
+sentences <strong>consistently improves performance</strong> — across all 18 models and every
+configuration. Coherent filler distracts more than incoherent filler. This
+quietly undermines the instinct to hand agents tidy narrative context, and
+nobody appears to have followed up on why.</p>
+</div>
+
+<h3 id="compaction-has-the-weakest-evidence-of-anything-here"><a class="anchor" href="#compaction-has-the-weakest-evidence-of-anything-here">#</a>Compaction has the weakest evidence of anything here</h3><p>Compaction — summarise the history, continue — is the flagship technique, now
+shipped as a server-side API feature. It is also the least supported:</p>
+<ul>
+<li><strong>Plain FIFO truncation matched or beat summary-based compaction</strong> on
+AppWorld&#39;s 147 stateful tasks (arXiv:2608.06503).</li>
+<li><strong>LOCA-bench measured compaction <em>reducing</em> accuracy</strong> for GPT-5.2-Medium at
+128K: 38.7 → 36.0.</li>
+<li>Anthropic&#39;s own cookbook measured what it costs: over 8 documents (~329K
+tokens), after compaction <strong>3/3 high-level facts survived and 0/3 obscure
+specifics did</strong>.</li>
+</ul>
+<p>Worse than the average loss is the <em>variance</em>: compaction turns reliably-solved
+tasks into intermittently-solved ones. Pass@2 (solved at least once in two runs)
+holds up while <strong>Pass² (solved in both runs) collapses</strong> — which is the
+definition of flakiness.</p>
+<p>Two practical consequences. Put durable rules in a file that is re-injected every
+request rather than trusting them to survive a summary. And watch for
+<strong>compaction thrashing</strong>: if one tool output is large enough to refill the window
+immediately after each summary, auto-compaction gives up and errors.</p>
+<h3 id="false-success-is-the-failure-mode-nobody-instruments"><a class="anchor" href="#false-success-is-the-failure-mode-nobody-instruments">#</a>False success is the failure mode nobody instruments</h3><p><em>From Confident Closing to Silent Failure</em> (arXiv:2606.09863) measured this over
+<strong>9,876 τ²-bench and 1,879 AppWorld trajectories</strong>: agents declaring success
+without achieving it accounts for <strong>45–48% of all failures</strong> — and it is nearly
+undetectable by the LLM-judge monitoring most teams deploy, because the agent&#39;s
+own report is fluent and confident.</p>
+<p>The defence is not a better judge. It is <strong>checking the environment</strong>: did the
+file change, does the record exist, do the tests pass.</p>
+<h3 id="evaluate-the-outcome-not-the-path"><a class="anchor" href="#evaluate-the-outcome-not-the-path">#</a>Evaluate the outcome, not the path</h3><p>Anthropic: &quot;Don&#39;t grade the path the agent took, grade what it produced.&quot; A
+suite requiring <em>tool A → B → C</em> fails an agent that found a better route.
+LangChain says the same in nearly the same words.</p>
+<p><strong>And yet the most widely shipped trajectory tooling defaults to exact-path
+matching</strong> — Google ADK&#39;s <code>tool_trajectory_avg_score</code> defaults to EXACT match at
+threshold 1.0. Adopt the default and you ship a suite that punishes improvement.</p>
+<p>Two more numbers for eval design:</p>
+<ul>
+<li><strong>Reliability compounds downward.</strong> A 75%-per-trial agent is ~42% reliable
+over three trials (0.75³). τ-bench&#39;s pass^k makes this explicit: GPT-4o solves
+&lt;50% at pass¹ and <strong>&lt;25% at pass⁸</strong> on retail.</li>
+<li><strong>Every major agent benchmark audited was fully gameable.</strong> Berkeley RDI&#39;s
+scanner scored <strong>100% on Terminal-Bench, SWE-bench Verified and SWE-bench
+Pro without solving a single task</strong> — via a <code>conftest.py</code> pytest hook, a
+binary wrapper trojan, a container parser overwrite. Treat leaderboard
+positions as claims about harnesses, not capabilities.</li>
+</ul>
+<hr>
+<h2 id="6-depth-when-to-add-agents-instead"><a class="anchor" href="#6-depth-when-to-add-agents-instead">#</a>6 · Depth — when to add agents instead</h2><p>The honest summary of a noisy debate.</p>
+<p><strong>The pro case, precisely stated.</strong> Anthropic reported a multi-agent research
+system outperforming single-agent Opus 4 by <strong>90.2%</strong> — on an <em>internal</em> eval,
+on a task shaped for parallel search. Real, but not a general result.</p>
+<p><strong>The strongest counter-evidence.</strong> Tran &amp; Kiela (arXiv:2604.02460) ran the
+controlled experiment across 3 model families, 2 benchmarks, 5 multi-agent
+architectures and 6 token budgets: <strong>under matched token budgets the multi-agent
+advantage largely disappears</strong> — single agents match or beat every architecture
+tested.</p>
+<p><strong>And the same paper contains the best argument <em>for</em> sub-agents.</strong> Its proof
+holds only under <em>perfect context utilisation</em>. Once context is degraded — which
+§5 says it always is — multi-agent becomes competitive. <strong>Context isolation is
+the real case for sub-agents</strong>, not parallelism.</p>
+<p><strong>The critique everyone quotes has been superseded by its own author.</strong>
+Cognition&#39;s <em>Don&#39;t Build Multi-Agents</em> is widely cited as a flat prohibition.
+Walden Yan published <em>Multi-Agents: What&#39;s Actually Working</em> in April 2026,
+revising rather than retracting: <strong>writes stay single-threaded, and additional
+agents contribute intelligence rather than actions.</strong> That single-writer
+principle is the actual resolution — anyone quoting the 2025 essay as a
+prohibition is quoting a superseded version of its author&#39;s position.</p>
+<p><strong>The cost, correctly stated.</strong> Anthropic&#39;s ladder: agents use ~<strong>4× more tokens
+than chat</strong>, multi-agent ~<strong>15× more than chat</strong>. So multi-agent is about
+<strong>3.75× a single agent</strong> — the 15× figure is against <em>chat</em> and is routinely
+misquoted as being against single-agent. Per-subagent fixed context overhead
+measures around <strong>54,000 tokens</strong> before any work happens. (A viral 436K figure
+was retracted by its own author as a caching artifact.)</p>
+<p><strong>And it can be strongly negative.</strong> Kim et al. (arXiv:2512.08296) report
+relative performance versus single-agent ranging from <strong>+80.8% on decomposable
+financial reasoning to −70.0% on sequential planning</strong>, with diminishing returns
+once a single agent already handles the task.</p>
+<div class="table-scroll"><table><thead><tr><th>Failure</th><th>Looks like</th><th>Actual cause</th></tr></thead><tbody><tr><td>Loop never terminates</td><td>Bill spikes, no output</td><td>Retry-with-feedback has no bound — the top cause in 6,549 repos</td></tr><tr><td>Agent reports success, nothing happened</td><td>Fluent summary, unchanged system</td><td>False success: 45–48% of failures; check the environment, not the report</td></tr><tr><td>Works in demo, flaky in production</td><td>Passes once, fails on repeat</td><td>pass¹ is not reliability; measure pass^k</td></tr><tr><td>Great benchmark score, poor real use</td><td>Leaderboard says otherwise</td><td>Benchmarks are gameable and score the harness</td></tr><tr><td>Degrades on long tasks</td><td>Fine early, wrong later</td><td>Context rot — degradation starts far below the window limit</td></tr><tr><td>Compaction made it worse</td><td>Intermittent failures appear</td><td>Compaction trades average quality for variance; Pass² collapses</td></tr><tr><td>Multi-agent cost 4× for no gain</td><td>More agents, same results</td><td>Matched-budget advantage is near zero unless context isolation is the point</td></tr><tr><td>Eval punishes a better agent</td><td>Smarter route marked wrong</td><td>Exact-path trajectory matching — check your ADK defaults</td></tr></tbody></table></div><hr>
+<h2 id="7-from-each-seat"><a class="anchor" href="#7-from-each-seat">#</a>7 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What harness and loop engineering means here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Whether the thing finishes, and whether &quot;done&quot; means done. False success is invisible to them, which is why it is your problem.</td></tr><tr><td><strong>Coder</strong></td><td>Your error messages are prompts. Write them for the model: what failed, and what to try instead. Then set your own iteration cap — the framework default is either 10 or 10,007 and neither was chosen for you.</td></tr><tr><td><strong>Tester</strong></td><td>Grade the end state, never the path. Measure pass^k, not pass@1. And verify against the environment, because 45–48% of failures are the agent confidently telling you it worked.</td></tr><tr><td><strong>System designer</strong></td><td>Budget caps stop on exhaustion; no-progress guards stop for a reason. Build the second. Tool results are the largest context consumer — decide what happens to a 50k-token response before one arrives.</td></tr><tr><td><strong>Architect</strong></td><td>Harness choice moves benchmark scores as much as model choice. It is a first-class design decision, and unlike the model it is entirely yours. Prefer one good loop; add sub-agents for context isolation, not for parallelism.</td></tr><tr><td><strong>CEO</strong></td><td>The cheapest reliability work is not a better model — it is bounded loops and outcome verification. An unbounded retry is a bill with no ceiling, and it is the single most common agent defect in open-source code.</td></tr><tr><td><strong>Market</strong></td><td>Agentic leaderboards measure the harness as much as the model, and every major one audited was scoreable at 100% without doing the task. Ask what scaffold produced the number.</td></tr></tbody></table></div><hr>
+<h2 id="8-interview-questions"><a class="anchor" href="#8-interview-questions">#</a>8 · Interview questions</h2><p><strong>&quot;Your agent&#39;s bill spiked 40× overnight with no code change. Where do you look?&quot;</strong>
+An unbounded retry loop, almost certainly. It is the largest documented class of
+infinite agentic loops — retry-with-feedback and tool-call iteration without a
+bound account for roughly half of confirmed cases across 6,549 scanned
+repositories, and the impact is overwhelmingly cost exhaustion rather than a
+crash. Check whether your framework&#39;s iteration cap is what you think: LangGraph&#39;s
+went from 25 to 10,007 while every blog post still says 25.</p>
+<p><strong>&quot;How do you know an agent actually completed the task?&quot;</strong>
+Not from its own report — false success accounts for 45–48% of failures and is
+nearly undetectable by LLM judges, because the summary is fluent and confident.
+Verify against the environment: the file changed, the record exists, the tests
+pass. Grade the end state, not the path, and never require a fixed tool sequence
+or you fail agents that found a better route.</p>
+<p><strong>&quot;Would you grade the agent&#39;s trajectory?&quot;</strong>
+Use it to diagnose, not to score. Both Anthropic and LangChain warn against
+requiring tool A → B → C — yet Google ADK&#39;s trajectory scorer defaults to exact
+match at threshold 1.0, so the default configuration punishes a smarter agent.
+If you score trajectory at all, score properties like recovery-after-error, not
+path equality.</p>
+<p><strong>&quot;A million-token context window means I don&#39;t need retrieval or compaction.&quot;</strong>
+No. Degradation starts far below the limit: on LOCA-bench a model with a
+1,050K window falls from 64% to 17% accuracy between 8K and 256K of environment
+description. And compaction is not the obvious fix — plain FIFO truncation
+matched or beat summary compaction on AppWorld, and compaction&#39;s real cost is
+variance: Pass@2 holds while Pass² collapses.</p>
+<p><strong>&quot;When is a multi-agent system worth it?&quot;</strong>
+When you need context isolation, not when you want parallelism. Under matched
+token budgets the multi-agent advantage largely disappears; the durable argument
+is that each sub-agent gets a clean window, which matters exactly because context
+degrades. The current best principle is Cognition&#39;s revised one: writes stay
+single-threaded, extra agents contribute intelligence rather than actions. And
+price it — multi-agent is ~3.75× a single agent, not the 15× that gets quoted
+(15× is against chat).</p>
+<p><strong>&quot;Same model, different harness — how much does it matter?&quot;</strong>
+Comparable to changing models. On Terminal-Bench 2.1 the same model under
+different scaffolds spans roughly 3–23 percentage points. Be careful with the
+famous numbers, though: SWE-agent&#39;s &quot;3.8% → 12.5%&quot; changes both model and
+scaffold — held at GPT-4 Turbo the honest figure is 1.31% → 12.47%.</p>
+<hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done with this page when you can:</p>
+<ul>
+<li>List what a harness contains, and name which parts you would ablate first</li>
+<li>Explain why the plain while-loop is the recommendation rather than the shortcut</li>
+<li>Say which stop conditions fire on exhaustion and which fire for a reason</li>
+<li>Name the leading cause of infinite agent loops, and why it is ironic</li>
+<li>Explain why window size is not working memory, with a number</li>
+<li>State compaction&#39;s real cost — variance, not just average quality</li>
+<li>Say why an agent&#39;s own success report is not evidence</li>
+<li>Give the honest case for and against sub-agents, and price both</li>
+</ul>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><ul>
+<li><strong>Harness anatomy</strong> — <a href="https://arxiv.org/abs/2604.03515"><em>Inside the Scaffold: A Source-Code Taxonomy of Coding Agent Architectures</em></a> (2026) — 13 agents read at source level; the best answer to &quot;what is in a harness&quot;.</li>
+<li><strong>The loop</strong> — <a href="https://www.anthropic.com/engineering/building-effective-agents"><em>Building Effective AI Agents</em></a> for the definition, and the <a href="https://code.claude.com/docs/en/agent-sdk/agent-loop">Agent SDK loop docs</a> for the five typed termination outcomes.</li>
+<li><strong>Loop failures</strong> — <a href="https://arxiv.org/abs/2503.13657">MAST</a> for the 1,600-trace failure taxonomy, and <a href="https://arxiv.org/abs/2607.01641"><em>When Agents Do Not Stop</em></a> for infinite loops across 6,549 repositories.</li>
+<li><strong>False success</strong> — <a href="https://arxiv.org/abs/2606.09863"><em>From Confident Closing to Silent Failure</em></a> — 45–48% of failures, measured over ~11,700 trajectories.</li>
+<li><strong>Context rot</strong> — <a href="https://www.trychroma.com/research/context-rot">Chroma&#39;s <em>Context Rot</em></a> (18 models, including the shuffling result) and <a href="https://arxiv.org/abs/2602.07962">LOCA-bench</a> for degradation by environment size.</li>
+<li><strong>Compaction</strong> — <a href="https://arxiv.org/abs/2608.06503"><em>Toward Reliable Context Compression for Long-Horizon Agents</em></a> — the paper that finds FIFO truncation competitive with summarisation.</li>
+<li><strong>Multi-agent, both sides</strong> — <a href="https://arxiv.org/abs/2604.02460">Tran &amp; Kiela</a> for the matched-budget result, Cognition&#39;s <em>Don&#39;t Build Multi-Agents</em> <strong>and</strong> its April 2026 revision, and <a href="https://arxiv.org/abs/2512.08296">Kim et al.</a> for +80.8% to −70.0%.</li>
+<li><strong>Eval</strong> — <a href="https://arxiv.org/abs/2406.12045">τ-bench</a> for pass^k, and the Agentic Benchmark Checklist for how construction flaws move scores by up to 100% relative.</li>
+</ul>
+<p>Related: <a href="agents.html">Agents</a> for whether to build one ·
+<a href="guardrails-and-security.html">Guardrails &amp; security</a> for the adversarial side of
+the same loop · <a href="regression-gates.html">Regression gates</a> for turning these evals
+into merge decisions · <a href="reasoning-inference-optimization.html">Reasoning inference optimization</a>
+for the token budget the loop spends · <a href="orchestration-frameworks.html">Orchestration frameworks</a>
+for the libraries whose defaults this page keeps correcting.</p>
+</article>
+    <div class="pager-row"><a class="pager previous" href="guardrails-and-security.html"><span>previous</span>Guardrails & security</a><a class="pager next" href="fine-tuning.html"><span>next</span>Fine-tuning & adaptation</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-the-harness">2 · Design — the harness</a></li><li class="d3"><a href="#what-is-actually-in-one">What is actually in one</a></li><li class="d3"><a href="#the-leverage-is-in-the-tools-and-mostly-in-their-descriptions">The leverage is in the tools, and mostly in their descriptions</a></li><li class="d3"><a href="#permissions-sandboxing-and-checkpoints-are-harness-components-too">Permissions, sandboxing and checkpoints are harness components too</a></li><li class="d3"><a href="#how-much-does-the-harness-actually-move-the-number">How much does the harness actually move the number?</a></li><li class="d2"><a href="#3-design-the-loop">3 · Design — the loop</a></li><li class="d3"><a href="#the-plain-while-loop-is-the-recommendation-not-the-shortcut">The plain while-loop is the recommendation, not the shortcut</a></li><li class="d3"><a href="#the-framework-defaults-are-not-what-you-think">The framework defaults are not what you think</a></li><li class="d3"><a href="#the-failure-modes-measured">The failure modes, measured</a></li><li class="d3"><a href="#the-guard-worth-building">The guard worth building</a></li><li class="d2"><a href="#4-experiment">4 · Experiment</a></li><li class="d2"><a href="#5-depth-context-is-the-other-half">5 · Depth — context is the other half</a></li><li class="d3"><a href="#everything-accumulates">Everything accumulates</a></li><li class="d3"><a href="#models-degrade-long-before-the-limit">Models degrade long before the limit</a></li><li class="d3"><a href="#compaction-has-the-weakest-evidence-of-anything-here">Compaction has the weakest evidence of anything here</a></li><li class="d3"><a href="#false-success-is-the-failure-mode-nobody-instruments">False success is the failure mode nobody instruments</a></li><li class="d3"><a href="#evaluate-the-outcome-not-the-path">Evaluate the outcome, not the path</a></li><li class="d2"><a href="#6-depth-when-to-add-agents-instead">6 · Depth — when to add agents instead</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+<script src="widgets.js"></script>
+<script src="labs.js"></script>
+</body>
+</html>
