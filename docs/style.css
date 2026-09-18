@@ -4,6 +4,9 @@
   --ground: #f5f7fa; --panel: #fff; --panel-2: #edf1f6;
   --ink: #0f1620; --ink-2: #3d4a5c; --ink-3: #6b788a;
   --rule: #d3dbe5; --rule-2: #e5eaf1;
+  /* hairline border width. Used 33 times across this file and never defined,
+     which silently resolved every one of those borders to none. */
+  --hair: 1px;
   --signal: #1f4e79; --signal-ink: #153a5b; --signal-wash: #e4edf6;
   --caution: #b15a08; --caution-wash: #fbeee0;
   --good: #1b6647; --good-wash: #e2f0ea;
