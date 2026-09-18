@@ -69,6 +69,7 @@ mattered.</p>
 
    CROSSOVER: roughly when sustained load keeps a GPU busy.
    Below that, hosted wins on cost as well as effort.</code></pre><hr>
+<div class="sim" data-sim="modelpick"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic — the mechanics you are actually buying.</strong> Every hosted API exposes
 roughly the same surface, and the differences matter more than the model:</p>
 <div class="table-scroll"><table><thead><tr><th>Feature</th><th>Why it decides things</th></tr></thead><tbody><tr><td><strong>Streaming</strong></td><td>Changes <em>perceived</em> latency more than any model swap. Time-to-first-token is the number users feel</td></tr><tr><td><strong>Structured output</strong></td><td>Native JSON-schema enforcement beats parsing and retrying</td></tr><tr><td><strong>Tool calling</strong></td><td>Quality here varies far more between models than chat quality does</td></tr><tr><td><strong>Context window</strong></td><td>Advertised length is not usable length — recall degrades well before the limit</td></tr><tr><td><strong>Prompt caching</strong></td><td>Large repeated prefixes get much cheaper; can dominate your bill</td></tr><tr><td><strong>Batch API</strong></td><td>Roughly half price for work that tolerates hours of delay</td></tr></tbody></table></div><p><strong>Intermediate — the cost model people get wrong.</strong> Output tokens usually cost

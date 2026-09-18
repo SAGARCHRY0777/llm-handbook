@@ -54,6 +54,7 @@ parameters. At INT4, gigabytes ≈ half the billions. A 70B at INT4 is ~35 GB
 and fits on one 40 GB card; at FP16 it does not fit on two.</p>
 </blockquote>
 <hr>
+<div class="sim" data-sim="envelope"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="kv-cache"><a class="anchor" href="#kv-cache">#</a>KV cache</h2><pre class="code"><code>   bytes = 2 × layers × kv_heads × head_dim × seq_len × batch × bytes_per_value</code></pre><p>For a Llama-3-8B shape (32 layers, 8 KV heads with GQA, head_dim 128, FP16):</p>
 <div class="table-scroll"><table><thead><tr><th>Context</th><th>Batch 1</th><th>Batch 8</th><th>Batch 32</th></tr></thead><tbody><tr><td>4k</td><td>0.27 GB</td><td>2.1 GB</td><td>8.6 GB</td></tr><tr><td>32k</td><td>2.1 GB</td><td>17 GB</td><td>69 GB</td></tr><tr><td>128k</td><td>8.6 GB</td><td>69 GB</td><td>275 GB</td></tr></tbody></table></div><p><strong>Read the diagonal.</strong> At long context and real batch sizes the cache dwarfs the
 16 GB of weights. This is why context length and concurrency trade directly

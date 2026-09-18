@@ -47,6 +47,12 @@ exists to prevent.
 
 ---
 
+```sim
+injectchain
+```
+
+---
+
 ## 2 · Design
 
 **Basic — the threat categories, and which are real.**

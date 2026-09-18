@@ -52,6 +52,12 @@ each time.
 
 ---
 
+```sim
+contextrot
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate — how long context is achieved.** Models are rarely trained at

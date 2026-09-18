@@ -52,6 +52,12 @@ prevents the confident-fiction failure that gets RAG systems distrusted.
 
 ---
 
+```sim
+cragloop
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate.** Three named variants, often conflated. They differ in *where*

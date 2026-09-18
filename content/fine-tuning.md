@@ -45,6 +45,12 @@ enthusiasm around it suggests.
 
 ---
 
+```sim
+loratrain
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate — the methods and what they cost.**

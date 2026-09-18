@@ -51,6 +51,12 @@ answer to "who writes the prompt".
 
 ---
 
+```sim
+framehop
+```
+
+---
+
 ## 2 · Design
 
 **Basic — LangChain's primitives.** Four things account for most of what you

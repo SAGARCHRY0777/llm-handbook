@@ -58,6 +58,11 @@ BM25 is three terms multiplied together, and you can break each one by hand. Typ
 bm25
 ```
 
+```sim
+rerankflow
+```
+
+
 ## 2 · Design
 
 **Intermediate — the options, in ascending cost.**

@@ -69,6 +69,12 @@ mid-conversation is most of what "senior" means in an interview.
 
 ---
 
+```sim
+handbooktour
+```
+
+---
+
 ## Reading order
 
 ```mermaid

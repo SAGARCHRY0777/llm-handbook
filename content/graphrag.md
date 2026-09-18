@@ -52,6 +52,12 @@ expensive on everything. Knowing which class is the entire decision.
 
 ---
 
+```sim
+graphhop
+```
+
+---
+
 ## 2 · Design
 
 **The pipeline**, and note how much of it is offline work:

@@ -67,6 +67,7 @@ enthusiasm around it suggests.</p>
      -&gt; the model learns the STYLE of your documents
      -&gt; and hallucinates confidently in that style
      -&gt; now it is wrong AND sounds exactly like your house voice</code></pre><hr>
+<div class="sim" data-sim="loratrain"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — the methods and what they cost.</strong></p>
 <div class="table-scroll"><table><thead><tr><th>Method</th><th>Trains</th><th>Memory for a 7B</th><th>Use when</th></tr></thead><tbody><tr><td><strong>Full fine-tune</strong></td><td>All weights</td><td>~80 GB+</td><td>Rarely justified outside labs</td></tr><tr><td><strong>LoRA</strong></td><td>Small low-rank adapters</td><td>~16 GB</td><td>The default choice</td></tr><tr><td><strong>QLoRA</strong></td><td>LoRA on a 4-bit base</td><td>~6 GB</td><td>Consumer GPUs; slight quality cost</td></tr><tr><td><strong>Prompt/prefix tuning</strong></td><td>Soft prompt vectors</td><td>Tiny</td><td>Niche; largely superseded</td></tr></tbody></table></div><p><strong>LoRA is the one to understand.</strong> Instead of updating a weight matrix <code>W</code>, you
 learn a low-rank correction: <code>W + BA</code>, where <code>B</code> and <code>A</code> are much smaller. With

@@ -66,6 +66,12 @@ gives the wrong cost.
 
 ---
 
+```sim
+shapecost
+```
+
+---
+
 ## 2 · Design — the six that are new
 
 ### Gated attention

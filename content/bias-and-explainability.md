@@ -44,6 +44,12 @@ basis.*
 
 ---
 
+```sim
+biasaudit
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate — bias is measurement before it is ethics.** The engineering work

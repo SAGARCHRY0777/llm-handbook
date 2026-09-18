@@ -66,6 +66,12 @@ serving it faster.
 
 ---
 
+```sim
+reasoncost
+```
+
+---
+
 ## 2 · Design — the nineteen techniques, in order
 
 Numbered as listed. The **Factor** column is the one that makes this memorable:

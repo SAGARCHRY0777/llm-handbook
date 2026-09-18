@@ -55,6 +55,12 @@ returns a confident, precise, wrong figure — and someone puts it in a board de
 
 ---
 
+```sim
+sqlgen
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate — the pipeline that works.**

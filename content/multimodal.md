@@ -50,6 +50,12 @@ times more per image and cannot tell you where anything is to the pixel.
 
 ---
 
+```sim
+visiontok
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate — the architecture that won.** Almost every current VLM follows

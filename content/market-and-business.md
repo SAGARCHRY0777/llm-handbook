@@ -48,6 +48,12 @@ them properly.
 
 ---
 
+```sim
+unitecon
+```
+
+---
+
 ## 2 · Design
 
 **Basic — the unit economics.** One number decides whether a business exists:

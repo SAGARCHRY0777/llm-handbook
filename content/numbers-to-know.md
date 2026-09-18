@@ -38,6 +38,12 @@ Add **15–20%** for activations and framework overhead, plus the KV cache below
 
 ---
 
+```sim
+envelope
+```
+
+---
+
 ## KV cache
 
 ```

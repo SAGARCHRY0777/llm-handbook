@@ -45,6 +45,12 @@ state out loud.
 
 ---
 
+```sim
+promptiter
+```
+
+---
+
 ## 2 · Design
 
 **Basic — the anatomy that consistently works.** Order matters, and this order

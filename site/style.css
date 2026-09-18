@@ -563,9 +563,11 @@ select.widget__input {
 
 .sim__flow {
   display: flex; align-items: center; gap: 12px;
-  overflow-x: auto; padding-bottom: 4px;
+  /* wrap rather than scroll: a card pushed off the right edge is a card the
+     reader never sees, and several sims put three wide nodes in one flow */
+  flex-wrap: wrap; overflow-x: auto; padding-bottom: 4px;
 }
-.sim__flow > * { flex: none; }
+.sim__flow > * { flex: 0 1 auto; min-width: 0; max-width: 100%; }
 .sim__arrow { color: var(--ink-3); font-size: 17px; flex: none; }
 .sim__stack { display: grid; gap: 10px; }
 .sim__cols { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
@@ -574,7 +576,8 @@ select.widget__input {
 /* ---- node card ---- */
 .sim__node {
   border: 1.5px solid var(--rule); border-radius: 9px;
-  background: var(--panel-2); padding: 12px 14px; min-width: 230px;
+  background: var(--panel-2); padding: 12px 14px;
+  min-width: 230px; max-width: 100%; overflow-x: auto;
 }
 .sim__node--ok   { border-color: var(--good); }
 .sim__node--warn { border-color: var(--caution); }

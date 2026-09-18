@@ -47,6 +47,12 @@ underneath everything else.
 
 ---
 
+```sim
+papertime
+```
+
+---
+
 ## Architecture & training
 
 | Paper | Year | What it established | Do |

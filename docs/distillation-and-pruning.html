@@ -69,6 +69,7 @@ quantization, is what an interviewer is actually probing.</p>
    COST TO DO IT           quantization  &lt;&lt;  pruning  &lt;  distillation
    QUALITY YOU KEEP        depends entirely on the task
    WHO SHOULD DO IT        everyone         few          fewer still</code></pre><hr>
+<div class="sim" data-sim="prunecycle"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — distillation.</strong> A large <strong>teacher</strong> produces outputs; a smaller
 <strong>student</strong> is trained to reproduce them. What the student learns from matters:</p>
 <div class="table-scroll"><table><thead><tr><th>Signal</th><th>What the student sees</th><th>Notes</th></tr></thead><tbody><tr><td><strong>Hard labels</strong></td><td>The teacher&#39;s chosen token</td><td>Wastes most of the signal</td></tr><tr><td><strong>Soft labels (logits)</strong></td><td>The full probability distribution</td><td>The classic method; carries the teacher&#39;s uncertainty</td></tr><tr><td><strong>Intermediate states</strong></td><td>Hidden layers, attention maps</td><td>Stronger, needs architectural compatibility</td></tr><tr><td><strong>Generated data</strong></td><td>Teacher-written examples</td><td>What most &quot;distillation&quot; means in practice today</td></tr></tbody></table></div><p><strong>The reason soft labels work is the interesting part.</strong> A teacher saying

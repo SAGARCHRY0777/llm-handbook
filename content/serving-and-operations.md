@@ -50,6 +50,12 @@ distributed-systems failures wearing a new hat.
 
 ---
 
+```sim
+servequeue
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate — continuous batching is the single biggest serving win**, and

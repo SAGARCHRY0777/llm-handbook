@@ -72,6 +72,7 @@ responsibility for, because that determines what you are stuck with.</p>
 cannot explain in an interview. The other two are plumbing; DSPy is a different
 answer to &quot;who writes the prompt&quot;.</p>
 <hr>
+<div class="sim" data-sim="framehop"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic — LangChain&#39;s primitives.</strong> Four things account for most of what you
 will touch:</p>
 <div class="table-scroll"><table><thead><tr><th>Primitive</th><th>What it is</th><th>Honest note</th></tr></thead><tbody><tr><td><strong>Prompt templates</strong></td><td>Strings with variables and validation</td><td>Useful, ~30 lines to write yourself</td></tr><tr><td><strong>Runnables (LCEL)</strong></td><td>Composable units chained with <code>|</code></td><td>Elegant; the abstraction leaks when debugging</td></tr><tr><td><strong>Output parsers</strong></td><td>Structured extraction, with retries</td><td>Superseded by native structured output on most APIs</td></tr><tr><td><strong>Retrievers</strong></td><td>A uniform <code>get_relevant_documents</code> interface</td><td>Genuinely useful — swapping vector stores is one line</td></tr></tbody></table></div><p><strong>LangGraph</strong> is the part worth taking seriously. A chain is a DAG: it runs

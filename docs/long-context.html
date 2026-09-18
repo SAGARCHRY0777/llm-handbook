@@ -74,6 +74,7 @@ each time.</p>
    MONEY      every token billed, every time
    LATENCY    prefill is quadratic-ish -- TTFT grows with prompt length
    MEMORY     KV cache grows linearly with context AND batch</code></pre><hr>
+<div class="sim" data-sim="contextrot"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — how long context is achieved.</strong> Models are rarely trained at
 their full advertised length; that would be prohibitively expensive. Instead:</p>
 <div class="table-scroll"><table><thead><tr><th>Technique</th><th>What it does</th></tr></thead><tbody><tr><td><strong>Position interpolation</strong></td><td>Squeeze trained positions to cover a longer range</td></tr><tr><td><strong>NTK / YaRN scaling</strong></td><td>Frequency-aware RoPE scaling that extrapolates better</td></tr><tr><td><strong>Continued pretraining</strong></td><td>Further training on genuinely long documents</td></tr><tr><td><strong>Sparse / sliding attention</strong></td><td>Attend to a window plus selected global tokens</td></tr></tbody></table></div><p><strong>This is why quality degrades in the extended region.</strong> Positions beyond the

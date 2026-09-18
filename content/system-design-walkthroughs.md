@@ -121,6 +121,12 @@ directions. Every confirmed miss becomes a golden item.
 
 ---
 
+```sim
+designwalk
+```
+
+---
+
 ## 2 · A customer support agent that can act
 
 ### Clarify

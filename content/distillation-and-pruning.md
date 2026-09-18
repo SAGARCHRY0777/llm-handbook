@@ -47,6 +47,12 @@ quantization, is what an interviewer is actually probing.
 
 ---
 
+```sim
+prunecycle
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate — distillation.** A large **teacher** produces outputs; a smaller

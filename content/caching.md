@@ -53,6 +53,12 @@ caching does not help. The two that actually pay are the ones they skipped.
 
 ---
 
+```sim
+cachelayers
+```
+
+---
+
 ## 2 · Design
 
 **Prefix caching is first because it is nearly free money.** Most LLM requests

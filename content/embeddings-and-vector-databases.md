@@ -48,6 +48,12 @@ scale. Both involve trade-offs that are invisible until you look for them.
 
 ---
 
+```sim
+annsearch
+```
+
+---
+
 ## 2 · Design
 
 **Basic — what an embedding is.** A fixed-length vector positioned so that

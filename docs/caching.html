@@ -75,6 +75,7 @@ caching does not help. The two that actually pay are the ones they skipped.</p>
    #4 is trivial and saves a surprising amount at ingestion time.
    #1 is easy and helps a little.
    #2 is powerful and needs care -- see below.</code></pre><hr>
+<div class="sim" data-sim="cachelayers"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Prefix caching is first because it is nearly free money.</strong> Most LLM requests
 share a large stable prefix — a system prompt, tool definitions, a few-shot
 block, sometimes a fixed corpus. Providers charge a large discount on cached

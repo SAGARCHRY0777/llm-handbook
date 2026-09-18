@@ -73,6 +73,7 @@ retrieval</strong>.</p>
    THE ENTIRE DIFFERENCE IS THE GRADE STEP AND THE &quot;none good&quot; BRANCH.</code></pre><p>The &quot;none good&quot; branch is what people leave out, and it is the branch that
 prevents the confident-fiction failure that gets RAG systems distrusted.</p>
 <hr>
+<div class="sim" data-sim="cragloop"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate.</strong> Three named variants, often conflated. They differ in <em>where</em>
 the check sits:</p>
 <div class="table-scroll"><table><thead><tr><th>Variant</th><th>Checks</th><th>Acts on failure by</th></tr></thead><tbody><tr><td><strong>CRAG</strong> (corrective)</td><td>Retrieved passages, before generating</td><td>Rewriting the query, or falling back to web/broader search</td></tr><tr><td><strong>Self-RAG</strong></td><td>Both retrieval <em>and</em> its own output, via reflection tokens</td><td>Retrieving again, or revising the draft</td></tr><tr><td><strong>Adaptive RAG</strong></td><td>The query itself, before retrieving</td><td>Routing: no retrieval / one hop / multi-hop</td></tr></tbody></table></div><p><strong>The grader is the whole design.</strong> It answers one question per passage — <em>does

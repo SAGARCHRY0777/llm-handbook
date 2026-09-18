@@ -50,6 +50,12 @@ anything interesting starts.
 
 ---
 
+```sim
+chunkwalk
+```
+
+---
+
 ## 2 · Design
 
 **Basic — the strategies, in ascending order of effort.**

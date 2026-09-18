@@ -44,6 +44,12 @@ The score climbs, users notice nothing. You optimised the measurement.
 
 ---
 
+```sim
+antipattern
+```
+
+---
+
 ## Retrieval
 
 **Optimising the model when retrieval never found the answer.**

@@ -33,6 +33,12 @@ that is not earning its place.
 
 ---
 
+```sim
+mockround
+```
+
+---
+
 ## Round 1 · Foundations
 
 *Asked to check you understand the machine, not just the API.*

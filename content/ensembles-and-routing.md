@@ -74,6 +74,12 @@ for a router, a threshold, two models to operate and a new way to be wrong.
 
 ---
 
+```sim
+cascade
+```
+
+---
+
 ## 2 · Design
 
 ### Routing — decide up front

@@ -66,6 +66,12 @@ goal in two weeks.
 
 ---
 
+```sim
+pathweeks
+```
+
+---
+
 ## Path 2 · Building your first RAG system
 
 You have a corpus and a requirement. This is the order that avoids the usual

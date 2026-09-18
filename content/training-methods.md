@@ -86,6 +86,12 @@ recipe is ~5–10% replay).
 
 ---
 
+```sim
+trainstages
+```
+
+---
+
 ## 2 · Supervised fine-tuning stage
 
 **This is where you almost certainly are.** You have input→output pairs and want
