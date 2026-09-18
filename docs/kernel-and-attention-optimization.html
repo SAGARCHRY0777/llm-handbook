@@ -98,6 +98,7 @@ even when that means doing more arithmetic — a polynomial on the tensor cores
 beats one instruction on a unit that is now the bottleneck. Nearly every
 kernel-level result of the last two years is a variation on that trade.</p>
 <hr>
+<div class="sim" data-sim="sparsekernel"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design-sparse-attention"><a class="anchor" href="#2-design-sparse-attention">#</a>2 · Design — sparse attention</h2><p>Dense attention computes every query against every key. Sparse attention
 computes a <strong>selection</strong> first, then attends only to what it selected. Every
 scheme here is that same two-step shape; they differ in who does the selecting

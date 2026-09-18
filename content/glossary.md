@@ -41,6 +41,12 @@ Use the search box (press <kbd>/</kbd>) to jump to a term.
 
 ---
 
+```sim
+termtour
+```
+
+---
+
 ## Tokenization
 
 | Term | Definition | What matters about it |

@@ -77,6 +77,7 @@ what happens when it calls the wrong one, twelve times, in a row.</p>
 reason rather than on exhaustion — is the subject of
 <a href="harness-and-loops.html">harness &amp; loop engineering</a>.</p>
 <hr>
+<div class="sim" data-sim="agentturn"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic — the spectrum, from safest to least safe.</strong> &quot;Agent&quot; covers a wide range
 and the differences matter more than the label:</p>
 <div class="table-scroll"><table><thead><tr><th>Pattern</th><th>Who decides control flow</th><th>Predictability</th></tr></thead><tbody><tr><td><strong>Chain</strong></td><td>You. Fixed sequence</td><td>Fully predictable</td></tr><tr><td><strong>Router</strong></td><td>Model picks one branch, once</td><td>Predictable, bounded</td></tr><tr><td><strong>Tool-calling loop</strong></td><td>Model picks tools until done</td><td>Bounded only by your limits</td></tr><tr><td><strong>Plan-and-execute</strong></td><td>Model writes a plan, then follows it</td><td>Plan is inspectable before acting</td></tr><tr><td><strong>Multi-agent</strong></td><td>Several models, delegating</td><td>Hardest to debug, most failure modes</td></tr></tbody></table></div><p><strong>Start at the top and move down only when forced.</strong> Most systems marketed as

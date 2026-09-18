@@ -48,6 +48,12 @@ in how you handle diversity and verification.
 
 ---
 
+```sim
+synthgen
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate — the three uses, in descending order of how well it works.**

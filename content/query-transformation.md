@@ -47,6 +47,12 @@ explains query planner statistics.
 
 ---
 
+```sim
+queryrewrite
+```
+
+---
+
 ## 2 · Design
 
 **Basic.** Query transformation means: do not retrieve with the raw user string.

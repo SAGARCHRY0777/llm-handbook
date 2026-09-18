@@ -70,6 +70,12 @@ do when the *cache* rather than the weights is what will not fit.
 
 ---
 
+```sim
+pipebubble
+```
+
+---
+
 ## 2 · Design — the four axes
 
 ### Data parallelism — the one that saves no memory

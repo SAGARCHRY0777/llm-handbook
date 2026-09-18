@@ -97,6 +97,11 @@ for the whole rest of the generation:
 attention
 ```
 
+```sim
+layerflow
+```
+
+
 ## 2 · Design
 
 **Basic — what attention computes.** Three vectors are derived from each token:

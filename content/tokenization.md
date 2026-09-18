@@ -55,6 +55,11 @@ most otherwise-inexplicable bugs.
 tokenizer
 ```
 
+```sim
+tokenwalk
+```
+
+
 ## 2 · Design
 
 **Basic — what a tokenizer is.** A fixed vocabulary (typically 32k–200k entries)

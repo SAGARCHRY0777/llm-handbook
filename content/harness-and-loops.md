@@ -73,6 +73,12 @@ effect of doing so is large.
 
 ---
 
+```sim
+harnessrun
+```
+
+---
+
 ## 2 · Design — the harness
 
 ### What is actually in one

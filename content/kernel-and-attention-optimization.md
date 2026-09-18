@@ -79,6 +79,12 @@ kernel-level result of the last two years is a variation on that trade.
 
 ---
 
+```sim
+sparsekernel
+```
+
+---
+
 ## 2 · Design — sparse attention
 
 Dense attention computes every query against every key. Sparse attention

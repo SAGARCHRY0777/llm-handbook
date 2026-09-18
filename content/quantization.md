@@ -49,6 +49,12 @@ optimization**, and the reason it helps decode far more than prefill.
 
 ---
 
+```sim
+quantpipe
+```
+
+---
+
 ## 2 · Design
 
 **Basic.** Quantization maps high-precision floats to a smaller numeric type. A

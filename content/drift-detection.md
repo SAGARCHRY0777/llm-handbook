@@ -52,6 +52,12 @@ actively wastes money on benign covariate drift.
 
 ---
 
+```sim
+driftwatch
+```
+
+---
+
 ## 2 · Design
 
 **Basic.** A drift detector is a **reference window**, a **current window**, a

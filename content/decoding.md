@@ -48,6 +48,12 @@ differently because of settings most people copy from a tutorial without reading
 
 ---
 
+```sim
+decodestep
+```
+
+---
+
 ## 2 · Design
 
 **Basic — the parameters and what each actually does.**

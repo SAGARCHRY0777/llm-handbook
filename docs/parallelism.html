@@ -91,6 +91,7 @@ do when the <em>cache</em> rather than the weights is what will not fit.</p>
      -&gt; PP between nodes (Ethernet/IB, ~50-400 Gb/s)
 
      doing it the other way round is the classic, expensive mistake.</code></pre><hr>
+<div class="sim" data-sim="pipebubble"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design-the-four-axes"><a class="anchor" href="#2-design-the-four-axes">#</a>2 · Design — the four axes</h2><h3 id="data-parallelism-the-one-that-saves-no-memory"><a class="anchor" href="#data-parallelism-the-one-that-saves-no-memory">#</a>Data parallelism — the one that saves no memory</h3><p>Replicate the whole model on each GPU and send different requests to each. There
 is no communication between replicas at inference, which makes it the simplest
 and the cheapest to operate.</p>

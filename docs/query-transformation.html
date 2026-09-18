@@ -69,6 +69,7 @@ explains query planner statistics.</p>
    HyDE           one question  -&gt; a fake ANSWER    ... fixes the asymmetry above
    step-back      one question  -&gt; a broader one    ... when the query is too specific
    decomposition  one question  -&gt; sub-questions    ... when it is really 3 questions</code></pre><hr>
+<div class="sim" data-sim="queryrewrite"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic.</strong> Query transformation means: do not retrieve with the raw user string.
 Rewrite it first, retrieve with the rewrite (or several), then merge.</p>
 <p><strong>Intermediate.</strong> The four techniques are not interchangeable — each fixes a

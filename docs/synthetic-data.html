@@ -70,6 +70,7 @@ in how you handle diversity and verification.</p>
    synthetic data       -&gt; BOOTSTRAP and COVERAGE
    real logged data     -&gt; the source of truth, as soon as you have any
    the ratchet          -&gt; every real failure becomes a permanent case</code></pre><hr>
+<div class="sim" data-sim="synthgen"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Intermediate — the three uses, in descending order of how well it works.</strong></p>
 <div class="table-scroll"><table><thead><tr><th>Use</th><th>Works?</th><th>Why</th></tr></thead><tbody><tr><td><strong>Eval set bootstrap</strong></td><td>Well, with care</td><td>You control the references; verification is possible</td></tr><tr><td><strong>Fine-tuning data</strong></td><td>Moderately</td><td>Quality is capped by the teacher; consistency is achievable</td></tr><tr><td><strong>Measuring real-world quality</strong></td><td><strong>No</strong></td><td>The distribution is wrong by construction</td></tr></tbody></table></div><p><strong>Generating an eval set is the highest-value use</strong> and the one to get right.
 The trick that makes it work: <strong>generate backwards.</strong> Do not ask for questions

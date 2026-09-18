@@ -52,6 +52,12 @@ The left half is a two-hour build. The right half is what makes it evidence.
 
 ---
 
+```sim
+judgeloop
+```
+
+---
+
 ## 2 · Design
 
 **Basic.** A judge is three things: a **model**, a **rubric**, and an **output

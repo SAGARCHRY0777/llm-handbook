@@ -70,6 +70,7 @@ numbers multiply faster&quot;.</p>
    The maths did not get faster. There is simply 4x less to carry.</code></pre><p><strong>This is the reason quantization is the highest-leverage inference
 optimization</strong>, and the reason it helps decode far more than prefill.</p>
 <hr>
+<div class="sim" data-sim="quantpipe"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design"><a class="anchor" href="#2-design">#</a>2 · Design</h2><p><strong>Basic.</strong> Quantization maps high-precision floats to a smaller numeric type. A
 tensor of FP16 values becomes INT8 or INT4 plus a <strong>scale</strong> (and often a
 <strong>zero-point</strong>) so the original range can be approximately recovered.</p>

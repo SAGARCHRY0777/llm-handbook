@@ -46,6 +46,12 @@ which is a design constraint, not a people problem.
 
 ---
 
+```sim
+gaterun
+```
+
+---
+
 ## 2 · Design
 
 **Basic.** A gate needs a **committed baseline**, a **policy**, and an **exit
