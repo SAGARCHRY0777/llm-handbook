@@ -407,6 +407,226 @@ number as several cheaper ones. But there is no body of work applying it to
 transformer inference, no kernel you can switch on, and nothing to evaluate. If
 you meet it on a list, that is the honest thing to say about it.</p>
 <hr>
+<h2 id="3d-rope-efficiency"><a class="anchor" href="#3d-rope-efficiency">#</a>3d · RoPE efficiency</h2><p>Rotary position embedding is the one operation on this page whose cost is
+entirely about <strong>memory traffic rather than arithmetic</strong>. Rotating a query or
+key is roughly four FLOPs per element — two multiplies and an add, against a
+cosine and sine that were computed long ago. Run it as its own kernel and you
+read Q and K out of HBM, touch each value once, and write them back. That round
+trip costs far more than the rotation does.</p>
+<p>Everything below follows from that one fact.</p>
+<p><strong>The tables are data-independent, so they are computed once.</strong> The angle for
+position <em>m</em> and dimension pair <em>i</em> is <code>m · base^(-2i/d)</code> — it depends on the
+position and the head dimension, never on the activations. So engines
+precompute <code>cos</code> and <code>sin</code> for every position up to <code>max_position_embeddings</code>
+at startup. That is not free: at 128k positions and head_dim 128 there are 64
+pairs per head, so the two tables hold <code>2 × 131,072 × 64 ≈ 16.8M</code> values —
+<strong>67 MB in fp32, 34 MB in fp16</strong>. Big enough that engines cache them per
+scaling configuration and rebuild only when the factor changes.</p>
+<p>The angles themselves are computed in <strong>fp32 even when the model runs in
+bf16</strong>, because <code>m · base^(-2i/d)</code> at m = 100,000 needs more mantissa than bf16
+has. Compute in fp32, cast the table once. This is a correctness cost you pay
+at startup rather than a throughput cost you pay per token.</p>
+<p><strong>The pairing layout decides whether it vectorises.</strong> RoPE rotates <em>pairs</em> of
+dimensions, and there are two conventions for which dimensions pair up:</p>
+<div class="table-scroll"><table><thead><tr><th></th><th>Interleaved (GPT-J style)</th><th>Split-half (NeoX style)</th></tr></thead><tbody><tr><td>Pairs</td><td><code>(x₀,x₁) (x₂,x₃) …</code> adjacent</td><td><code>(x₀, x_{d/2}) (x₁, x_{1+d/2}) …</code></td></tr><tr><td>Access</td><td>strided, stride 2</td><td>two contiguous halves</td></tr><tr><td>Rotation</td><td>per-pair shuffle</td><td><code>x·cos + rotate_half(x)·sin</code></td></tr><tr><td>Vectorises</td><td>poorly</td><td>well</td></tr></tbody></table></div><p>Split-half wins because <code>rotate_half</code> is a slice, a negate and a concatenate
+over contiguous memory — it maps onto wide vector loads, where the interleaved
+form needs a strided gather or a shuffle per pair. The two are not
+interchangeable: a checkpoint trained one way produces garbage read the other
+way, which is why vLLM carries an explicit <code>is_neox_style</code> flag rather than
+picking one.</p>
+<p><strong>The real win is fusion.</strong> Since the operation is memory-bound, the fix is to
+never give it its own pass over the data. Fold the rotation into the
+<strong>epilogue of the QKV projection</strong> — the tile is already in registers after the
+GEMM, so rotate it there and write it out once — or into the <strong>prologue of the
+attention kernel</strong>, which is about to read Q and K anyway. This is the same
+trade as <a href="#fused-epilogues-and-prologues">fused epilogues</a> above, applied to the
+cheapest possible operation, and it is where nearly all of RoPE&#39;s cost
+disappears.</p>
+<p><strong>Rotate less.</strong> Two independent reductions, both free of the kernel:</p>
+<ul>
+<li><strong>Only Q and K are rotated, never V.</strong> Position enters through the dot
+product, and V is not part of one. Two of the three projections, not three.</li>
+<li><strong>Partial RoPE</strong> applies the rotation to only the first <em>r</em> dimensions of
+each head and leaves the rest unrotated. Work falls proportionally, and the
+unrotated dimensions behave like NoPE — which is a length-extrapolation
+choice as much as a speed one. See <a href="model-shape.html">model shape</a> for what it
+does to the model rather than to the kernel.</li>
+</ul>
+<p><strong>Store post-rotation.</strong> Decode reads the cache far more often than prefill
+writes it, so engines cache K <em>after</em> rotation and never re-apply it. That
+choice is what makes position-shifted reuse hard, and
+<a href="kv-reuse.html">KV reuse</a> is the page about the consequences.</p>
+<h3 id="what-you-actually-set"><a class="anchor" href="#what-you-actually-set">#</a>What you actually set</h3><p>The knobs are split across the checkpoint config and the serving flag, and the
+first three change the model&#39;s behaviour, not just its speed:</p>
+<div class="table-scroll"><table><thead><tr><th>Setting</th><th>Where</th><th>What it does</th></tr></thead><tbody><tr><td><code>rope_theta</code></td><td><code>config.json</code></td><td>The base. 10,000 originally; long-context models raise it (Llama 3 uses 500,000) to slow the angle sweep</td></tr><tr><td><code>rope_scaling</code></td><td><code>config.json</code> / <code>--rope-scaling</code></td><td><code>{&quot;rope_type&quot;: &quot;linear&quot; | &quot;dynamic&quot; | &quot;yarn&quot; | &quot;llama3&quot;, &quot;factor&quot;: N}</code> — how positions are remapped past the trained length</td></tr><tr><td><code>partial_rotary_factor</code> / <code>rotary_pct</code></td><td><code>config.json</code></td><td>Fraction of each head that gets rotated. Below 1.0 is partial RoPE</td></tr><tr><td><code>is_neox_style</code></td><td>engine</td><td>Split-half (<code>true</code>) or interleaved (<code>false</code>). <strong>Must match the checkpoint</strong> — this is a correctness flag that happens to have a performance consequence</td></tr><tr><td><code>max_position_embeddings</code></td><td><code>config.json</code></td><td>Sizes the precomputed tables, so it sets their memory cost</td></tr><tr><td><code>--max-model-len</code></td><td>serving flag</td><td>Caps positions actually served, which is what bounds the table in practice</td></tr></tbody></table></div><p>Only the last two are purely about efficiency. The rest change what the model
+computes, so a &quot;RoPE optimisation&quot; that touches them needs an eval, not a
+benchmark.</p>
+<h2 id="3e-the-layer-below-the-kernel"><a class="anchor" href="#3e-the-layer-below-the-kernel">#</a>3e · The layer below the kernel</h2><p>Inference-optimization taxonomies bottom out in classical compiler and
+computer-architecture techniques — loop transformations, arithmetic tricks,
+data structures. They belong on the list, but they are not all levers you can
+pull, and the honest split matters more than the enumeration: <strong>most are done
+for you by the compiler, a handful are the entire reason a kernel is fast, and
+a few are research directions that have not paid off for transformers.</strong></p>
+<h3 id="loop-transformations"><a class="anchor" href="#loop-transformations">#</a>Loop transformations</h3><p>A GPU kernel <em>is</em> a loop nest, so every classical loop transformation has a
+meaning here. Four of them carry almost all the value:</p>
+<div class="table-scroll"><table><thead><tr><th>Transformation</th><th>What it does</th><th>Status for LLM inference</th></tr></thead><tbody><tr><td><strong>Loop tiling</strong> (blocking)</td><td>Process in cache-sized blocks instead of whole rows</td><td><strong>The one that matters.</strong> FlashAttention is a tiling transformation — it never materialises the N×N score matrix because it tiles the loop and keeps the running softmax in SRAM</td></tr><tr><td><strong>Loop fusion</strong></td><td>Merge adjacent loops into one pass</td><td><strong>Kernel fusion is loop fusion</strong> at coarser grain — the whole subject of the fused-epilogue section above</td></tr><tr><td><strong>Loop unrolling</strong></td><td>Emit <em>k</em> iterations per trip</td><td>Real and manual: <code>#pragma unroll</code> cuts branch overhead and exposes instruction-level parallelism</td></tr><tr><td><strong>Loop strip mining</strong> (sectioning)</td><td>Split a loop into vector-width chunks</td><td>The basis of vectorisation — it is how a scalar loop becomes SIMD</td></tr></tbody></table></div><p>Three more come up occasionally:</p>
+<ul>
+<li><strong>Loop interchange</strong> swaps nesting order, which changes the memory access
+pattern. On a GPU this is the difference between coalesced and scattered
+loads — the same arithmetic at several times the cost.</li>
+<li><strong>Loop fission</strong> (distribution) splits one loop into two, usually to fit
+registers or shared memory. It is the inverse of fusion, and you reach for it
+when a fused kernel spills.</li>
+<li><strong>Loop peeling</strong> pulls the ragged first or last iterations out. This is how
+variable-length batching handles a tail that does not fill a tile.</li>
+</ul>
+<p>The rest — <strong>loop reversal, skewing, coalescing, spreading, normalization,
+interleave, splitting, sentinel, collapsing</strong>, and <strong>loop-invariant code
+motion</strong> — are either applied automatically by the compiler or are HPC
+techniques aimed at dependence patterns transformers do not have. Knowing the
+names is worth something; hand-applying them is not.</p>
+<p><strong>Loop perforation</strong> deserves separate mention because it is different in kind:
+deliberately skipping iterations to trade accuracy for speed. It is real
+approximate computing, and in LLM inference it reappears under other names —
+skipping low-scoring blocks in sparse attention is loop perforation with a
+learned predicate.</p>
+<h3 id="code-level-optimizations"><a class="anchor" href="#code-level-optimizations">#</a>Code-level optimizations</h3><p><strong>Constant folding, common subexpression elimination, strength reduction,
+algebraic identities, lazy evaluation, compile-time evaluation</strong> — every one is
+performed by <code>nvcc</code>, LLVM or the deep-learning compiler, at optimisation levels
+you already use. The reason to know them is diagnostic rather than prescriptive:
+when a kernel is slower than its arithmetic says it should be, the cause is
+essentially never instruction count. It is memory movement, occupancy, or a
+launch you did not need. Optimising the arithmetic of a memory-bound kernel is
+the most common wasted afternoon in this field.</p>
+<p>One genuine exception: <strong>reciprocal multiplication</strong>. Division is far more
+expensive than multiplication, so normalization kernels compute a reciprocal
+square root once (<code>rsqrt</code>) and multiply, rather than dividing per element.</p>
+<h3 id="arithmetic"><a class="anchor" href="#arithmetic">#</a>Arithmetic</h3><ul>
+<li><strong>Integer dot product</strong> is real silicon, not a trick — <code>DP4A</code> and the integer
+tensor-core paths are what make INT8 inference fast. This is the hardware that
+<a href="quantization.html">quantization</a> is cashing in.</li>
+<li><strong>Approximate multiplication</strong> leads somewhere specific: replace a multiply
+with an add in the log domain, and you arrive at logarithmic number systems
+and adder networks. See the number-systems material below.</li>
+<li><strong>Approximate addition, approximate division, bitserial operations</strong> are
+edge-and-FPGA techniques. They assume you control the datapath, which on a GPU
+you do not.</li>
+</ul>
+<h3 id="matrix-algebra-beyond-the-dense-gemm"><a class="anchor" href="#matrix-algebra-beyond-the-dense-gemm">#</a>Matrix algebra beyond the dense GEMM</h3><div class="table-scroll"><table><thead><tr><th>Approach</th><th>Idea</th><th>Honest verdict for transformers</th></tr></thead><tbody><tr><td><strong>Strassen</strong></td><td>Fewer multiplies via recursion</td><td>Asymptotically better, numerically worse, and irrelevant when tensor cores are already at peak on the dense form</td></tr><tr><td><strong>Winograd</strong></td><td>Fewer multiplies for small convolutions</td><td>Genuinely useful for 3×3 CNN kernels; a transformer has no such convolution</td></tr><tr><td><strong>Butterfly / Monarch matrices</strong></td><td>Structured, FFT-like factorisations</td><td>The live research direction — a structured matrix can be sub-quadratic <em>and</em> hardware-efficient, which sampling-based methods never managed</td></tr><tr><td><strong>Approximate matrix multiplication</strong></td><td>Sample or sketch the product</td><td>Rarely survives the accuracy bar at inference</td></tr></tbody></table></div><p><strong>Low-rank factorisation</strong> is the one that ships: replace <code>W (d×d)</code> with <code>A (d×r)</code>
+and <code>B (r×d)</code>. It is the mechanism behind <a href="fine-tuning.html">LoRA</a>, behind
+<a href="model-shape.html">MLA&#39;s</a> compressed KV, and behind embedding compression.
+<strong>Tensor and Tucker decompositions</strong> generalise it to more than two dimensions
+and are common in CNN compression, uncommon in transformers.</p>
+<h3 id="data-structures-that-actually-appear"><a class="anchor" href="#data-structures-that-actually-appear">#</a>Data structures that actually appear</h3><div class="table-scroll"><table><thead><tr><th>Structure</th><th>Where it shows up</th></tr></thead><tbody><tr><td><strong>Radix tree</strong> (compressed trie)</td><td><strong>RadixAttention</strong> — prefix KV cache sharing across requests, the structure that makes <a href="kv-reuse.html">prefix caching</a> work for branching conversations</td></tr><tr><td><strong>Trie</strong></td><td>Tokenizer vocabulary lookup, and grammar masks for constrained decoding</td></tr><tr><td><strong>Hash table / perfect hashing</strong></td><td>Block tables in paged attention; exact prefix-cache keys</td></tr><tr><td><strong>Locality-sensitive hashing</strong></td><td>Approximate nearest neighbour, and the routing step in some sparse-attention schemes</td></tr><tr><td><strong>Bloom filter</strong></td><td>Cheap negative lookups before an expensive cache probe</td></tr><tr><td><strong>Bit vectors / bit signatures</strong></td><td>Sparse attention masks and block-sparsity metadata</td></tr><tr><td><strong>Look-up tables</strong></td><td>Replacing arithmetic outright — dequantization tables, and the polynomial/LUT hybrids used to approximate <code>exp</code> in softmax</td></tr><tr><td><strong>K-means clustering</strong></td><td>Codebooks for vector and product quantization</td></tr></tbody></table></div><h3 id="convolution"><a class="anchor" href="#convolution">#</a>Convolution</h3><p><strong>Grouped convolutions</strong> and <strong>depthwise separable convolutions</strong> are CNN
+techniques, and a decoder-only transformer contains no convolution at all. They
+reach LLM work through two doors: the <strong>vision encoder</strong> of a multimodal model,
+and the <strong>short 1-D causal convolution</strong> inside Mamba-style
+<a href="transformers.html">state space model</a> blocks. If your stack has neither, this
+row of the taxonomy does not apply to you — which is a more useful thing to know
+than a description of the technique.</p>
+<h2 id="3f-component-optimizations-the-parts-around-the-matmuls"><a class="anchor" href="#3f-component-optimizations-the-parts-around-the-matmuls">#</a>3f · Component optimizations — the parts around the matmuls</h2><p>The GEMMs get the attention, but a transformer layer is a matmul sandwich with
+normalization, an activation and a softmax between the slices. Every one of
+those is <strong>elementwise and memory-bound</strong>, which means the same rule applies
+throughout: the arithmetic is already free, so the only thing worth optimising
+is whether the data gets read twice.</p>
+<h3 id="activation-functions"><a class="anchor" href="#activation-functions">#</a>Activation functions</h3><ul>
+<li><strong>Fused activation functions</strong> — fused ReLU, fused GELU, fused SwiGLU. An
+activation reads a tensor, transforms each
+element, writes it back. On its own that is a full round trip to HBM for a few
+FLOPs per element. Folded into the GEMM epilogue it costs nothing — the tile
+is already in registers. This is the single highest-value item in this section
+and it is on by default in every serious kernel library.</li>
+<li><strong>Activation function approximation.</strong> Exact GELU needs <code>erf</code>; the <code>tanh</code> approximation
+is accurate to well under quantization noise and much cheaper. Most frameworks
+ship the approximation as the default and the exact form as an option, which
+is the right way round.</li>
+<li><strong>Activation alternatives.</strong> The lineage ReLU → GELU → SwiGLU traded a little
+speed for quality each step. It is now partly reversing: <strong>ReLU is coming back
+specifically because it produces exact zeros</strong>, and those zeros are
+exploitable activation sparsity — a quality cost taken deliberately to buy a
+structural speedup.</li>
+<li><strong>Activation removal (bilinear layers).</strong> Drop the nonlinearity from a gated
+unit and the FFN becomes bilinear — two projections multiplied elementwise,
+no activation at all. Cheap, and less damaging than it sounds.</li>
+<li><strong>Activation function reordering</strong> moves the nonlinearity relative to the
+operations around it. The deployed instance is quantization-driven rather
+than kernel-driven: AWQ&#39;s per-channel scaling has to be applied on the
+correct side of the activation, and folding it the wrong way silently
+changes the function being computed.</li>
+<li><strong>Integer-only activations</strong> matter only if you are doing end-to-end integer
+inference, where a single float operation forces a dequantize/requantize pair
+and destroys the point.</li>
+</ul>
+<h3 id="normalization"><a class="anchor" href="#normalization">#</a>Normalization</h3><ul>
+<li><strong>Fused LayerNorm / RMSNorm</strong> — the same round-trip argument, and the same
+answer.</li>
+<li><strong>RMSNorm as an alternative to LayerNorm</strong> is itself the optimisation: it
+drops the mean subtraction, which removes one full pass over the data. Nearly
+every modern LLM uses it.</li>
+<li><strong>Pre-norm versus post-norm</strong> is a placement choice with a training
+consequence rather than an inference one: pre-norm keeps the residual stream
+clean and is what makes 32+ layers trainable without warmup tricks. Every
+current LLM is pre-norm, and it is why the residual add in
+<a href="transformers.html">transformers</a> is never normalised directly.</li>
+<li><strong>Approximate and integer-only normalization</strong> exist for the same
+edge/integer reasons as above.</li>
+</ul>
+<h3 id="softmax"><a class="anchor" href="#softmax">#</a>Softmax</h3><ul>
+<li><strong>Fused softmax</strong> is not just a fusion — the <strong>online softmax</strong> formulation
+computes the running maximum and sum in a single pass, which is precisely what
+lets FlashAttention tile attention without materialising the score matrix.
+The numerics of that pass are covered in §3.</li>
+<li><strong>Softmax alternatives</strong> are the interesting ones. <code>sparsemax</code> and <code>entmax</code>
+produce <em>exact zeros</em> instead of tiny probabilities, so the attention output
+becomes genuinely sparse rather than merely concentrated — which is the
+mechanism behind adaptive-sparsity schemes like ASEntmax.</li>
+<li><strong>Softmax pruning</strong> drops the low tail before normalising; top-k attention is
+this idea with a fixed cut.</li>
+<li><strong>Integer-only softmax</strong> completes an integer pipeline, at real accuracy cost
+around the exponential.</li>
+</ul>
+<h3 id="feed-forward-network"><a class="anchor" href="#feed-forward-network">#</a>Feed-forward network</h3><p>The MLP holds ~80% of a layer&#39;s parameters, so structural wins here are worth
+more than anywhere else.</p>
+<ul>
+<li><strong>FFN matrix merging / intra-FFN fusion.</strong> SwiGLU&#39;s gate and up projections
+read the same input and have the same shape, so they are concatenated into one
+GEMM and split afterwards. One launch, one read of the activation. Standard.</li>
+<li><strong>Inter-FFN fusion</strong> merges FFNs across layers that share parameters — only
+available if the model was built that way.</li>
+<li><strong>Bias vector pruning</strong> is the rare optimisation that is already finished:
+Llama, PaLM and most modern LLMs <strong>have no bias vectors at all</strong> in their
+projections. The fused add-bias kernel exists for architectures that do.</li>
+<li><strong>FFN sparsity</strong> follows from ReLU-family activations — if most intermediate
+values are zero, the down-projection can skip those columns. This is what
+makes the ReLU revival worth its quality cost.</li>
+<li><strong>FFN pruning and approximation</strong> are the width-axis techniques from
+<a href="distillation-and-pruning.html">distillation and pruning</a>.</li>
+</ul>
+<h3 id="parameter-and-weight-sharing"><a class="anchor" href="#parameter-and-weight-sharing">#</a>Parameter and weight sharing</h3><p>Sharing is compression without approximation: the weights are exact, there are
+just fewer of them.</p>
+<div class="table-scroll"><table><thead><tr><th>Technique</th><th>What is shared</th><th>Where you have met it</th></tr></thead><tbody><tr><td><strong>Weight tying</strong></td><td>Embedding and unembedding matrices</td><td>Saves <code>V × d</code> — ~525M parameters on an 8B model</td></tr><tr><td><strong>KV head fusion</strong></td><td>K/V heads across query heads</td><td>This is exactly what <strong>GQA</strong> is</td></tr><tr><td><strong>KV cache layer fusion</strong></td><td>K/V across <em>layers</em></td><td>Cross-layer attention (CLA) — cuts the cache by the sharing factor</td></tr><tr><td><strong>Attention head fusion</strong></td><td>Projections across heads</td><td>Merging Q/K/V into one packed GEMM</td></tr><tr><td><strong>Layer fusion</strong></td><td>Whole layers reused at several depths</td><td>Universal-transformer style; rare in deployed LLMs</td></tr><tr><td><strong>Activation sharing</strong></td><td>Recomputed activations across steps</td><td>Overlaps with caching rather than compression</td></tr></tbody></table></div><h3 id="quantization-granularity"><a class="anchor" href="#quantization-granularity">#</a>Quantization granularity</h3><p>How wide a region shares one scale factor is the central accuracy/size trade in
+<a href="quantization.html">quantization</a>:</p>
+<p><strong>Per-tensor</strong> → <strong>layerwise</strong> → <strong>per-channel</strong> → <strong>blockwise</strong> (a block of 32
+or 128 weights, which is what <code>K-quant</code> formats and MXFP4/NVFP4 use) →
+<strong>vector quantization</strong> (a learned codebook, as in AQLM). Finer granularity
+costs more scale-factor storage and buys more accuracy; blockwise is where
+almost everything has landed, because it is fine enough to contain outliers and
+coarse enough that the scales stay small.</p>
+<h3 id="hardware"><a class="anchor" href="#hardware">#</a>Hardware</h3><ul>
+<li><strong>Hardware–software co-design</strong> is the honest description of the whole modern
+stack: NVFP4 exists because the hardware added a datapath for it, and
+2:4 sparsity exists because sparse tensor cores do.</li>
+<li><strong>Multi-GPU</strong> execution is covered properly in <a href="parallelism.html">parallelism</a>
+ — the four ways to split a model and what each costs in communication.</li>
+<li><strong>SIMD — AVX / AVX-512 on x86, NEON on ARM</strong> — is where CPU inference lives.
+<code>llama.cpp</code>&#39;s performance is largely a story about hand-written SIMD kernels
+per instruction set.</li>
+<li><strong>NPUs</strong> ship in current phones and laptops and are built for low-precision
+integer throughput at low power, which is why on-device models are quantized
+aggressively rather than merely for memory.</li>
+<li><strong>Overclocking</strong> appears on taxonomies. In a datacentre you are thermally and
+power limited already; it is not an inference optimisation.</li>
+</ul>
 <h2 id="4-uml-where-each-one-intervenes"><a class="anchor" href="#4-uml-where-each-one-intervenes">#</a>4 · UML — where each one intervenes</h2><pre class="mermaid">flowchart TB
     REQ[&quot;Prompt arrives&quot;] --&gt; SEL{&quot;Sparse attention?&quot;}
     SEL --&gt;|dense| ALLQ[&quot;Score every query x every key&lt;br/&gt;O(n^2) — the thing being avoided&quot;]
@@ -602,7 +822,7 @@ demanding.</p>
     <div class="pager-row"><a class="pager previous" href="reasoning-inference-optimization.html"><span>previous</span>Reasoning inference optimization</a><a class="pager next" href="kv-reuse.html"><span>next</span>KV reuse beyond the exact prefix</a></div>
   </main>
 
-  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-sparse-attention">2 · Design — sparse attention</a></li><li class="d3"><a href="#the-primitive-top-k-approximation">The primitive: top-k approximation</a></li><li class="d3"><a href="#the-three-named-schemes">The three named schemes</a></li><li class="d3"><a href="#morton-codes-making-the-selected-blocks-addressable">Morton codes — making the selected blocks addressable</a></li><li class="d2"><a href="#3-design-kernel-numerics">3 · Design — kernel numerics</a></li><li class="d3"><a href="#approximate-exponential-and-flashattention-4">Approximate exponential, and FlashAttention-4</a></li><li class="d3"><a href="#bf16x9-and-bf16x6-fp32-accuracy-on-bf16-silicon">BF16x9 and BF16x6 — FP32 accuracy on BF16 silicon</a></li><li class="d3"><a href="#whole-layer-fused-kernels-megakernels">Whole-layer fused kernels — megakernels</a></li><li class="d3"><a href="#kernel-synthesis">Kernel synthesis</a></li><li class="d3"><a href="#prefill-micro-optimisations">Prefill micro-optimisations</a></li><li class="d2"><a href="#3b-the-hardware-underneath">3b · The hardware underneath</a></li><li class="d3"><a href="#native-fp4-and-what-native-buys">Native FP4, and what &quot;native&quot; buys</a></li><li class="d3"><a href="#block-scaled-versus-block-floating-point">Block-scaled versus block floating point</a></li><li class="d3"><a href="#fused-epilogues-and-prologues">Fused epilogues and prologues</a></li><li class="d3"><a href="#thread-block-clusters-and-distributed-shared-memory">Thread block clusters and distributed shared memory</a></li><li class="d3"><a href="#normalization-and-the-cost-of-the-small-operations">Normalization, and the cost of the small operations</a></li><li class="d3"><a href="#structured-matrices-butterfly-and-monarch">Structured matrices — butterfly and Monarch</a></li><li class="d3"><a href="#the-exotica-and-an-honest-verdict-on-it">The exotica, and an honest verdict on it</a></li><li class="d2"><a href="#3c-a-note-on-the-algebraic-integer-number-system">3c · A note on the algebraic integer number system</a></li><li class="d2"><a href="#4-uml-where-each-one-intervenes">4 · UML — where each one intervenes</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-sparse-attention">2 · Design — sparse attention</a></li><li class="d3"><a href="#the-primitive-top-k-approximation">The primitive: top-k approximation</a></li><li class="d3"><a href="#the-three-named-schemes">The three named schemes</a></li><li class="d3"><a href="#morton-codes-making-the-selected-blocks-addressable">Morton codes — making the selected blocks addressable</a></li><li class="d2"><a href="#3-design-kernel-numerics">3 · Design — kernel numerics</a></li><li class="d3"><a href="#approximate-exponential-and-flashattention-4">Approximate exponential, and FlashAttention-4</a></li><li class="d3"><a href="#bf16x9-and-bf16x6-fp32-accuracy-on-bf16-silicon">BF16x9 and BF16x6 — FP32 accuracy on BF16 silicon</a></li><li class="d3"><a href="#whole-layer-fused-kernels-megakernels">Whole-layer fused kernels — megakernels</a></li><li class="d3"><a href="#kernel-synthesis">Kernel synthesis</a></li><li class="d3"><a href="#prefill-micro-optimisations">Prefill micro-optimisations</a></li><li class="d2"><a href="#3b-the-hardware-underneath">3b · The hardware underneath</a></li><li class="d3"><a href="#native-fp4-and-what-native-buys">Native FP4, and what &quot;native&quot; buys</a></li><li class="d3"><a href="#block-scaled-versus-block-floating-point">Block-scaled versus block floating point</a></li><li class="d3"><a href="#fused-epilogues-and-prologues">Fused epilogues and prologues</a></li><li class="d3"><a href="#thread-block-clusters-and-distributed-shared-memory">Thread block clusters and distributed shared memory</a></li><li class="d3"><a href="#normalization-and-the-cost-of-the-small-operations">Normalization, and the cost of the small operations</a></li><li class="d3"><a href="#structured-matrices-butterfly-and-monarch">Structured matrices — butterfly and Monarch</a></li><li class="d3"><a href="#the-exotica-and-an-honest-verdict-on-it">The exotica, and an honest verdict on it</a></li><li class="d2"><a href="#3c-a-note-on-the-algebraic-integer-number-system">3c · A note on the algebraic integer number system</a></li><li class="d2"><a href="#3d-rope-efficiency">3d · RoPE efficiency</a></li><li class="d3"><a href="#what-you-actually-set">What you actually set</a></li><li class="d2"><a href="#3e-the-layer-below-the-kernel">3e · The layer below the kernel</a></li><li class="d3"><a href="#loop-transformations">Loop transformations</a></li><li class="d3"><a href="#code-level-optimizations">Code-level optimizations</a></li><li class="d3"><a href="#arithmetic">Arithmetic</a></li><li class="d3"><a href="#matrix-algebra-beyond-the-dense-gemm">Matrix algebra beyond the dense GEMM</a></li><li class="d3"><a href="#data-structures-that-actually-appear">Data structures that actually appear</a></li><li class="d3"><a href="#convolution">Convolution</a></li><li class="d2"><a href="#3f-component-optimizations-the-parts-around-the-matmuls">3f · Component optimizations — the parts around the matmuls</a></li><li class="d3"><a href="#activation-functions">Activation functions</a></li><li class="d3"><a href="#normalization">Normalization</a></li><li class="d3"><a href="#softmax">Softmax</a></li><li class="d3"><a href="#feed-forward-network">Feed-forward network</a></li><li class="d3"><a href="#parameter-and-weight-sharing">Parameter and weight sharing</a></li><li class="d3"><a href="#quantization-granularity">Quantization granularity</a></li><li class="d3"><a href="#hardware">Hardware</a></li><li class="d2"><a href="#4-uml-where-each-one-intervenes">4 · UML — where each one intervenes</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
 </div>
 
 <script type="module">

@@ -507,6 +507,327 @@ transformer inference, no kernel you can switch on, and nothing to evaluate. If
 you meet it on a list, that is the honest thing to say about it.
 
 ---
+## 3d · RoPE efficiency
+
+Rotary position embedding is the one operation on this page whose cost is
+entirely about **memory traffic rather than arithmetic**. Rotating a query or
+key is roughly four FLOPs per element — two multiplies and an add, against a
+cosine and sine that were computed long ago. Run it as its own kernel and you
+read Q and K out of HBM, touch each value once, and write them back. That round
+trip costs far more than the rotation does.
+
+Everything below follows from that one fact.
+
+**The tables are data-independent, so they are computed once.** The angle for
+position *m* and dimension pair *i* is `m · base^(-2i/d)` — it depends on the
+position and the head dimension, never on the activations. So engines
+precompute `cos` and `sin` for every position up to `max_position_embeddings`
+at startup. That is not free: at 128k positions and head_dim 128 there are 64
+pairs per head, so the two tables hold `2 × 131,072 × 64 ≈ 16.8M` values —
+**67 MB in fp32, 34 MB in fp16**. Big enough that engines cache them per
+scaling configuration and rebuild only when the factor changes.
+
+The angles themselves are computed in **fp32 even when the model runs in
+bf16**, because `m · base^(-2i/d)` at m = 100,000 needs more mantissa than bf16
+has. Compute in fp32, cast the table once. This is a correctness cost you pay
+at startup rather than a throughput cost you pay per token.
+
+**The pairing layout decides whether it vectorises.** RoPE rotates *pairs* of
+dimensions, and there are two conventions for which dimensions pair up:
+
+| | Interleaved (GPT-J style) | Split-half (NeoX style) |
+|---|---|---|
+| Pairs | `(x₀,x₁) (x₂,x₃) …` adjacent | `(x₀, x_{d/2}) (x₁, x_{1+d/2}) …` |
+| Access | strided, stride 2 | two contiguous halves |
+| Rotation | per-pair shuffle | `x·cos + rotate_half(x)·sin` |
+| Vectorises | poorly | well |
+
+Split-half wins because `rotate_half` is a slice, a negate and a concatenate
+over contiguous memory — it maps onto wide vector loads, where the interleaved
+form needs a strided gather or a shuffle per pair. The two are not
+interchangeable: a checkpoint trained one way produces garbage read the other
+way, which is why vLLM carries an explicit `is_neox_style` flag rather than
+picking one.
+
+**The real win is fusion.** Since the operation is memory-bound, the fix is to
+never give it its own pass over the data. Fold the rotation into the
+**epilogue of the QKV projection** — the tile is already in registers after the
+GEMM, so rotate it there and write it out once — or into the **prologue of the
+attention kernel**, which is about to read Q and K anyway. This is the same
+trade as [fused epilogues](#fused-epilogues-and-prologues) above, applied to the
+cheapest possible operation, and it is where nearly all of RoPE's cost
+disappears.
+
+**Rotate less.** Two independent reductions, both free of the kernel:
+
+- **Only Q and K are rotated, never V.** Position enters through the dot
+  product, and V is not part of one. Two of the three projections, not three.
+- **Partial RoPE** applies the rotation to only the first *r* dimensions of
+  each head and leaves the rest unrotated. Work falls proportionally, and the
+  unrotated dimensions behave like NoPE — which is a length-extrapolation
+  choice as much as a speed one. See [model shape](model-shape.html) for what it
+  does to the model rather than to the kernel.
+
+**Store post-rotation.** Decode reads the cache far more often than prefill
+writes it, so engines cache K *after* rotation and never re-apply it. That
+choice is what makes position-shifted reuse hard, and
+[KV reuse](kv-reuse.html) is the page about the consequences.
+
+### What you actually set
+
+The knobs are split across the checkpoint config and the serving flag, and the
+first three change the model's behaviour, not just its speed:
+
+| Setting | Where | What it does |
+|---|---|---|
+| `rope_theta` | `config.json` | The base. 10,000 originally; long-context models raise it (Llama 3 uses 500,000) to slow the angle sweep |
+| `rope_scaling` | `config.json` / `--rope-scaling` | `{"rope_type": "linear" \| "dynamic" \| "yarn" \| "llama3", "factor": N}` — how positions are remapped past the trained length |
+| `partial_rotary_factor` / `rotary_pct` | `config.json` | Fraction of each head that gets rotated. Below 1.0 is partial RoPE |
+| `is_neox_style` | engine | Split-half (`true`) or interleaved (`false`). **Must match the checkpoint** — this is a correctness flag that happens to have a performance consequence |
+| `max_position_embeddings` | `config.json` | Sizes the precomputed tables, so it sets their memory cost |
+| `--max-model-len` | serving flag | Caps positions actually served, which is what bounds the table in practice |
+
+Only the last two are purely about efficiency. The rest change what the model
+computes, so a "RoPE optimisation" that touches them needs an eval, not a
+benchmark.
+
+## 3e · The layer below the kernel
+
+Inference-optimization taxonomies bottom out in classical compiler and
+computer-architecture techniques — loop transformations, arithmetic tricks,
+data structures. They belong on the list, but they are not all levers you can
+pull, and the honest split matters more than the enumeration: **most are done
+for you by the compiler, a handful are the entire reason a kernel is fast, and
+a few are research directions that have not paid off for transformers.**
+
+### Loop transformations
+
+A GPU kernel *is* a loop nest, so every classical loop transformation has a
+meaning here. Four of them carry almost all the value:
+
+| Transformation | What it does | Status for LLM inference |
+|---|---|---|
+| **Loop tiling** (blocking) | Process in cache-sized blocks instead of whole rows | **The one that matters.** FlashAttention is a tiling transformation — it never materialises the N×N score matrix because it tiles the loop and keeps the running softmax in SRAM |
+| **Loop fusion** | Merge adjacent loops into one pass | **Kernel fusion is loop fusion** at coarser grain — the whole subject of the fused-epilogue section above |
+| **Loop unrolling** | Emit *k* iterations per trip | Real and manual: `#pragma unroll` cuts branch overhead and exposes instruction-level parallelism |
+| **Loop strip mining** (sectioning) | Split a loop into vector-width chunks | The basis of vectorisation — it is how a scalar loop becomes SIMD |
+
+Three more come up occasionally:
+
+- **Loop interchange** swaps nesting order, which changes the memory access
+  pattern. On a GPU this is the difference between coalesced and scattered
+  loads — the same arithmetic at several times the cost.
+- **Loop fission** (distribution) splits one loop into two, usually to fit
+  registers or shared memory. It is the inverse of fusion, and you reach for it
+  when a fused kernel spills.
+- **Loop peeling** pulls the ragged first or last iterations out. This is how
+  variable-length batching handles a tail that does not fill a tile.
+
+The rest — **loop reversal, skewing, coalescing, spreading, normalization,
+interleave, splitting, sentinel, collapsing**, and **loop-invariant code
+motion** — are either applied automatically by the compiler or are HPC
+techniques aimed at dependence patterns transformers do not have. Knowing the
+names is worth something; hand-applying them is not.
+
+**Loop perforation** deserves separate mention because it is different in kind:
+deliberately skipping iterations to trade accuracy for speed. It is real
+approximate computing, and in LLM inference it reappears under other names —
+skipping low-scoring blocks in sparse attention is loop perforation with a
+learned predicate.
+
+### Code-level optimizations
+
+**Constant folding, common subexpression elimination, strength reduction,
+algebraic identities, lazy evaluation, compile-time evaluation** — every one is
+performed by `nvcc`, LLVM or the deep-learning compiler, at optimisation levels
+you already use. The reason to know them is diagnostic rather than prescriptive:
+when a kernel is slower than its arithmetic says it should be, the cause is
+essentially never instruction count. It is memory movement, occupancy, or a
+launch you did not need. Optimising the arithmetic of a memory-bound kernel is
+the most common wasted afternoon in this field.
+
+One genuine exception: **reciprocal multiplication**. Division is far more
+expensive than multiplication, so normalization kernels compute a reciprocal
+square root once (`rsqrt`) and multiply, rather than dividing per element.
+
+### Arithmetic
+
+- **Integer dot product** is real silicon, not a trick — `DP4A` and the integer
+  tensor-core paths are what make INT8 inference fast. This is the hardware that
+  [quantization](quantization.html) is cashing in.
+- **Approximate multiplication** leads somewhere specific: replace a multiply
+  with an add in the log domain, and you arrive at logarithmic number systems
+  and adder networks. See the number-systems material below.
+- **Approximate addition, approximate division, bitserial operations** are
+  edge-and-FPGA techniques. They assume you control the datapath, which on a GPU
+  you do not.
+
+### Matrix algebra beyond the dense GEMM
+
+| Approach | Idea | Honest verdict for transformers |
+|---|---|---|
+| **Strassen** | Fewer multiplies via recursion | Asymptotically better, numerically worse, and irrelevant when tensor cores are already at peak on the dense form |
+| **Winograd** | Fewer multiplies for small convolutions | Genuinely useful for 3×3 CNN kernels; a transformer has no such convolution |
+| **Butterfly / Monarch matrices** | Structured, FFT-like factorisations | The live research direction — a structured matrix can be sub-quadratic *and* hardware-efficient, which sampling-based methods never managed |
+| **Approximate matrix multiplication** | Sample or sketch the product | Rarely survives the accuracy bar at inference |
+
+**Low-rank factorisation** is the one that ships: replace `W (d×d)` with `A (d×r)`
+and `B (r×d)`. It is the mechanism behind [LoRA](fine-tuning.html), behind
+[MLA's](model-shape.html) compressed KV, and behind embedding compression.
+**Tensor and Tucker decompositions** generalise it to more than two dimensions
+and are common in CNN compression, uncommon in transformers.
+
+### Data structures that actually appear
+
+| Structure | Where it shows up |
+|---|---|
+| **Radix tree** (compressed trie) | **RadixAttention** — prefix KV cache sharing across requests, the structure that makes [prefix caching](kv-reuse.html) work for branching conversations |
+| **Trie** | Tokenizer vocabulary lookup, and grammar masks for constrained decoding |
+| **Hash table / perfect hashing** | Block tables in paged attention; exact prefix-cache keys |
+| **Locality-sensitive hashing** | Approximate nearest neighbour, and the routing step in some sparse-attention schemes |
+| **Bloom filter** | Cheap negative lookups before an expensive cache probe |
+| **Bit vectors / bit signatures** | Sparse attention masks and block-sparsity metadata |
+| **Look-up tables** | Replacing arithmetic outright — dequantization tables, and the polynomial/LUT hybrids used to approximate `exp` in softmax |
+| **K-means clustering** | Codebooks for vector and product quantization |
+
+### Convolution
+
+**Grouped convolutions** and **depthwise separable convolutions** are CNN
+techniques, and a decoder-only transformer contains no convolution at all. They
+reach LLM work through two doors: the **vision encoder** of a multimodal model,
+and the **short 1-D causal convolution** inside Mamba-style
+[state space model](transformers.html) blocks. If your stack has neither, this
+row of the taxonomy does not apply to you — which is a more useful thing to know
+than a description of the technique.
+
+## 3f · Component optimizations — the parts around the matmuls
+
+The GEMMs get the attention, but a transformer layer is a matmul sandwich with
+normalization, an activation and a softmax between the slices. Every one of
+those is **elementwise and memory-bound**, which means the same rule applies
+throughout: the arithmetic is already free, so the only thing worth optimising
+is whether the data gets read twice.
+
+### Activation functions
+
+- **Fused activation functions** — fused ReLU, fused GELU, fused SwiGLU. An
+  activation reads a tensor, transforms each
+  element, writes it back. On its own that is a full round trip to HBM for a few
+  FLOPs per element. Folded into the GEMM epilogue it costs nothing — the tile
+  is already in registers. This is the single highest-value item in this section
+  and it is on by default in every serious kernel library.
+- **Activation function approximation.** Exact GELU needs `erf`; the `tanh` approximation
+  is accurate to well under quantization noise and much cheaper. Most frameworks
+  ship the approximation as the default and the exact form as an option, which
+  is the right way round.
+- **Activation alternatives.** The lineage ReLU → GELU → SwiGLU traded a little
+  speed for quality each step. It is now partly reversing: **ReLU is coming back
+  specifically because it produces exact zeros**, and those zeros are
+  exploitable activation sparsity — a quality cost taken deliberately to buy a
+  structural speedup.
+- **Activation removal (bilinear layers).** Drop the nonlinearity from a gated
+  unit and the FFN becomes bilinear — two projections multiplied elementwise,
+  no activation at all. Cheap, and less damaging than it sounds.
+- **Activation function reordering** moves the nonlinearity relative to the
+  operations around it. The deployed instance is quantization-driven rather
+  than kernel-driven: AWQ's per-channel scaling has to be applied on the
+  correct side of the activation, and folding it the wrong way silently
+  changes the function being computed.
+- **Integer-only activations** matter only if you are doing end-to-end integer
+  inference, where a single float operation forces a dequantize/requantize pair
+  and destroys the point.
+
+### Normalization
+
+- **Fused LayerNorm / RMSNorm** — the same round-trip argument, and the same
+  answer.
+- **RMSNorm as an alternative to LayerNorm** is itself the optimisation: it
+  drops the mean subtraction, which removes one full pass over the data. Nearly
+  every modern LLM uses it.
+- **Pre-norm versus post-norm** is a placement choice with a training
+  consequence rather than an inference one: pre-norm keeps the residual stream
+  clean and is what makes 32+ layers trainable without warmup tricks. Every
+  current LLM is pre-norm, and it is why the residual add in
+  [transformers](transformers.html) is never normalised directly.
+- **Approximate and integer-only normalization** exist for the same
+  edge/integer reasons as above.
+
+### Softmax
+
+- **Fused softmax** is not just a fusion — the **online softmax** formulation
+  computes the running maximum and sum in a single pass, which is precisely what
+  lets FlashAttention tile attention without materialising the score matrix.
+  The numerics of that pass are covered in §3.
+- **Softmax alternatives** are the interesting ones. `sparsemax` and `entmax`
+  produce *exact zeros* instead of tiny probabilities, so the attention output
+  becomes genuinely sparse rather than merely concentrated — which is the
+  mechanism behind adaptive-sparsity schemes like ASEntmax.
+- **Softmax pruning** drops the low tail before normalising; top-k attention is
+  this idea with a fixed cut.
+- **Integer-only softmax** completes an integer pipeline, at real accuracy cost
+  around the exponential.
+
+### Feed-forward network
+
+The MLP holds ~80% of a layer's parameters, so structural wins here are worth
+more than anywhere else.
+
+- **FFN matrix merging / intra-FFN fusion.** SwiGLU's gate and up projections
+  read the same input and have the same shape, so they are concatenated into one
+  GEMM and split afterwards. One launch, one read of the activation. Standard.
+- **Inter-FFN fusion** merges FFNs across layers that share parameters — only
+  available if the model was built that way.
+- **Bias vector pruning** is the rare optimisation that is already finished:
+  Llama, PaLM and most modern LLMs **have no bias vectors at all** in their
+  projections. The fused add-bias kernel exists for architectures that do.
+- **FFN sparsity** follows from ReLU-family activations — if most intermediate
+  values are zero, the down-projection can skip those columns. This is what
+  makes the ReLU revival worth its quality cost.
+- **FFN pruning and approximation** are the width-axis techniques from
+  [distillation and pruning](distillation-and-pruning.html).
+
+### Parameter and weight sharing
+
+Sharing is compression without approximation: the weights are exact, there are
+just fewer of them.
+
+| Technique | What is shared | Where you have met it |
+|---|---|---|
+| **Weight tying** | Embedding and unembedding matrices | Saves `V × d` — ~525M parameters on an 8B model |
+| **KV head fusion** | K/V heads across query heads | This is exactly what **GQA** is |
+| **KV cache layer fusion** | K/V across *layers* | Cross-layer attention (CLA) — cuts the cache by the sharing factor |
+| **Attention head fusion** | Projections across heads | Merging Q/K/V into one packed GEMM |
+| **Layer fusion** | Whole layers reused at several depths | Universal-transformer style; rare in deployed LLMs |
+| **Activation sharing** | Recomputed activations across steps | Overlaps with caching rather than compression |
+
+### Quantization granularity
+
+How wide a region shares one scale factor is the central accuracy/size trade in
+[quantization](quantization.html):
+
+**Per-tensor** → **layerwise** → **per-channel** → **blockwise** (a block of 32
+or 128 weights, which is what `K-quant` formats and MXFP4/NVFP4 use) →
+**vector quantization** (a learned codebook, as in AQLM). Finer granularity
+costs more scale-factor storage and buys more accuracy; blockwise is where
+almost everything has landed, because it is fine enough to contain outliers and
+coarse enough that the scales stay small.
+
+### Hardware
+
+- **Hardware–software co-design** is the honest description of the whole modern
+  stack: NVFP4 exists because the hardware added a datapath for it, and
+  2:4 sparsity exists because sparse tensor cores do.
+- **Multi-GPU** execution is covered properly in [parallelism](parallelism.html)
+   — the four ways to split a model and what each costs in communication.
+- **SIMD — AVX / AVX-512 on x86, NEON on ARM** — is where CPU inference lives.
+  `llama.cpp`'s performance is largely a story about hand-written SIMD kernels
+  per instruction set.
+- **NPUs** ship in current phones and laptops and are built for low-precision
+  integer throughput at low power, which is why on-device models are quantized
+  aggressively rather than merely for memory.
+- **Overclocking** appears on taxonomies. In a datacentre you are thermally and
+  power limited already; it is not an inference optimisation.
+
 
 ## 4 · UML — where each one intervenes
 

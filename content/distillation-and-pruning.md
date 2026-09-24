@@ -77,6 +77,22 @@ distributions beats the same student trained on the same data's ground truth.
 > and effective, but it is training on hard labels — the dark knowledge is gone.
 > Worth naming the difference precisely, because interviewers notice.
 
+**What access you have to the teacher decides which method is available.** This
+is the split that actually constrains you in practice, and it maps directly onto
+whether the teacher is your model or someone else's:
+
+| Variant | Teacher access | What you can use |
+|---|---|---|
+| **White box distillation** | Full — logits, hidden states, attention maps | Everything above, including intermediate-state matching. Requires open weights |
+| **Black box distillation** | Outputs only, through an API | Generated text alone. The dark knowledge is unreachable, so this is fine-tuning on synthetic data wearing a distillation label |
+| **Ensemble distillation** | Several teachers | Average or vote across teachers before training the student — costs *n* teacher passes, and smooths out any single teacher's idiosyncrasies |
+
+**Dataset distillation** is a different thing that shares the word. It compresses
+the *training set* rather than the model: synthesise a small set of examples that
+trains a model about as well as the full corpus did. The output is data, not a
+smaller model, and the two techniques compose — you can distil a dataset and then
+distil a model on it. Check which one a paper means before comparing numbers.
+
 **Intermediate — pruning.** Remove weights and keep the rest. The split that
 decides whether you get a speedup at all:
 
@@ -100,6 +116,140 @@ be more redundant than the first and last. Depth pruning — dropping whole laye
 surprising result worth knowing.
 
 ---
+## 2b · The four axes you can cut
+
+"Pruning" above was split by *granularity* — unstructured, semi-structured,
+structured. The other split, and the more useful one when you are choosing what
+to try, is by **which dimension of the tensor you remove**. A transformer
+activation is `[batch, sequence, model_dim]` processed by `layers`, so there are
+exactly four axes, and each has its own literature, its own failure mode, and a
+different answer to "does this actually make inference faster?"
+
+| Axis | Cut what | Speedup source | Main risk |
+|---|---|---|---|
+| **Depth** | Whole layers | Fewer sequential ops — helps latency directly | Quality falls off a cliff past a threshold |
+| **Width** | Heads, channels, FFN rows | Smaller matrices | Needs retraining to recover |
+| **Length** | Tokens in the sequence | Attention is quadratic here | You may delete the answer |
+| **Model dim** | Embedding dimensions | Smaller everything | Touches every layer at once |
+
+### Depth — pruning along the layer axis
+
+Middle layers are the redundant ones; the first and last are load-bearing. That
+single observation drives everything here.
+
+- **Static layer pruning** removes chosen layers permanently and ships a shorter
+  model. Simple, and the result is a normal model with no runtime machinery.
+- **Dynamic layer pruning / layer skipping** decides *per token* whether to run
+  a layer. Cheaper on average, but the layer weights must stay resident, so it
+  buys compute and not memory.
+- **Layer approximation** replaces a layer with something cheaper — a low-rank
+  stand-in or an identity — rather than deleting it.
+- **Shallow decoder** architectures put the depth in the encoder and keep the
+  decoder short, which is a strong trade when decode dominates your latency.
+- **Layer reordering** changes execution order. Mostly a research curiosity for
+  inference; the wins are in scheduling, not quality.
+- **Layer importance** is the measurement all of these depend on: score each
+  layer by how much the residual stream actually changes across it (cosine
+  distance between input and output is the common proxy) and cut the flattest.
+
+### Early exit — dynamic depth pruning, and the KV problem nobody mentions
+
+Early exit stops at layer *k* when the prediction is already settled, pruning
+every layer above it *for that token*. The exit policy is the design decision:
+
+| Policy | Exit when | Cost |
+|---|---|---|
+| **Confidence-based** | Top-1 probability passes a threshold | One softmax per candidate exit |
+| **Entropy-based** | Distribution entropy falls below a threshold | Same, but calibrates better across domains |
+| **Patience-based** | *N* consecutive layers agree on the same token | Robust to a single over-confident layer |
+| **Learned** | A small trained classifier decides | Best accuracy, another thing to train and version |
+
+<div class="callout warn">
+
+**The reason early exit is rare in production is the KV cache.** If a token
+exits at layer 12, layers 13–32 never computed its K and V. The next token's
+attention at layer 20 then needs a cache entry that does not exist. Three fixes
+exist and all cost something: compute the missing layers lazily when a later
+token needs them (unpredictable latency), copy or propagate the layer-12 state
+upward as an approximation (accuracy loss that compounds), or only permit exits
+at a depth where you accept recomputing the rest. This is why early exit reads
+well in papers and appears in very few serving stacks.
+
+</div>
+
+Early exit also composes with two things worth knowing: **early-exit
+distillation**, where the student is trained so intermediate layers are
+independently decodable, and **early-exit speculative decoding**, where the
+shallow exit *is* the draft model and the full stack verifies it — which
+sidesteps the KV problem entirely, because verification runs every layer anyway.
+
+### Width — pruning heads, channels and FFN rows
+
+- **Attention head pruning.** Many heads are genuinely removable; head
+  importance is wildly uneven. Remove a head and the `Wq/Wk/Wv/Wo` slices go
+  with it, so the matrices are truly smaller.
+- **FFN pruning / channel pruning / filter pruning** all cut the intermediate
+  dimension `d_ff`. Since the MLP is ~80% of a layer's parameters, this is where
+  the mass is — see [transformers](transformers.html) for the arithmetic.
+- **Slimmable networks** train one model to run correctly at several widths, so
+  deployment picks a width per device instead of shipping several checkpoints.
+
+Width pruning almost always needs recovery fine-tuning. Depth pruning frequently
+does not, which is part of why depth pruning often wins at equal parameter
+reduction.
+
+### Length — pruning the sequence, the best return on effort
+
+Attention is quadratic in sequence length, so removing tokens removes more work
+than removing an equivalent fraction of weights. The family:
+
+- **Token pruning / token dropping / token skipping** — drop low-attention
+  tokens as depth increases, on the theory that a token that nothing attends to
+  is not contributing.
+- **Dynamic token pruning** makes that decision per input rather than by a fixed
+  schedule.
+- **Token merging** combines similar tokens instead of deleting them, which
+  keeps some of the signal a deletion would lose.
+- **Prompt compression / context compression / input text compression** shrink
+  the text before it is ever tokenised — the cheapest version, and the one that
+  composes with everything else.
+- **Zero padding removal** (variable-length or "varlen" batching) is the free
+  one: never compute attention over padding at all. Every serious serving stack
+  does this, and if yours does not, it is the first thing to fix.
+
+The risk is blunt: the token you pruned may have been the answer. Length pruning
+needs eval on retrieval-style tasks specifically, because average quality can
+hold while needle-in-a-haystack recall collapses — see
+[long context](long-context.html).
+
+### Model dimension, components, and combinations
+
+- **Embedding pruning** and **embedding matrix compression** target the
+  vocabulary tables, which are ~13% of an 8B model's parameters. **Embedding
+  low-rank factorisation** replaces `V × d` with `V × r` and `r × d`. The
+  **unembedding** (LM head) is the same size and is often the easier of the two
+  to compress, because it is only touched once per token.
+- **Component pruning** removes structure rather than weights: **normalization
+  pruning**, **positional-encoding pruning** (NoPE — removing position
+  encoding entirely, which is viable for some architectures and is the limit
+  case of [partial RoPE](model-shape.html)), **softmax pruning**, and
+  **skip-connection pruning**. These are architectural research more than
+  deployment options; residual removal in particular tends to break trainability.
+- **Multi-dimensional pruning** — **dual**, **triple**, **quadruple** — cuts
+  several axes at once, because the axes are not independent: pruning heads
+  changes which layers are redundant. **Pyramid inference** is the structured
+  version, tapering width with depth so the model narrows as it deepens.
+
+### Choosing the criterion, not just the axis
+
+Within unstructured pruning the *scoring rule* matters as much as the target:
+
+| Criterion | Scores a weight by | Use when |
+|---|---|---|
+| **Magnitude pruning** | Absolute value | Pruning a pretrained model with no further training |
+| **Movement pruning** | How much it moves *toward zero* during fine-tuning | Pruning during transfer — the standard result is that magnitude is the wrong signal here, because a large weight that is being driven to zero matters less than a small one being driven away from it |
+| **Gradual pruning** | Either, applied on a schedule | Almost always — one-shot pruning to a high sparsity is far worse than reaching it over many steps |
+
 
 ## 3 · Flow
 

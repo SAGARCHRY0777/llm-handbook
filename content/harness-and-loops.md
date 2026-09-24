@@ -320,6 +320,32 @@ request rather than trusting them to survive a summary. And watch for
 **compaction thrashing**: if one tool output is large enough to refill the window
 immediately after each summary, auto-compaction gives up and errors.
 
+### Tool optimizations — the half of the loop that is not the model
+
+§5 established that tool results are usually the largest consumer of the
+context window. They are also usually the largest consumer of *wall clock*: the
+GPU sits idle while a tool call goes to a database, an API or a sandbox. Both
+facts have the same shape — the expensive part of an agent loop is often not
+inference — and there is a small, practical literature on each.
+
+| Technique | What it overlaps or removes | Catch |
+|---|---|---|
+| **Multi-tool parallel execution** | Independent calls in one turn run concurrently instead of serially | Only sound when the calls do not depend on each other; the model must be able to *emit* several at once, which not every tool-calling format allows |
+| **Tool execution pipelining** | Runs a tool while the next step's prefill proceeds | Needs the tool result not to change what gets prefilled — true for appends, false for anything that rewrites history |
+| **Speculative tool execution** | Starts the likely call before the model finishes emitting it | Same bet as [speculative decoding](decoding.html), and the same failure mode: a wrong guess wastes the work. **Only safe for reads.** Speculatively executing a write is an unrecoverable side effect |
+| **Disaggregated tool execution** | Moves tool work onto separate infrastructure from the GPU | The same phase-splitting argument as disaggregated prefill: do not hold an accelerator while waiting on a database |
+| **Tool token reduction / concise tool output** | Shrinks the result before it enters context | The cheapest and most reliable of the five |
+
+**Start with the last row.** The others are latency optimisations with real
+correctness conditions attached; truncating, projecting or summarising a tool
+result before it lands in the window costs nothing and attacks the constraint
+that §5 showed actually degrades agents. A 50k-token API response that could
+have been ten fields is both the context problem and the bill.
+
+The ordering matters because of what the numbers say: a loop is bounded by
+context degradation long before it is bounded by tool latency, so the technique
+that shortens the transcript beats the technique that overlaps the wait.
+
 ### False success is the failure mode nobody instruments
 
 *From Confident Closing to Silent Failure* (arXiv:2606.09863) measured this over
