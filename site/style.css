@@ -137,7 +137,8 @@ h2:hover .anchor, h3:hover .anchor { opacity: 1; }
 .prose blockquote p:last-child { margin-bottom: 0; }
 .prose hr { border: 0; border-top: 1px solid var(--rule); margin: 34px 0; }
 .prose code { font-family: var(--mono); font-size: .86em; background: var(--panel-2);
-  padding: 1px 5px; border-radius: 4px; }
+  padding: 1px 5px; border-radius: 4px;
+  overflow-wrap: anywhere; }
 .prose pre.code { background: var(--panel-2); border: 1px solid var(--rule-2);
   border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 0 0 16px; }
 .prose pre.code code { background: none; padding: 0; font-size: 13px; line-height: 1.55; }
