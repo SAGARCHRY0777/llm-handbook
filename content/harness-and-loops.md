@@ -246,6 +246,128 @@ Watch for **oscillation** specifically: A→B→A→B defeats any guard that onl
 compares against the immediately previous action.
 
 ---
+## 3b · Verifiers, routers and interrupts
+
+Strip an agent loop down and there are exactly two things in it besides the
+model: something that **judges whether the work is good enough**, and something
+that **can stop the loop**. §3 was entirely about the second — caps, budgets,
+no-progress windows. This section is about the first, and about the two harness
+components that sit on either side of it.
+
+### The verifier, and what it costs
+
+Who judges the output decides the shape of the loop and multiplies its bill:
+
+| Shape | Who judges | Model calls per step |
+|---|---|---|
+| **Plain ReAct** | The model itself, implicitly | 1 |
+| **Generator → verifier** | A separate judging call | 2 |
+| **Generator → critic → revisor** (reflection) | A critic writes feedback, a revisor acts on it | 3 |
+
+Reflection is the pattern people reach for first and it **triples the cost per
+step**. It is worth that only when verification is genuinely cheaper or more
+reliable than generation — which is a property of the task, not of the
+architecture:
+
+- **Code, SQL, structured output, anything with a schema.** Verification is a
+  test run, a parse or a type check. Cheap, deterministic, and it cannot share
+  the generator's blind spot. Reflection pays here.
+- **Prose, summaries, judgement calls.** The verifier is another LLM with the
+  same training and the same failure modes. §5 measured what that gets you:
+  false success accounts for 45–48% of failures and is **nearly undetectable by
+  LLM judges**. A critic that shares the generator's blind spots confirms rather
+  than catches.
+
+<div class="callout warn">
+
+**The verifier that works checks the environment, not the answer.** Did the test
+pass, did the file change, does the record exist, does the JSON validate against
+the schema. A verifier that reads the agent's output and forms an opinion is a
+second opinion from the same mind. This is the single most useful thing to get
+right in an agent loop, and it is why "add a critic agent" so often fails to
+move the numbers.
+
+</div>
+
+### Routers — the verifier that runs first
+
+A **router** decides which specialist handles a request before any work starts:
+technical → the technical agent, billing → the billing agent, everything else →
+a general one. It is the same act of judgement as a verifier, moved to the front
+of the loop, and it has a property nothing else in the harness does: **every
+downstream decision is conditioned on it**. Route wrong and no amount of quality
+in the specialist recovers — the agent answers a question nobody asked, fluently.
+
+Four things follow:
+
+- **Prefer a deterministic router when the classes are crisp.** A keyword rule
+  or a trained classifier is cheaper, faster and *testable* against a fixed set.
+  Spend a model call on routing only when the boundary genuinely needs language
+  understanding.
+- **Always have a default route.** A router with no fallback fails closed on
+  anything it has not seen, which in production is a steady trickle of real
+  users getting nothing.
+- **Measure routing accuracy separately from end-to-end accuracy.** They are
+  different numbers with different fixes, and a single end-to-end score cannot
+  tell you which half is broken. This is the same disaggregation argument as
+  [bias and explainability](bias-and-explainability.html), applied to a pipeline
+  stage instead of a population.
+- **A router is not a cost optimiser.** Routing by *capability* to a specialist
+  and routing by *price* to a cheaper model are different systems that happen to
+  share a name — see [ensembles and routing](ensembles-and-routing.html) for the
+  second, and [agents](agents.html) for the router as a control-flow pattern.
+
+### The full interruption taxonomy
+
+§3's table covered the guards that fire on exhaustion. Two more stop a loop for
+a reason, and one stops it on a person:
+
+| Interruption | Fires when | Who decides |
+|---|---|---|
+| Step / turn cap | The count runs out | You, in advance |
+| Budget cap | The money runs out | You, in advance |
+| No-progress window | State stopped moving | The loop |
+| **Verifier / goal check** | Criteria are met | A deterministic check |
+| **Human in the loop** | A gate is reached | A person |
+
+### Human-in-the-loop *is* durable state
+
+This is the part that is usually discovered late. To pause for a human you must
+be able to stop mid-loop, persist the entire state — history, tool results,
+which node you were on — and resume later, plausibly in a different process, on
+a different machine, after a deploy.
+
+**That is a checkpointer.** It is why LangGraph's `interrupt` and its
+checkpointing are the same subsystem rather than two features, and why a
+framework without durable state cannot offer real human-in-the-loop at all. It
+can offer a blocking prompt, which is a different thing: if your loop cannot
+survive a process restart, your "human in the loop" is a person watching a
+terminal, and the review window is however long they are willing to sit there.
+
+**Put the gate before irreversible actions.** §2 established the boundary —
+checkpoints cover the filesystem, not the world. A file edit can be rolled back;
+a payment, an email, a `DROP TABLE` and a deploy cannot. Those are exactly the
+places a human gate earns its latency, and approval fatigue is the reason to
+gate *few* things rather than many: a person who has approved forty harmless
+diffs will approve the forty-first without reading it.
+
+### Tracing — you cannot debug a loop you cannot see
+
+A loop that fails on step 14 of 20 hands you one wrong answer and no
+explanation. Reproducing it is expensive and often impossible, because the model
+is non-deterministic and the environment moved. The minimum worth capturing, per
+step:
+
+- The inputs, the tool calls with their arguments, and the results
+- **Which guard was evaluated and what it returned** — the cheapest signal, and
+  the one almost nobody logs
+- Token and cost counters, accumulated across the run rather than per call
+
+This is not optional instrumentation. Given that an agent's own success report
+is wrong 45–48% of the time, the trace is the only artifact that tells you what
+actually happened — and the guard evaluations are what tell you *why it stopped*,
+which is the question §3 says you will be asking.
+
 
 ## 4 · Experiment
 

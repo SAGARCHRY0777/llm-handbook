@@ -205,6 +205,93 @@ a no-progress window of 3 stops at 6 steps for a third of the tokens.</p>
 <p>Watch for <strong>oscillation</strong> specifically: A→B→A→B defeats any guard that only
 compares against the immediately previous action.</p>
 <hr>
+<h2 id="3b-verifiers-routers-and-interrupts"><a class="anchor" href="#3b-verifiers-routers-and-interrupts">#</a>3b · Verifiers, routers and interrupts</h2><p>Strip an agent loop down and there are exactly two things in it besides the
+model: something that <strong>judges whether the work is good enough</strong>, and something
+that <strong>can stop the loop</strong>. §3 was entirely about the second — caps, budgets,
+no-progress windows. This section is about the first, and about the two harness
+components that sit on either side of it.</p>
+<h3 id="the-verifier-and-what-it-costs"><a class="anchor" href="#the-verifier-and-what-it-costs">#</a>The verifier, and what it costs</h3><p>Who judges the output decides the shape of the loop and multiplies its bill:</p>
+<div class="table-scroll"><table><thead><tr><th>Shape</th><th>Who judges</th><th>Model calls per step</th></tr></thead><tbody><tr><td><strong>Plain ReAct</strong></td><td>The model itself, implicitly</td><td>1</td></tr><tr><td><strong>Generator → verifier</strong></td><td>A separate judging call</td><td>2</td></tr><tr><td><strong>Generator → critic → revisor</strong> (reflection)</td><td>A critic writes feedback, a revisor acts on it</td><td>3</td></tr></tbody></table></div><p>Reflection is the pattern people reach for first and it <strong>triples the cost per
+step</strong>. It is worth that only when verification is genuinely cheaper or more
+reliable than generation — which is a property of the task, not of the
+architecture:</p>
+<ul>
+<li><strong>Code, SQL, structured output, anything with a schema.</strong> Verification is a
+test run, a parse or a type check. Cheap, deterministic, and it cannot share
+the generator&#39;s blind spot. Reflection pays here.</li>
+<li><strong>Prose, summaries, judgement calls.</strong> The verifier is another LLM with the
+same training and the same failure modes. §5 measured what that gets you:
+false success accounts for 45–48% of failures and is <strong>nearly undetectable by
+LLM judges</strong>. A critic that shares the generator&#39;s blind spots confirms rather
+than catches.</li>
+</ul>
+<div class="callout warn">
+
+<p><strong>The verifier that works checks the environment, not the answer.</strong> Did the test
+pass, did the file change, does the record exist, does the JSON validate against
+the schema. A verifier that reads the agent&#39;s output and forms an opinion is a
+second opinion from the same mind. This is the single most useful thing to get
+right in an agent loop, and it is why &quot;add a critic agent&quot; so often fails to
+move the numbers.</p>
+</div>
+
+<h3 id="routers-the-verifier-that-runs-first"><a class="anchor" href="#routers-the-verifier-that-runs-first">#</a>Routers — the verifier that runs first</h3><p>A <strong>router</strong> decides which specialist handles a request before any work starts:
+technical → the technical agent, billing → the billing agent, everything else →
+a general one. It is the same act of judgement as a verifier, moved to the front
+of the loop, and it has a property nothing else in the harness does: <strong>every
+downstream decision is conditioned on it</strong>. Route wrong and no amount of quality
+in the specialist recovers — the agent answers a question nobody asked, fluently.</p>
+<p>Four things follow:</p>
+<ul>
+<li><strong>Prefer a deterministic router when the classes are crisp.</strong> A keyword rule
+or a trained classifier is cheaper, faster and <em>testable</em> against a fixed set.
+Spend a model call on routing only when the boundary genuinely needs language
+understanding.</li>
+<li><strong>Always have a default route.</strong> A router with no fallback fails closed on
+anything it has not seen, which in production is a steady trickle of real
+users getting nothing.</li>
+<li><strong>Measure routing accuracy separately from end-to-end accuracy.</strong> They are
+different numbers with different fixes, and a single end-to-end score cannot
+tell you which half is broken. This is the same disaggregation argument as
+<a href="bias-and-explainability.html">bias and explainability</a>, applied to a pipeline
+stage instead of a population.</li>
+<li><strong>A router is not a cost optimiser.</strong> Routing by <em>capability</em> to a specialist
+and routing by <em>price</em> to a cheaper model are different systems that happen to
+share a name — see <a href="ensembles-and-routing.html">ensembles and routing</a> for the
+second, and <a href="agents.html">agents</a> for the router as a control-flow pattern.</li>
+</ul>
+<h3 id="the-full-interruption-taxonomy"><a class="anchor" href="#the-full-interruption-taxonomy">#</a>The full interruption taxonomy</h3><p>§3&#39;s table covered the guards that fire on exhaustion. Two more stop a loop for
+a reason, and one stops it on a person:</p>
+<div class="table-scroll"><table><thead><tr><th>Interruption</th><th>Fires when</th><th>Who decides</th></tr></thead><tbody><tr><td>Step / turn cap</td><td>The count runs out</td><td>You, in advance</td></tr><tr><td>Budget cap</td><td>The money runs out</td><td>You, in advance</td></tr><tr><td>No-progress window</td><td>State stopped moving</td><td>The loop</td></tr><tr><td><strong>Verifier / goal check</strong></td><td>Criteria are met</td><td>A deterministic check</td></tr><tr><td><strong>Human in the loop</strong></td><td>A gate is reached</td><td>A person</td></tr></tbody></table></div><h3 id="human-in-the-loop-is-durable-state"><a class="anchor" href="#human-in-the-loop-is-durable-state">#</a>Human-in-the-loop *is* durable state</h3><p>This is the part that is usually discovered late. To pause for a human you must
+be able to stop mid-loop, persist the entire state — history, tool results,
+which node you were on — and resume later, plausibly in a different process, on
+a different machine, after a deploy.</p>
+<p><strong>That is a checkpointer.</strong> It is why LangGraph&#39;s <code>interrupt</code> and its
+checkpointing are the same subsystem rather than two features, and why a
+framework without durable state cannot offer real human-in-the-loop at all. It
+can offer a blocking prompt, which is a different thing: if your loop cannot
+survive a process restart, your &quot;human in the loop&quot; is a person watching a
+terminal, and the review window is however long they are willing to sit there.</p>
+<p><strong>Put the gate before irreversible actions.</strong> §2 established the boundary —
+checkpoints cover the filesystem, not the world. A file edit can be rolled back;
+a payment, an email, a <code>DROP TABLE</code> and a deploy cannot. Those are exactly the
+places a human gate earns its latency, and approval fatigue is the reason to
+gate <em>few</em> things rather than many: a person who has approved forty harmless
+diffs will approve the forty-first without reading it.</p>
+<h3 id="tracing-you-cannot-debug-a-loop-you-cannot-see"><a class="anchor" href="#tracing-you-cannot-debug-a-loop-you-cannot-see">#</a>Tracing — you cannot debug a loop you cannot see</h3><p>A loop that fails on step 14 of 20 hands you one wrong answer and no
+explanation. Reproducing it is expensive and often impossible, because the model
+is non-deterministic and the environment moved. The minimum worth capturing, per
+step:</p>
+<ul>
+<li>The inputs, the tool calls with their arguments, and the results</li>
+<li><strong>Which guard was evaluated and what it returned</strong> — the cheapest signal, and
+the one almost nobody logs</li>
+<li>Token and cost counters, accumulated across the run rather than per call</li>
+</ul>
+<p>This is not optional instrumentation. Given that an agent&#39;s own success report
+is wrong 45–48% of the time, the trace is the only artifact that tells you what
+actually happened — and the guard evaluations are what tell you <em>why it stopped</em>,
+which is the question §3 says you will be asking.</p>
 <h2 id="4-experiment"><a class="anchor" href="#4-experiment">#</a>4 · Experiment</h2><p>Run a loop and watch a guard decide the bill. Set the task to <em>impossible</em> with
 the no-progress window at 0, then move the window to 3 — same agent, same task,
 and the cost falls by roughly three times because the loop noticed it was not
@@ -391,7 +478,7 @@ for the libraries whose defaults this page keeps correcting.</p>
     <div class="pager-row"><a class="pager previous" href="guardrails-and-security.html"><span>previous</span>Guardrails & security</a><a class="pager next" href="fine-tuning.html"><span>next</span>Fine-tuning & adaptation</a></div>
   </main>
 
-  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-the-harness">2 · Design — the harness</a></li><li class="d3"><a href="#what-is-actually-in-one">What is actually in one</a></li><li class="d3"><a href="#the-leverage-is-in-the-tools-and-mostly-in-their-descriptions">The leverage is in the tools, and mostly in their descriptions</a></li><li class="d3"><a href="#permissions-sandboxing-and-checkpoints-are-harness-components-too">Permissions, sandboxing and checkpoints are harness components too</a></li><li class="d3"><a href="#how-much-does-the-harness-actually-move-the-number">How much does the harness actually move the number?</a></li><li class="d2"><a href="#3-design-the-loop">3 · Design — the loop</a></li><li class="d3"><a href="#the-plain-while-loop-is-the-recommendation-not-the-shortcut">The plain while-loop is the recommendation, not the shortcut</a></li><li class="d3"><a href="#the-framework-defaults-are-not-what-you-think">The framework defaults are not what you think</a></li><li class="d3"><a href="#the-failure-modes-measured">The failure modes, measured</a></li><li class="d3"><a href="#the-guard-worth-building">The guard worth building</a></li><li class="d2"><a href="#4-experiment">4 · Experiment</a></li><li class="d2"><a href="#5-depth-context-is-the-other-half">5 · Depth — context is the other half</a></li><li class="d3"><a href="#everything-accumulates">Everything accumulates</a></li><li class="d3"><a href="#models-degrade-long-before-the-limit">Models degrade long before the limit</a></li><li class="d3"><a href="#compaction-has-the-weakest-evidence-of-anything-here">Compaction has the weakest evidence of anything here</a></li><li class="d3"><a href="#tool-optimizations-the-half-of-the-loop-that-is-not-the-model">Tool optimizations — the half of the loop that is not the model</a></li><li class="d3"><a href="#false-success-is-the-failure-mode-nobody-instruments">False success is the failure mode nobody instruments</a></li><li class="d3"><a href="#evaluate-the-outcome-not-the-path">Evaluate the outcome, not the path</a></li><li class="d2"><a href="#6-depth-when-to-add-agents-instead">6 · Depth — when to add agents instead</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-the-harness">2 · Design — the harness</a></li><li class="d3"><a href="#what-is-actually-in-one">What is actually in one</a></li><li class="d3"><a href="#the-leverage-is-in-the-tools-and-mostly-in-their-descriptions">The leverage is in the tools, and mostly in their descriptions</a></li><li class="d3"><a href="#permissions-sandboxing-and-checkpoints-are-harness-components-too">Permissions, sandboxing and checkpoints are harness components too</a></li><li class="d3"><a href="#how-much-does-the-harness-actually-move-the-number">How much does the harness actually move the number?</a></li><li class="d2"><a href="#3-design-the-loop">3 · Design — the loop</a></li><li class="d3"><a href="#the-plain-while-loop-is-the-recommendation-not-the-shortcut">The plain while-loop is the recommendation, not the shortcut</a></li><li class="d3"><a href="#the-framework-defaults-are-not-what-you-think">The framework defaults are not what you think</a></li><li class="d3"><a href="#the-failure-modes-measured">The failure modes, measured</a></li><li class="d3"><a href="#the-guard-worth-building">The guard worth building</a></li><li class="d2"><a href="#3b-verifiers-routers-and-interrupts">3b · Verifiers, routers and interrupts</a></li><li class="d3"><a href="#the-verifier-and-what-it-costs">The verifier, and what it costs</a></li><li class="d3"><a href="#routers-the-verifier-that-runs-first">Routers — the verifier that runs first</a></li><li class="d3"><a href="#the-full-interruption-taxonomy">The full interruption taxonomy</a></li><li class="d3"><a href="#human-in-the-loop-is-durable-state">Human-in-the-loop *is* durable state</a></li><li class="d3"><a href="#tracing-you-cannot-debug-a-loop-you-cannot-see">Tracing — you cannot debug a loop you cannot see</a></li><li class="d2"><a href="#4-experiment">4 · Experiment</a></li><li class="d2"><a href="#5-depth-context-is-the-other-half">5 · Depth — context is the other half</a></li><li class="d3"><a href="#everything-accumulates">Everything accumulates</a></li><li class="d3"><a href="#models-degrade-long-before-the-limit">Models degrade long before the limit</a></li><li class="d3"><a href="#compaction-has-the-weakest-evidence-of-anything-here">Compaction has the weakest evidence of anything here</a></li><li class="d3"><a href="#tool-optimizations-the-half-of-the-loop-that-is-not-the-model">Tool optimizations — the half of the loop that is not the model</a></li><li class="d3"><a href="#false-success-is-the-failure-mode-nobody-instruments">False success is the failure mode nobody instruments</a></li><li class="d3"><a href="#evaluate-the-outcome-not-the-path">Evaluate the outcome, not the path</a></li><li class="d2"><a href="#6-depth-when-to-add-agents-instead">6 · Depth — when to add agents instead</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
 </div>
 
 <script type="module">
