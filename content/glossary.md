@@ -147,6 +147,17 @@ termtour
 | **Prefix caching** | Reusing computation for a shared prompt prefix | Often the largest single cost lever on a stable system prompt |
 | **Load shedding** | Rejecting work above a threshold | Needs hysteresis — two thresholds — or it flaps |
 | **Backpressure** | Signalling upstream to slow down | Bounded queue plus 429 with `Retry-After` |
+| **Dynamic batching** *(alias)* | Forming a batch from whatever has arrived, rather than a fixed size | Often used loosely for **continuous batching** — worth asking which is meant, because the per-request and per-step versions have very different tail latency |
+| **In-flight batching** *(alias)* | NVIDIA's name for continuous batching | Same mechanism, TensorRT-LLM's vocabulary. See *Continuous batching* |
+| **Paged KV cache** *(alias)* | The cache organised into fixed-size blocks with a block table | The storage half of **PagedAttention**; the kernel half is what reads it |
+| **KV cache eviction** | Dropping low-value entries to hold a fixed budget | Irreversible and input-dependent — an evicted token cannot be recovered if a later query needed it |
+| **KV cache token pruning** *(alias)* | Eviction chosen by a saliency score | Same operation, named for how the victim is picked |
+| **KV cache sparsity** *(alias)* | Keeping or reading only part of the cache | Two different things wear this name: sparse *storage* lowers memory, sparse *reads* lower bandwidth and do not |
+| **Kernel tiling** | Processing in cache-sized blocks instead of whole rows | The transformation underneath FlashAttention — it is why the N×N score matrix never exists |
+| **Fused prologue** | Folding work into a matmul *before* it, rather than after | The mirror of a fused epilogue; less common, because most elementwise work lands downstream |
+| **Mixed-precision quantization** | Different bit widths for different parts of one model | Outlier channels or sensitive layers stay wide while the rest go narrow — the practical middle ground between uniform INT4 and giving up |
+| **Blockwise quantization** | One scale factor per block of 32 or 128 weights | Where almost everything has landed: fine enough to contain an outlier, coarse enough that the scales stay small |
+| **Cross-attention** | Attention where queries come from one sequence and keys/values from another | The encoder–decoder link, and how a vision encoder's output reaches a language model |
 
 ---
 

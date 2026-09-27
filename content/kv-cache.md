@@ -263,6 +263,41 @@ Keeping four sink tokens plus a sliding window is what lets a fixed-size cache
 stream indefinitely without collapse. Any eviction policy you write yourself
 needs the same carve-out, and this is the most common way a home-grown one
 fails.
+**Four variants of the above are worth naming, because taxonomies list them
+separately and interviewers ask for them by name.**
+
+**KV cache token merging** is the alternative to eviction that people reach for
+once they have been burned by it. Instead of dropping a low-value entry, combine
+it with a neighbour — average the K and V of adjacent, similar tokens into one
+slot. It keeps some of the signal a deletion throws away, at the cost of
+blurring two positions into one, and it inherits eviction's real problem
+unchanged: the decision is made before you know what the next query will ask
+for. Prefer it to eviction when the content is redundant prose; it buys nothing
+over eviction when the content is a list of distinct facts.
+
+**Cyclic KV cache** — also called a rolling-buffer or circular KV cache — is not
+a separate policy but the *implementation* of row 5. A sliding window has a
+fixed capacity, so allocate `W` slots once and overwrite position `t mod W`.
+No reallocation, no compaction, no copying as the window advances. It is the
+reason a windowed layer costs constant memory rather than merely bounded memory,
+and it composes with attention sinks by exempting the first few slots from the
+wraparound.
+
+**KV head pruning** is row 1's idea applied after the fact: drop whole KV heads
+from a model that was not trained with fewer. GQA and MQA are architectural —
+the model learned to share. Head pruning takes a trained checkpoint and removes
+heads by measured importance, which is cheaper than retraining and worse than
+having trained that way. It is the same trade as
+[width pruning](distillation-and-pruning.html) generally: real memory savings,
+quality recovery usually requires fine-tuning.
+
+**TurboQuant** sits beside OSCAR in Group C at **3-bit** KV quantization. The
+useful thing to know is the shape of that frontier rather than either method's
+headline number: 4-bit KV is routine, 3-bit is workable with careful outlier
+handling, and 2-bit is where methods stop being interchangeable and start being
+research. If a page tells you 2-bit KV is solved, check what it does with the
+first few tokens.
+
 
 ### Group C — data width: fewer bits per value
 

@@ -229,7 +229,37 @@ generation degenerates — not gracefully, but into repetition and gibberish.
 Keeping four sink tokens plus a sliding window is what lets a fixed-size cache
 stream indefinitely without collapse. Any eviction policy you write yourself
 needs the same carve-out, and this is the most common way a home-grown one
-fails.</p>
+fails.
+<strong>Four variants of the above are worth naming, because taxonomies list them
+separately and interviewers ask for them by name.</strong></p>
+<p><strong>KV cache token merging</strong> is the alternative to eviction that people reach for
+once they have been burned by it. Instead of dropping a low-value entry, combine
+it with a neighbour — average the K and V of adjacent, similar tokens into one
+slot. It keeps some of the signal a deletion throws away, at the cost of
+blurring two positions into one, and it inherits eviction&#39;s real problem
+unchanged: the decision is made before you know what the next query will ask
+for. Prefer it to eviction when the content is redundant prose; it buys nothing
+over eviction when the content is a list of distinct facts.</p>
+<p><strong>Cyclic KV cache</strong> — also called a rolling-buffer or circular KV cache — is not
+a separate policy but the <em>implementation</em> of row 5. A sliding window has a
+fixed capacity, so allocate <code>W</code> slots once and overwrite position <code>t mod W</code>.
+No reallocation, no compaction, no copying as the window advances. It is the
+reason a windowed layer costs constant memory rather than merely bounded memory,
+and it composes with attention sinks by exempting the first few slots from the
+wraparound.</p>
+<p><strong>KV head pruning</strong> is row 1&#39;s idea applied after the fact: drop whole KV heads
+from a model that was not trained with fewer. GQA and MQA are architectural —
+the model learned to share. Head pruning takes a trained checkpoint and removes
+heads by measured importance, which is cheaper than retraining and worse than
+having trained that way. It is the same trade as
+<a href="distillation-and-pruning.html">width pruning</a> generally: real memory savings,
+quality recovery usually requires fine-tuning.</p>
+<p><strong>TurboQuant</strong> sits beside OSCAR in Group C at <strong>3-bit</strong> KV quantization. The
+useful thing to know is the shape of that frontier rather than either method&#39;s
+headline number: 4-bit KV is routine, 3-bit is workable with careful outlier
+handling, and 2-bit is where methods stop being interchangeable and start being
+research. If a page tells you 2-bit KV is solved, check what it does with the
+first few tokens.</p>
 <h3 id="group-c-data-width-fewer-bits-per-value"><a class="anchor" href="#group-c-data-width-fewer-bits-per-value">#</a>Group C — data width: fewer bits per value</h3><div class="table-scroll"><table><thead><tr><th>#</th><th>Technique</th><th>Term attacked</th><th>Typical factor</th><th>The cost</th></tr></thead><tbody><tr><td>11</td><td><strong>Quantization</strong> — FP16 → FP8 → 4-bit KV</td><td><code>bytes_per_value</code></td><td>2–4×</td><td>Recall degradation at long context, and it hits the early tokens hardest</td></tr><tr><td>12</td><td><strong>Low-rank projection (Palu)</strong> — cache a compressed latent, reconstruct K/V on the fly</td><td><code>head_dim</code></td><td>Reported &gt;90% at the aggressive end</td><td>Reconstruction compute per attention step; needs fused kernels to be a net win</td></tr></tbody></table></div><p><strong>OSCAR is the current answer to &quot;is INT2 KV actually possible?&quot;</strong> and it is
 worth knowing because of <em>why</em> it works. Rotating the cache before quantizing is
 standard — a Hadamard transform spreads outliers so they stop dominating the
