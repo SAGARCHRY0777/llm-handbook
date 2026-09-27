@@ -233,9 +233,11 @@
         "<span>" + esc(label) + "</span><b>" + esc(value) + "</b></div>";
     },
 
-    /** A small table. */
+    /** A small table. Wrapped, because a multi-column monospace table cannot
+     *  shrink below its intrinsic width and would otherwise push the panel
+     *  past the page on a phone. */
     table: function (head, rows) {
-      var h = '<table class="sim__table"><thead><tr>';
+      var h = '<div class="sim__tablewrap"><table class="sim__table"><thead><tr>';
       for (var i = 0; i < head.length; i++) h += "<th>" + esc(head[i]) + "</th>";
       h += "</tr></thead><tbody>";
       for (var r = 0; r < rows.length; r++) {
@@ -243,7 +245,7 @@
         for (var c = 0; c < rows[r].length; c++) h += "<td>" + esc(rows[r][c]) + "</td>";
         h += "</tr>";
       }
-      return h + "</tbody></table>";
+      return h + "</tbody></table></div>";
     },
 
     /** An explanatory line under the diagram. */

@@ -562,7 +562,7 @@ select.widget__input {
 .sim__reset:hover { color: var(--ink); border-color: var(--rule); }
 
 /* ---- stage ---- */
-.sim__stage { margin-top: 16px; min-height: 40px; }
+.sim__stage { margin-top: 16px; min-height: 40px; min-width: 0; }
 
 .sim__flow {
   display: flex; align-items: center; gap: 12px;
@@ -572,7 +572,8 @@ select.widget__input {
 }
 .sim__flow > * { flex: 0 1 auto; min-width: 0; max-width: 100%; }
 .sim__arrow { color: var(--ink-3); font-size: 17px; flex: none; }
-.sim__stack { display: grid; gap: 10px; }
+.sim__stack { display: grid; gap: 10px; min-width: 0; }
+.sim__stack > * { min-width: 0; max-width: 100%; }
 .sim__cols { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-start; }
 .sim__cols > * { flex: 1 1 200px; min-width: 0; }
 
@@ -580,7 +581,7 @@ select.widget__input {
 .sim__node {
   border: 1.5px solid var(--rule); border-radius: 9px;
   background: var(--panel-2); padding: 12px 14px;
-  min-width: 230px; max-width: 100%; overflow-x: auto;
+  min-width: min(230px, 100%); max-width: 100%; overflow-x: auto;
 }
 .sim__node--ok   { border-color: var(--good); }
 .sim__node--warn { border-color: var(--caution); }
@@ -630,7 +631,7 @@ select.widget__input {
 /* ---- stat tile ---- */
 .sim__stat {
   border: var(--hair) solid var(--rule); border-radius: 7px;
-  background: var(--panel-2); padding: 10px 13px; display: grid; gap: 3px; min-width: 112px;
+  background: var(--panel-2); padding: 10px 13px; display: grid; gap: 3px; min-width: min(112px, 100%);
 }
 .sim__stat--ok   { background: var(--good-wash);    border-color: var(--good); }
 .sim__stat--warn { background: var(--caution-wash); border-color: var(--caution); }
@@ -679,13 +680,13 @@ select.widget__input {
 .sim__cell--idle { opacity: .4; }
 
 /* ---- timeline lane ---- */
-.sim__lane { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; }
+.sim__lane { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; min-width: 0; }
 .sim__lname {
   font: 500 11px/1 var(--mono); color: var(--ink-3);
   flex: none; width: 74px; text-align: right;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.sim__lcells { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 2px; }
+.sim__lcells { display: flex; gap: 3px; overflow-x: auto; padding-bottom: 2px; flex: 1; min-width: 0; }
 .sim__lcell {
   font: 500 9.5px/1 var(--mono);
   min-width: 30px; height: 21px; flex: none;
@@ -714,7 +715,7 @@ select.widget__input {
 
 /* ---- bar ---- */
 .sim__bar { display: flex; align-items: center; gap: 10px; font: 400 11.5px/1 var(--mono); }
-.sim__blabel { color: var(--ink-3); flex: none; min-width: 92px; }
+.sim__blabel { color: var(--ink-3); flex: 0 1 92px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sim__btrack { flex: 1; background: var(--panel-2); border-radius: 3px; height: 9px; overflow: hidden; min-width: 60px; }
 .sim__btrack i { display: block; height: 100%; background: var(--signal); transition: width .35s ease; }
 .sim__bar--ok .sim__btrack i   { background: var(--good); }
@@ -741,6 +742,7 @@ select.widget__input {
 .sim__row--ok b   { color: var(--good); }
 .sim__row--warn b { color: var(--caution); }
 .sim__row--bad b  { color: var(--bad); }
+.sim__tablewrap { overflow-x: auto; max-width: 100%; min-width: 0; }
 .sim__table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .sim__table th, .sim__table td {
   text-align: left; padding: 6px 9px; border-bottom: var(--hair) solid var(--rule-2);
