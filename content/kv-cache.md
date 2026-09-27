@@ -263,6 +263,7 @@ Keeping four sink tokens plus a sliding window is what lets a fixed-size cache
 stream indefinitely without collapse. Any eviction policy you write yourself
 needs the same carve-out, and this is the most common way a home-grown one
 fails.
+
 **Four variants of the above are worth naming, because taxonomies list them
 separately and interviewers ask for them by name.**
 
