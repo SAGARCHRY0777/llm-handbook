@@ -135,7 +135,9 @@ do not go looking for a paper.
 ## 3 · Design — structure: infill is where prefix caching breaks
 
 Fill-in-the-middle is the workload that defeats prefix caching most completely,
-and code assistants are almost entirely FIM.
+and code assistants are almost entirely FIM. The re-serialisation below is
+**infill prefix reordering**, and repairing the cache it breaks is **infill
+suffix KV correction** — both appear under those names on optimisation lists.
 
 ```
   a FIM prompt is assembled, not concatenated:

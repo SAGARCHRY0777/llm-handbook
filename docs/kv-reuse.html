@@ -121,7 +121,9 @@ as a description of that step rather than as a named technique with results, and
 do not go looking for a paper.</p>
 <hr>
 <h2 id="3-design-structure-infill-is-where-prefix-caching-breaks"><a class="anchor" href="#3-design-structure-infill-is-where-prefix-caching-breaks">#</a>3 · Design — structure: infill is where prefix caching breaks</h2><p>Fill-in-the-middle is the workload that defeats prefix caching most completely,
-and code assistants are almost entirely FIM.</p>
+and code assistants are almost entirely FIM. The re-serialisation below is
+<strong>infill prefix reordering</strong>, and repairing the cache it breaks is <strong>infill
+suffix KV correction</strong> — both appear under those names on optimisation lists.</p>
 <pre class="code"><code>  a FIM prompt is assembled, not concatenated:
 
      &lt;PRE&gt; prefix tokens &lt;SUF&gt; suffix tokens &lt;MID&gt; -&gt; model generates here

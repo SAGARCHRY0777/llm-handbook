@@ -375,6 +375,43 @@ than scheduling.
 
 ---
 
+### Making the prefill itself cheaper
+
+The rows above schedule prefill. A separate family makes it *smaller*. Prefill
+is compute-bound where decode is memory-bound, so the techniques are
+the opposite in character — they are about doing less arithmetic, not moving
+fewer bytes.
+
+- **Deep prefill, shallow decoder.** Put the depth where it is paid once. A deep
+  encoder-like stack processes the prompt, a shallower decoder generates — and
+  since decode runs once per output token while prefill runs once per request,
+  moving layers from decode to prefill trades a cost you pay hundreds of times
+  for one you pay once.
+- **Prefill first-layer precomputation.** The first layer's input is the token
+  embedding, which depends only on the token id — not on context. So for common
+  prefixes the first layer's work is identical every time and can be computed
+  once and stored. It is the narrowest possible version of prefix caching, and
+  the one that works even when the rest of the prefix differs.
+- **Prefill last-layer FFN skipping.** During prefill you need the *KV* of every
+  prompt token, but the only token whose **output** you use is the last one —
+  that is what seeds generation. The final layer's FFN, computed for the other
+  *n−1* positions, is discarded. Skipping it is exact for those positions, and
+  on a long prompt it removes a whole FFN's work for nearly the entire sequence.
+- **Prefill first-token optimisations** target TTFT specifically, which is the
+  metric users feel. The lever is usually scheduling rather than arithmetic:
+  admit the request sooner, chunk the prompt so it interleaves with ongoing
+  decode, and stream the first token the moment it exists.
+
+<div class="callout note">
+
+**These are not interchangeable with chunked prefill, and the distinction is
+worth holding.** Chunked and layered prefill are *scheduling* — the same work,
+rearranged so one long prompt stops stalling everyone else. The four above are
+*elimination*: work that is genuinely never done. A serving stack usually wants
+both, and they compose.
+
+</div>
+
 ## 3 · Flow — how to actually choose
 
 Do them in this order. The ordering is by *risk*, not by size of win: everything

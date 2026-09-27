@@ -104,6 +104,63 @@ rather than asserts.
 
 ---
 
+## 2b · The rest of the decoding algorithms
+
+§2 covered the samplers you will actually configure. Taxonomies list a dozen
+more, and they sort cleanly into three groups — which is more useful than the
+list, because the groups tell you whether a given name is a *sampler*, a
+*kernel*, or a *different generation paradigm*.
+
+### Still samplers — they change which token is drawn
+
+- **Min-p sampling** cuts at a threshold *relative to the top token's
+  probability* — keep everything above `p × p_max` — rather than at a fixed
+  cumulative mass. The effect is that a confident step keeps almost nothing and
+  an uncertain one keeps a lot, automatically. It is the most defensible
+  alternative to top-p, and the argument for it is that `top_p = 0.95` means
+  something very different when the top token has 0.9 than when it has 0.15.
+- **Contrastive decoding** scores with *two* models — a strong one and a
+  deliberately weak one — and prefers tokens the strong model likes *and the
+  weak one does not*. The weak model acts as a proxy for "generic, degenerate
+  continuation", so subtracting it suppresses repetition without a penalty
+  term. The cost is a second forward pass per step.
+
+Both sit at the same place in the pipeline as temperature and top-p: after the
+logits, before the draw. Everything in [decoding §2](#2-design) composes with
+them.
+
+### Not samplers — they change how the same tokens are computed
+
+- **Flash decoding** is a *kernel*, despite the name's symmetry with
+  [FlashAttention](kernel-and-attention-optimization.html). At decode time
+  there is exactly one query and a very long KV cache, so the usual
+  parallelisation over query positions has nothing to work with and the GPU
+  sits mostly idle. Flash decoding splits the *key/value* dimension across
+  thread blocks instead and combines the partial softmax results — the same
+  online-softmax trick, applied along a different axis. **It changes no
+  output at all**, which is the tell that it belongs on the kernel page rather
+  than this one.
+
+### Different paradigms — they change how many tokens come out
+
+- **Non-autoregressive decoding** generates the whole sequence in parallel
+  rather than one token at a time. It is genuinely fast and generally worse:
+  without conditioning on what it just emitted, the model cannot keep a long
+  output self-consistent. It survives in translation and speech, not in
+  open-ended generation.
+- **Multi-token generation** (multi-token prediction) is the practical middle:
+  train the model with extra heads that predict positions *t+1, t+2, …*, then
+  use those extra predictions as a free draft for
+  [speculative decoding](#speculative-decoding). The model becomes its own
+  draft model, which removes the awkward part of speculation — finding a small
+  model that agrees with the big one.
+
+**The distinction worth carrying:** a sampler changes what you get, a kernel
+changes how fast you get it, and a paradigm changes what "a step" means. Names
+like *flash decoding* and *non-autoregressive decoding* sit in the same list on
+every taxonomy and belong to three different layers of the stack.
+
+
 ## 3 · Flow
 
 ```mermaid

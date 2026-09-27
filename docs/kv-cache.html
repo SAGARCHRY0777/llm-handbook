@@ -309,6 +309,40 @@ utilisation than admitting conservatively and never preempting — but only if y
 watch the preemption rate, because a high one means you are thrashing rather
 than scheduling.</p>
 <hr>
+<h3 id="making-the-prefill-itself-cheaper"><a class="anchor" href="#making-the-prefill-itself-cheaper">#</a>Making the prefill itself cheaper</h3><p>The rows above schedule prefill. A separate family makes it <em>smaller</em>. Prefill
+is compute-bound where decode is memory-bound, so the techniques are
+the opposite in character — they are about doing less arithmetic, not moving
+fewer bytes.</p>
+<ul>
+<li><strong>Deep prefill, shallow decoder.</strong> Put the depth where it is paid once. A deep
+encoder-like stack processes the prompt, a shallower decoder generates — and
+since decode runs once per output token while prefill runs once per request,
+moving layers from decode to prefill trades a cost you pay hundreds of times
+for one you pay once.</li>
+<li><strong>Prefill first-layer precomputation.</strong> The first layer&#39;s input is the token
+embedding, which depends only on the token id — not on context. So for common
+prefixes the first layer&#39;s work is identical every time and can be computed
+once and stored. It is the narrowest possible version of prefix caching, and
+the one that works even when the rest of the prefix differs.</li>
+<li><strong>Prefill last-layer FFN skipping.</strong> During prefill you need the <em>KV</em> of every
+prompt token, but the only token whose <strong>output</strong> you use is the last one —
+that is what seeds generation. The final layer&#39;s FFN, computed for the other
+<em>n−1</em> positions, is discarded. Skipping it is exact for those positions, and
+on a long prompt it removes a whole FFN&#39;s work for nearly the entire sequence.</li>
+<li><strong>Prefill first-token optimisations</strong> target TTFT specifically, which is the
+metric users feel. The lever is usually scheduling rather than arithmetic:
+admit the request sooner, chunk the prompt so it interleaves with ongoing
+decode, and stream the first token the moment it exists.</li>
+</ul>
+<div class="callout note">
+
+<p><strong>These are not interchangeable with chunked prefill, and the distinction is
+worth holding.</strong> Chunked and layered prefill are <em>scheduling</em> — the same work,
+rearranged so one long prompt stops stalling everyone else. The four above are
+<em>elimination</em>: work that is genuinely never done. A serving stack usually wants
+both, and they compose.</p>
+</div>
+
 <h2 id="3-flow-how-to-actually-choose"><a class="anchor" href="#3-flow-how-to-actually-choose">#</a>3 · Flow — how to actually choose</h2><p>Do them in this order. The ordering is by <em>risk</em>, not by size of win: everything
 above the line is free, everything below trades quality for memory.</p>
 <pre class="code"><code>  1. What model?           -&gt; GQA is probably already there. Check the config.
@@ -646,7 +680,7 @@ formula above: cross-layer KV sharing, K=V, and variable width.</p>
     <div class="pager-row"><a class="pager previous" href="distillation-and-pruning.html"><span>previous</span>Distillation & pruning</a><a class="pager next" href="reasoning-inference-optimization.html"><span>next</span>Reasoning inference optimization</a></div>
   </main>
 
-  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-the-thirteen-techniques">2 · Design — the thirteen techniques</a></li><li class="d3"><a href="#group-a-architectural-fewer-heads-fewer-layers-shorter-state">Group A — architectural: fewer heads, fewer layers, shorter state</a></li><li class="d3"><a href="#group-b-token-memory-management-fewer-tokens-less-waste">Group B — token &amp; memory management: fewer tokens, less waste</a></li><li class="d3"><a href="#group-c-data-width-fewer-bits-per-value">Group C — data width: fewer bits per value</a></li><li class="d3"><a href="#group-d-scheduling-same-bytes-better-occupancy">Group D — scheduling: same bytes, better occupancy</a></li><li class="d2"><a href="#3-flow-how-to-actually-choose">3 · Flow — how to actually choose</a></li><li class="d2"><a href="#4-uml-where-each-technique-intervenes">4 · UML — where each technique intervenes</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d3"><a href="#prefix-reuse-in-the-three-parts-it-actually-decomposes-into">Prefix reuse, in the three parts it actually decomposes into</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-the-thirteen-techniques">2 · Design — the thirteen techniques</a></li><li class="d3"><a href="#group-a-architectural-fewer-heads-fewer-layers-shorter-state">Group A — architectural: fewer heads, fewer layers, shorter state</a></li><li class="d3"><a href="#group-b-token-memory-management-fewer-tokens-less-waste">Group B — token &amp; memory management: fewer tokens, less waste</a></li><li class="d3"><a href="#group-c-data-width-fewer-bits-per-value">Group C — data width: fewer bits per value</a></li><li class="d3"><a href="#group-d-scheduling-same-bytes-better-occupancy">Group D — scheduling: same bytes, better occupancy</a></li><li class="d3"><a href="#making-the-prefill-itself-cheaper">Making the prefill itself cheaper</a></li><li class="d2"><a href="#3-flow-how-to-actually-choose">3 · Flow — how to actually choose</a></li><li class="d2"><a href="#4-uml-where-each-technique-intervenes">4 · UML — where each technique intervenes</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d3"><a href="#prefix-reuse-in-the-three-parts-it-actually-decomposes-into">Prefix reuse, in the three parts it actually decomposes into</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
 </div>
 
 <script type="module">

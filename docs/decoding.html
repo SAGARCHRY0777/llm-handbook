@@ -104,6 +104,54 @@ guarantee. Any test asserting exact string equality on model output is a flaky
 test waiting to happen — which is precisely why the evaluation module scores
 rather than asserts.</p>
 <hr>
+<h2 id="2b-the-rest-of-the-decoding-algorithms"><a class="anchor" href="#2b-the-rest-of-the-decoding-algorithms">#</a>2b · The rest of the decoding algorithms</h2><p>§2 covered the samplers you will actually configure. Taxonomies list a dozen
+more, and they sort cleanly into three groups — which is more useful than the
+list, because the groups tell you whether a given name is a <em>sampler</em>, a
+<em>kernel</em>, or a <em>different generation paradigm</em>.</p>
+<h3 id="still-samplers-they-change-which-token-is-drawn"><a class="anchor" href="#still-samplers-they-change-which-token-is-drawn">#</a>Still samplers — they change which token is drawn</h3><ul>
+<li><strong>Min-p sampling</strong> cuts at a threshold <em>relative to the top token&#39;s
+probability</em> — keep everything above <code>p × p_max</code> — rather than at a fixed
+cumulative mass. The effect is that a confident step keeps almost nothing and
+an uncertain one keeps a lot, automatically. It is the most defensible
+alternative to top-p, and the argument for it is that <code>top_p = 0.95</code> means
+something very different when the top token has 0.9 than when it has 0.15.</li>
+<li><strong>Contrastive decoding</strong> scores with <em>two</em> models — a strong one and a
+deliberately weak one — and prefers tokens the strong model likes <em>and the
+weak one does not</em>. The weak model acts as a proxy for &quot;generic, degenerate
+continuation&quot;, so subtracting it suppresses repetition without a penalty
+term. The cost is a second forward pass per step.</li>
+</ul>
+<p>Both sit at the same place in the pipeline as temperature and top-p: after the
+logits, before the draw. Everything in <a href="#2-design">decoding §2</a> composes with
+them.</p>
+<h3 id="not-samplers-they-change-how-the-same-tokens-are-computed"><a class="anchor" href="#not-samplers-they-change-how-the-same-tokens-are-computed">#</a>Not samplers — they change how the same tokens are computed</h3><ul>
+<li><strong>Flash decoding</strong> is a <em>kernel</em>, despite the name&#39;s symmetry with
+<a href="kernel-and-attention-optimization.html">FlashAttention</a>. At decode time
+there is exactly one query and a very long KV cache, so the usual
+parallelisation over query positions has nothing to work with and the GPU
+sits mostly idle. Flash decoding splits the <em>key/value</em> dimension across
+thread blocks instead and combines the partial softmax results — the same
+online-softmax trick, applied along a different axis. <strong>It changes no
+output at all</strong>, which is the tell that it belongs on the kernel page rather
+than this one.</li>
+</ul>
+<h3 id="different-paradigms-they-change-how-many-tokens-come-out"><a class="anchor" href="#different-paradigms-they-change-how-many-tokens-come-out">#</a>Different paradigms — they change how many tokens come out</h3><ul>
+<li><strong>Non-autoregressive decoding</strong> generates the whole sequence in parallel
+rather than one token at a time. It is genuinely fast and generally worse:
+without conditioning on what it just emitted, the model cannot keep a long
+output self-consistent. It survives in translation and speech, not in
+open-ended generation.</li>
+<li><strong>Multi-token generation</strong> (multi-token prediction) is the practical middle:
+train the model with extra heads that predict positions <em>t+1, t+2, …</em>, then
+use those extra predictions as a free draft for
+<a href="#speculative-decoding">speculative decoding</a>. The model becomes its own
+draft model, which removes the awkward part of speculation — finding a small
+model that agrees with the big one.</li>
+</ul>
+<p><strong>The distinction worth carrying:</strong> a sampler changes what you get, a kernel
+changes how fast you get it, and a paradigm changes what &quot;a step&quot; means. Names
+like <em>flash decoding</em> and <em>non-autoregressive decoding</em> sit in the same list on
+every taxonomy and belong to three different layers of the stack.</p>
 <h2 id="3-flow"><a class="anchor" href="#3-flow">#</a>3 · Flow</h2><pre class="mermaid">graph TD
   A[Task] --&gt; B{One correct answer,&lt;br/&gt;or many acceptable ones?}
   B --&gt;|one| C[temperature 0&lt;br/&gt;extraction, classification, code]
@@ -252,7 +300,7 @@ confidence to a larger model or to a human — it costs nothing and works.</p>
     <div class="pager-row"><a class="pager previous" href="tokenization.html"><span>previous</span>Tokenization</a><a class="pager next" href="model-selection.html"><span>next</span>LLM APIs & model selection</a></div>
   </main>
 
-  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-where-sampling-sits-in-the-loop">4 · UML — where sampling sits in the loop</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design">2 · Design</a></li><li class="d2"><a href="#2b-the-rest-of-the-decoding-algorithms">2b · The rest of the decoding algorithms</a></li><li class="d3"><a href="#still-samplers-they-change-which-token-is-drawn">Still samplers — they change which token is drawn</a></li><li class="d3"><a href="#not-samplers-they-change-how-the-same-tokens-are-computed">Not samplers — they change how the same tokens are computed</a></li><li class="d3"><a href="#different-paradigms-they-change-how-many-tokens-come-out">Different paradigms — they change how many tokens come out</a></li><li class="d2"><a href="#3-flow">3 · Flow</a></li><li class="d2"><a href="#4-uml-where-sampling-sits-in-the-loop">4 · UML — where sampling sits in the loop</a></li><li class="d2"><a href="#5-example">5 · Example</a></li><li class="d2"><a href="#6-depth-the-senior-layer">6 · Depth — the senior layer</a></li><li class="d2"><a href="#7-from-each-seat">7 · From each seat</a></li><li class="d2"><a href="#8-interview-questions">8 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
 </div>
 
 <script type="module">

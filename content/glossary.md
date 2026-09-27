@@ -158,6 +158,26 @@ termtour
 | **Mixed-precision quantization** | Different bit widths for different parts of one model | Outlier channels or sensitive layers stay wide while the rest go narrow — the practical middle ground between uniform INT4 and giving up |
 | **Blockwise quantization** | One scale factor per block of 32 or 128 weights | Where almost everything has landed: fine enough to contain an outlier, coarse enough that the scales stay small |
 | **Cross-attention** | Attention where queries come from one sequence and keys/values from another | The encoder–decoder link, and how a vision encoder's output reaches a language model |
+| **Dynamic inference** *(adaptive inference)* | Spending different amounts of compute per input | The umbrella over early exit, MoE routing and cascades — the unifying idea is that not every input deserves the same work |
+| **Inference budget** | A per-request cap on tokens, time or cost | What turns adaptive inference from a research idea into an SLO; without one, "spend more on hard inputs" has no ceiling |
+| **Deep learning compiler** | Ahead-of-time optimiser for a model graph — TVM, XLA, Inductor | Most of what it does is operator reordering and fusion; it is why hand-written kernels are worth it only where it fails |
+| **Neural architecture search** (NAS) | Searching automatically over model shapes | Largely superseded for LLMs by scaling-law extrapolation, which predicts the answer more cheaply than search finds it |
+| **Chunked attention** | Attention computed over fixed blocks of the sequence | The tiling idea applied to the sequence axis; the basis of block-sparse and sliding-window kernels |
+| **QKV computation** | Producing the query, key and value projections | Packed into one GEMM in practice — three matrices with the same input and shape is one matmul, not three |
+| **Mixture-of-Heads** (MoH) | MoE routing applied to attention heads instead of FFN experts | Per-token head selection; the same conditional-computation idea moved from width to attention |
+| **Length generalization** | Whether a model works past the length it trained on | The property RoPE scaling is trying to buy, and the reason a context window is a claim about memory rather than recall |
+| **Long RAG** | Retrieving fewer, larger passages for a long-context model | The middle position between many small chunks and stuffing the corpus — the trade moves with the model's real recall, not its window |
+| **RAG cache** | Caching retrieval results, or the KV of retrieved chunks | Two different things share the name: caching the *documents* saves the retriever, caching their *KV* saves prefill |
+| **RAG fusion** | Running several query variants and fusing the ranked lists | Usually reciprocal rank fusion; buys recall for the cost of N retrievals |
+| **Speculative RAG** | Drafting an answer before, or in parallel with, retrieval | Same bet as speculative decoding — cheap when the draft is usually right, wasted work when it is not |
+| **Fake quantization** *(simulated quantization)* | Rounding to a quantized grid but computing in float | What QAT does during training, and what a benchmark is doing when INT4 shows no speedup — it measured accuracy, not throughput |
+| **Stochastic quantization** | Rounding up or down with probability set by the remainder | Unbiased in expectation, which matters for gradients and rarely for inference |
+| **Cluster-based quantization** *(weight clustering)* | Weights replaced by indices into a learned codebook | Vector quantization's ancestor; AQLM is the modern form |
+| **Block floating-point** | A shared exponent across a block, with per-element mantissas | The format underneath MXFP4 and NVFP4 — "block-scaled" describes the scaling, "block floating-point" the representation |
+| **FTZ / DAZ** | CPU flags that flush denormals to zero | Denormals can cost hundreds of cycles; these trade a sliver of precision near zero for predictable latency |
+| **Edge inference** | Running on the device rather than a server | Memory and power bound, not FLOP bound — which is why edge models are quantized aggressively and often distilled |
+| **AI PC** | A laptop or desktop with an on-board NPU | The consumer form of edge inference; the NPU is built for low-precision integer throughput at low power |
+| **Serverless inference** | Per-request compute with no persistent instance | Cold starts dominate: loading weights is the cost, so it suits spiky low-volume traffic and suits nothing that needs a warm KV cache |
 
 ---
 

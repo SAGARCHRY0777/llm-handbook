@@ -828,6 +828,86 @@ coarse enough that the scales stay small.
 - **Overclocking** appears on taxonomies. In a datacentre you are thermally and
   power limited already; it is not an inference optimisation.
 
+## 3g · Sparsity, and the four ways to not do work
+
+Every optimisation on this page so far makes work cheaper. This section is about
+the other move: **not doing it at all**. The techniques divide by *how regular
+the skipped work is*, because that — not how much you skip — decides whether
+hardware can exploit it.
+
+### Sparsity, ordered by how usable it is
+
+| Kind | Pattern | Hardware can exploit it? |
+|---|---|---|
+| **Unstructured** | Any weight, anywhere | No. A 90%-sparse tensor stored densely runs at exactly the dense speed |
+| **Block sparsity** | Whole tiles are zero | **Yes** — a zero tile is a matmul you skip entirely, and tiles are the unit kernels already work in |
+| **N:M sparsity** | *N* non-zeros in every group of *M* | **Yes**, given silicon that understands the format |
+| **2:4 sparsity** | The N:M case NVIDIA built for | Sparse Tensor Cores decode it directly: 2 values plus index bits per 4 weights |
+
+**Dynamic sparsity** is different in kind: the zeros depend on the *input*
+rather than the weights. ReLU-family activations produce it for free — see the
+FFN discussion above — and sparse attention produces it by construction. It is
+the more valuable sort, because it adapts to what the model is actually doing,
+and the harder sort to exploit, because the pattern is not known when the kernel
+is compiled. That is precisely what **block** sparsity buys back: force the
+dynamic zeros into tile-shaped groups and a dynamic pattern becomes a
+schedulable one.
+
+**Sparse GEMM** kernels are what turn any of this into speed. The break-even is
+higher than people expect — a sparse kernel carries indexing overhead a dense
+one does not — which is why moderate unstructured sparsity is reliably *slower*
+than dense.
+
+### The four ways to avoid recomputing
+
+These appear on taxonomies as separate entries and are one idea with four
+scopes:
+
+- **Computation reuse** — if you computed it and the inputs have not changed,
+  read it back. The KV cache is this idea, and [prefix caching](kv-reuse.html)
+  is this idea applied across requests.
+- **Precomputation** — anything that depends only on values known in advance.
+  RoPE's cos/sin tables are the canonical case: position and dimension are known
+  at startup, so the whole table is built once. Dequantization lookup tables are
+  another.
+- **Conditional computation** — decide per input whether a component runs at
+  all. **MoE is conditional computation**, and so is early exit; the difference
+  is that one routes across width and the other truncates depth.
+- **Zero-skipping** — do not multiply by zero. At the instruction level this is
+  a loss (the branch costs more than the multiply); at the tile level it is the
+  block-sparsity win above. The scope is what decides whether it helps, which is
+  the same lesson as the sparsity table.
+
+**Approximate caching** relaxes the first one: serve a *near* match rather than
+an exact one. That is [semantic caching](caching.html) at the request level, and
+it is the only entry here that can return a wrong answer — everything else is
+exact by construction.
+
+**Incremental inference** is the umbrella term for the whole family: when the
+input changes slightly, recompute only what depends on the change. Autoregressive
+decoding *is* incremental inference — each step's input is the previous one plus
+a token, which is exactly why a cache works at all.
+
+### Kernel-level rearrangements
+
+Three more that complete the kernel vocabulary from §3e:
+
+- **Kernel fission** splits one kernel into several — the inverse of fusion, and
+  the right move when a fused kernel spills registers or its stages need
+  different tile shapes. Fusion is not monotonically good.
+- **Operator reordering** moves operations to expose fusion or improve locality:
+  hoisting a normalization across a reshape so it can fuse with the matmul that
+  follows. This is what a deep-learning compiler spends most of its time doing.
+- **Transpose caching** keeps a transposed copy of a matrix that is read both
+  ways, trading memory for not re-materialising the layout. Worth it when the
+  same weight is consumed in both orientations across a step.
+
+**Data locality** is the constraint under all three. A kernel is fast when the
+data it needs next is already close, and every transformation here — tiling,
+fusion, fission, reordering — is a rearrangement in service of that one fact.
+**FlashInfer** is a current library worth knowing by name: attention and
+sampling kernels built around exactly these choices for serving workloads.
+
 
 ## 4 · UML — where each one intervenes
 
