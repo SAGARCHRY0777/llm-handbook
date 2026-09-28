@@ -2,7 +2,7 @@
 title: Multimodal & vision-language
 slug: multimodal
 module: foundations
-order: 7
+order: 8
 status: live
 level: intermediate → advanced
 summary: Models that see, what that costs in tokens, and where a purpose-built vision model still wins outright.

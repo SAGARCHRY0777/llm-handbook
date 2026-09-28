@@ -2,7 +2,7 @@
 title: Long context
 slug: long-context
 module: foundations
-order: 8
+order: 9
 status: live
 level: intermediate → advanced
 summary: Why a 200k window does not replace retrieval, and how to decide between them with a measurement rather than an opinion.

@@ -270,6 +270,10 @@ prefix — often the single largest cost saving available. And measure whether t
 long version actually beats the short one; frequently it does not, because
 instructions accreted over months without anyone testing removal.
 
+The document itself — how long it should be, what order to put things in, and
+why roughly three quarters of a deployed one turns out to be tool definitions —
+is [system prompts](system-prompts.html).
+
 **When prompting is the wrong tool.** If you are on your fifteenth prompt
 revision and still failing, the problem is usually not the prompt. It is
 retrieval that never supplied the answer, a task that needs decomposing into

@@ -2,7 +2,7 @@
 title: Reasoning models & test-time compute
 slug: reasoning-models
 module: foundations
-order: 9
+order: 10
 status: live
 level: intermediate → advanced
 summary: Models that think before answering, what that buys, and the large set of tasks where it buys nothing.

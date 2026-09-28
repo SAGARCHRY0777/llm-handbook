@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>System prompts · LLM Handbook</title>
+<meta name="description" content="What is actually in the context before your first token — measured from published prompts across two vendors — and why the leaked ones are mostly scaffolding you never inherit.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%231F4E79'/%3E%3Crect x='7' y='8' width='18' height='3' rx='1.5' fill='%23fff'/%3E%3Crect x='7' y='14' width='12' height='3' rx='1.5' fill='%23A9CCEC'/%3E%3Crect x='7' y='20' width='15' height='3' rx='1.5' fill='%237FB2E0'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="style.css">
+<script>
+  // Applied before first paint so the page never flashes the wrong theme.
+  (function () {
+    try {
+      var t = localStorage.getItem("llm-handbook:theme");
+      if (t === "light" || t === "dark") document.documentElement.setAttribute("data-theme", t);
+    } catch (e) {}
+  })();
+</script>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="topbar">
+  <button class="menu-btn" id="menu-btn" aria-label="Open navigation" aria-expanded="false">☰</button>
+  <a class="brand" href="index.html">LLM&nbsp;Handbook</a>
+  <div class="search-wrap">
+    <input id="search" type="search" placeholder="Search the handbook…" autocomplete="off"
+           aria-label="Search" aria-controls="results" aria-expanded="false">
+    <div id="results" class="results" role="listbox" hidden></div>
+  </div>
+  <button class="theme-btn" id="theme-btn" aria-label="Switch theme">◐</button>
+</header>
+
+<div class="shell">
+  <aside class="sidebar" id="sidebar"><div class="nav-group"><div class="nav-group-title">Start here</div><ul><li><a href="index.html">Start here</a></li></ul></div><div class="nav-group"><div class="nav-group-title">LLM foundations</div><ul><li><a href="transformers.html">Transformers & attention</a></li><li><a href="tokenization.html">Tokenization</a></li><li><a href="decoding.html">Decoding & sampling</a></li><li><a href="model-selection.html">LLM APIs & model selection</a></li><li><a href="prompt-engineering.html">Prompt engineering & structured output</a></li><li><a href="system-prompts.html" class="active">System prompts</a></li><li><a href="multimodal.html">Multimodal & vision-language</a></li><li><a href="long-context.html">Long context</a></li><li><a href="reasoning-models.html">Reasoning models & test-time compute</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Retrieval & advanced RAG</div><ul><li><a href="chunking.html">Chunking & ingestion</a></li><li><a href="embeddings-and-vector-databases.html">Embeddings & vector databases</a></li><li><a href="reranking.html">Reranking & filtering</a></li><li><a href="text2sql.html">Text2SQL & structured data</a></li><li><a href="graphrag.html">GraphRAG & knowledge graphs</a></li><li><a href="query-transformation.html">Query transformation & HyDE</a></li><li><a href="corrective-rag.html">Corrective & self-RAG</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Evaluation & judging</div><ul><li><a href="llm-as-a-judge.html">LLM as a judge</a></li><li><a href="drift-detection.html">Drift detection</a></li><li><a href="regression-gates.html">Regression gates in CI</a></li><li><a href="bias-and-explainability.html">Bias monitoring & explainability</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Inference optimization</div><ul><li><a href="quantization.html">Quantization</a></li><li><a href="distillation-and-pruning.html">Distillation & pruning</a></li><li><a href="kv-cache.html">KV cache optimization</a></li><li><a href="reasoning-inference-optimization.html">Reasoning inference optimization</a></li><li><a href="kernel-and-attention-optimization.html">Kernel & attention optimization</a></li><li><a href="kv-reuse.html">KV reuse beyond the exact prefix</a></li><li><a href="model-shape.html">Reading a model config</a></li><li><a href="ensembles-and-routing.html">Ensembles, cascades & routing</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Orchestration frameworks</div><ul><li><a href="orchestration-frameworks.html">Orchestration frameworks</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Agents & safety</div><ul><li><a href="agents.html">Agents & tool use</a></li><li><a href="guardrails-and-security.html">Guardrails & security</a></li><li><a href="harness-and-loops.html">Harness & loop engineering</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Training & adaptation</div><ul><li><a href="fine-tuning.html">Fine-tuning & adaptation</a></li><li><a href="synthetic-data.html">Synthetic data generation</a></li><li><a href="training-methods.html">The 20 ways to train a model</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Deployment & operations</div><ul><li><a href="serving-and-operations.html">Serving & operations</a></li><li><a href="caching.html">Caching strategies</a></li><li><a href="parallelism.html">Parallelism & distributed inference</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Market & business</div><ul><li><a href="market-and-business.html">Market & business of LLMs</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Practice & interviews</div><ul><li><a href="system-design-walkthroughs.html">System design walkthroughs</a></li><li><a href="interview-questions.html">Interview question bank</a></li><li><a href="learning-paths.html">Learning paths</a></li></ul></div><div class="nav-group"><div class="nav-group-title">Reference</div><ul><li><a href="glossary.html">Glossary</a></li><li><a href="papers.html">Research papers</a></li><li><a href="numbers-to-know.html">Numbers to know</a></li><li><a href="anti-patterns.html">Anti-patterns</a></li></ul></div></aside>
+
+  <main id="main" class="main">
+    <article class="prose"><h1 id="system-prompts"><a class="anchor" href="#system-prompts">#</a>System prompts</h1><blockquote>
+<p><strong>The one sentence:</strong> the &quot;system prompt&quot; you read about in a leak and the
+system prompt you get from an API differ by more than two orders of magnitude,
+because almost all of the former is product scaffolding and tool definitions
+that a raw API call does not include.</p>
+</blockquote>
+<p><a href="prompt-engineering.html">Prompt engineering</a> covers the techniques that survive
+measurement. This page is about the artifact itself: what goes in it, in what
+order, how long it should be, and how to read the published and extracted ones
+without drawing the wrong conclusion.</p>
+<p>Every figure below is a <strong>file size in bytes</strong> from a public corpus, chosen
+because it is the one property of these documents that is objectively checkable
+and reproducible. Divide by roughly 4 for a token estimate.</p>
+<hr>
+<h2 id="1-diagram"><a class="anchor" href="#1-diagram">#</a>1 · Diagram</h2><pre class="code"><code>  WHAT THE MODEL SEES BEFORE YOUR FIRST TOKEN
+
+  ┌──────────────────────────────────────────────────────────┐
+  │  1. identity / role        &quot;you are ...&quot;                 │  small
+  │  2. behavioural rules      tone, refusals, formatting    │  small
+  │  3. product context        date, user tier, surface      │  small
+  │  4. TOOL DEFINITIONS       one schema per tool  ────────►│  LARGE
+  │  5. injected context       retrieved docs, memory        │  varies
+  └──────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+                    then, finally, your message
+
+
+  THE SAME MODEL, THREE WAYS  (bytes)
+
+    published prompt        18,813   ← behaviour only
+    extracted, no tools     49,660   ← + product scaffolding
+    extracted, with tools  179,561   ← + tool schemas
+
+              tools are 72% of what the model actually reads</code></pre><hr>
+<h2 id="2-design-system-prompt-means-two-different-things"><a class="anchor" href="#2-design-system-prompt-means-two-different-things">#</a>2 · Design — "system prompt" means two different things</h2><p>This is the distinction that makes everything else make sense, and almost every
+online discussion of leaked prompts misses it.</p>
+<div class="table-scroll"><table><thead><tr><th></th><th><strong>Published prompt</strong></th><th><strong>Extracted prompt</strong></th></tr></thead><tbody><tr><td>Contains</td><td>Behavioural instructions</td><td>Instructions + tool schemas + product context</td></tr><tr><td>Source</td><td>The vendor, dated and versioned</td><td>Reconstructed by a user, undated</td></tr><tr><td>Verifiable</td><td>Yes</td><td>No</td></tr><tr><td>Claude Opus 4.6</td><td><strong>18,813 B</strong></td><td><strong>179,561 B</strong></td></tr></tbody></table></div><p><strong>They differ by 9.5×, and both are honestly labelled.</strong> The vendor publishes
+the part that describes <em>behaviour</em>. The extracted file also captures the tool
+definitions and product wiring that the deployed surface adds. Neither is lying;
+they are measuring different objects.</p>
+<p>So when someone says &quot;Claude&#39;s system prompt is 180 KB&quot;, the accurate statement
+is: <em>the Claude.ai product sends roughly 180 KB, of which under 11% is the
+behavioural prompt Anthropic publishes.</em></p>
+<h3 id="the-part-nobody-budgets-for-tool-definitions"><a class="anchor" href="#the-part-nobody-budgets-for-tool-definitions">#</a>The part nobody budgets for: tool definitions</h3><p>The corpus contains the controlled comparison — the same model with and without
+tools:</p>
+<div class="table-scroll"><table><thead><tr><th>Model</th><th>No tools</th><th>With tools</th><th>Tools&#39; share</th></tr></thead><tbody><tr><td>Claude Opus 4.6</td><td>49,660 B</td><td>179,561 B</td><td><strong>72%</strong></td></tr><tr><td>Claude Sonnet 4.6</td><td>47,414 B</td><td>174,341 B</td><td><strong>73%</strong></td></tr></tbody></table></div><p>Two independent models, the same answer. <strong>Roughly three quarters of a deployed
+system prompt is tool schemas</strong>, which is the measured version of the claim in
+<a href="harness-and-loops.html">harness &amp; loops</a> that a tool definition <em>is</em> a prompt.
+Every tool you add is permanent context, paid on every request, before the user
+says anything.</p>
+<hr>
+<h2 id="3-the-number-that-should-change-how-you-read-leaks"><a class="anchor" href="#3-the-number-that-should-change-how-you-read-leaks">#</a>3 · The number that should change how you read leaks</h2><p>API prompts and consumer-product prompts are not the same order of magnitude:</p>
+<div class="table-scroll"><table><thead><tr><th>Surface</th><th>Bytes</th><th>≈ tokens</th></tr></thead><tbody><tr><td><code>gpt-5.5-pro-api</code></td><td>835</td><td>~210</td></tr><tr><td><code>gpt-5.5-api</code></td><td>862</td><td>~215</td></tr><tr><td><code>gpt-5.3-codex-api</code></td><td><strong>194</strong></td><td>~50</td></tr><tr><td><code>gpt-5.3-chat-api</code></td><td>2,200</td><td>~550</td></tr><tr><td><code>gpt-5.5-instant</code> (product)</td><td>85,051</td><td>~21,000</td></tr><tr><td><code>gpt-5.5-thinking</code> (product)</td><td>116,100</td><td>~29,000</td></tr><tr><td><code>gpt-5.6-sol</code> (product)</td><td>127,131</td><td>~32,000</td></tr></tbody></table></div><div class="callout warn">
+
+<p><strong>The API gives you a nearly empty system prompt.</strong> <code>gpt-5.5-api</code> at 862 bytes
+against <code>gpt-5.5-thinking</code> at 116,100 is a <strong>135× difference</strong>, and the pattern
+holds across every API/product pair in the corpus. Everything you have read
+about a leaked ChatGPT or Claude.ai prompt — the personality rules, the
+formatting conventions, the tool suite, the safety scaffolding — is <strong>product
+engineering you do not inherit when you call the API.</strong></p>
+<p>That cuts both ways. You do not get their guardrails for free, and you are not
+fighting their instructions either. The behaviour you get from a raw API call is
+much closer to the model itself, which is why the same model can feel different
+through two surfaces.</p>
+</div>
+
+<p>The surface variation <em>within</em> one vendor is nearly as wide: <code>claude-voice-mode</code>
+is <strong>1,085 B</strong> while <code>claude-in-chrome</code> is <strong>74,050 B</strong> — a 68× spread driven
+almost entirely by how many tools the surface exposes.</p>
+<hr>
+<h2 id="4-how-long-should-yours-be"><a class="anchor" href="#4-how-long-should-yours-be">#</a>4 · How long should yours be?</h2><p>The published Claude prompts form a clean time series on a consistent basis:</p>
+<div class="table-scroll"><table><thead><tr><th>Date</th><th>Model</th><th>Bytes</th></tr></thead><tbody><tr><td>2024-07-12</td><td>Claude Opus 3</td><td>2,154</td></tr><tr><td>2025-05-22</td><td>Claude Opus 4</td><td>10,863</td></tr><tr><td>2026-02-05</td><td>Claude Opus 4.6</td><td>18,813</td></tr><tr><td>2026-09-22</td><td>Claude Opus 5.5</td><td>27,216</td></tr></tbody></table></div><p><strong>About 12.6× in twenty-six months</strong>, and the growth is not decoration — it is
+mostly accumulated edge cases, each one a behaviour someone had to specify after
+observing it go wrong.</p>
+<p>Two things follow for your own prompt:</p>
+<ul>
+<li><strong>Starting long is the mistake.</strong> Those documents grew in response to observed
+failures. A 3,000-token prompt written before you have seen your system fail is
+guessing at which edge cases matter, and paying for the guess on every request.</li>
+<li><strong>Every line should have a story.</strong> If you cannot name the failure a sentence
+prevents, it is a candidate for deletion. That is the only reliable pressure
+against monotonic growth, because each individual addition always looks cheap.</li>
+</ul>
+<p>The cost is real and compounding — see
+<a href="prompt-engineering.html">prompt engineering §6</a> on what a long prompt costs per
+request, and <a href="kv-reuse.html">KV reuse</a> on why a <em>stable</em> prefix is worth far
+more than a short one. A 20,000-token system prompt that never changes is
+cheaper than a 2,000-token one that varies per user, because the first is a
+cache hit and the second is not.</p>
+<h3 id="ordering"><a class="anchor" href="#ordering">#</a>Ordering</h3><p>Put the <strong>invariant</strong> parts first and the <strong>variable</strong> parts last. Prefix
+caching matches on an exact prefix, so a date or a user name near the top
+invalidates everything after it. Identity → rules → tools → product context →
+retrieved content → user message, in that order, is both the conventional
+structure and the cache-optimal one.</p>
+<hr>
+<h2 id="5-depth-reading-an-extracted-prompt-without-being-fooled"><a class="anchor" href="#5-depth-reading-an-extracted-prompt-without-being-fooled">#</a>5 · Depth — reading an extracted prompt without being fooled</h2><p>Extracted prompts are useful evidence and unreliable fact. The corpus makes both
+halves visible.</p>
+<p><strong>They are not reproducible.</strong> No capture date, no model build, no method. The
+repository&#39;s own README invites contributors to open a PR &quot;if you got a
+different result&quot;, which is a fair admission that two extractions of the same
+model can disagree. Treat any single file as one observation, not a
+specification.</p>
+<p><strong>Implausible sizes are a signal.</strong> One entry in the corpus,
+<code>claude-projects-thread-claude.md</code>, is <strong>533,064 bytes</strong> — roughly 133,000
+tokens, most of a context window, for something labelled a system prompt. The
+likely explanation is that the capture includes conversation or project content
+rather than only the prompt. When a figure fails a sanity check, the extraction
+is the thing to doubt.</p>
+<p><strong>Prefer the dated ones.</strong> The corpus separates a versioned <code>official/</code> folder
+from the extracted files, and where a vendor publishes its own prompts, those
+are strictly better: dated, attributable, and stable enough to cite.</p>
+<p><strong>What extracted prompts are genuinely good for</strong> is the thing no published
+prompt shows you: the <em>shape</em> of a deployed one. How tools are described, where
+refusal language sits, how much space product context takes, what gets repeated.
+Fifty of them side by side is real evidence about structure, and structure is
+robust to any individual file being slightly wrong.</p>
+<hr>
+<h2 id="6-from-each-seat"><a class="anchor" href="#6-from-each-seat">#</a>6 · From each seat</h2><div class="table-scroll"><table><thead><tr><th>Seat</th><th>What this means here</th></tr></thead><tbody><tr><td><strong>User</strong></td><td>Never sees it, and it shapes everything — including why the same model feels different in two apps.</td></tr><tr><td><strong>Coder</strong></td><td>Your tool schemas are ~72% of the prompt. Writing a tool description badly is the same mistake as writing the prompt badly, and costs the same tokens.</td></tr><tr><td><strong>Tester</strong></td><td>The prompt is an input. Version it, diff it, and re-run your evals when it changes — a prompt edit is a deploy.</td></tr><tr><td><strong>System designer</strong></td><td>Order by volatility: invariant first, per-request last. That single decision determines whether prefix caching works at all.</td></tr><tr><td><strong>Architect</strong></td><td>Calling the API means building the scaffolding yourself. The 135× gap between an API prompt and a product prompt is the work the product team did that you now own.</td></tr><tr><td><strong>CEO</strong></td><td>It is paid on every request, forever. A 20k-token prompt at a million requests a day is a permanent line item, and the fix is deletion, not a discount.</td></tr><tr><td><strong>Market</strong></td><td>&quot;Leaked system prompt&quot; headlines almost always describe product scaffolding, not a model. The interesting comparison is between surfaces, not vendors.</td></tr></tbody></table></div><hr>
+<h2 id="7-interview-questions"><a class="anchor" href="#7-interview-questions">#</a>7 · Interview questions</h2><p><strong>&quot;How long should a system prompt be?&quot;</strong>
+Shorter than you think, and it will grow anyway. Published Claude prompts went
+from ~2 KB to ~27 KB in two years, and that growth came from specified edge
+cases rather than design. Start with what you can justify, add only in response
+to an observed failure, and keep the order stable so it caches. A long stable
+prompt beats a short volatile one on cost.</p>
+<p><strong>&quot;Does the API give me the same system prompt as the chat product?&quot;</strong>
+No, and the gap is enormous — around 862 bytes against 116,000 for one recent
+OpenAI pair, roughly 135×. Consumer products ship extensive scaffolding: tools,
+personality, formatting, safety layers. Through the API you inherit none of it,
+which means neither their guardrails nor their constraints. That is the main
+reason the same model behaves differently through two surfaces.</p>
+<p><strong>&quot;Where does most of a deployed system prompt go?&quot;</strong>
+Tool definitions. The same Claude model measured with and without tools is
+49,660 versus 179,561 bytes — tools are about 72% of it, and the figure
+reproduces on a second model. Adding a tool is a permanent context cost, paid
+before the user has said anything.</p>
+<p><strong>&quot;How would you order a system prompt?&quot;</strong>
+By volatility, invariant first. Identity, rules and tool schemas do not change;
+the date, the user and retrieved documents do. Prefix caching matches on an
+exact prefix, so one variable token near the top invalidates the cache for
+everything below it — which turns an ordering preference into a measurable bill.</p>
+<hr>
+<h2 id="stop-condition"><a class="anchor" href="#stop-condition">#</a>Stop condition</h2><p>You are done with this page when you can:</p>
+<ul>
+<li>State the difference between a published and an extracted system prompt, and why they differ by ~10×</li>
+<li>Say what fraction of a deployed prompt is tool definitions, and why that matters for adding tools</li>
+<li>Explain why an API call and a chat product behave differently with the same model</li>
+<li>Order a system prompt by volatility, and say what that buys</li>
+<li>Read a leaked prompt as evidence of structure rather than as a specification</li>
+</ul>
+<hr>
+<h2 id="sources-worth-reading"><a class="anchor" href="#sources-worth-reading">#</a>Sources worth reading</h2><ul>
+<li><strong>Anthropic&#39;s published system prompts</strong> — dated and versioned in the release notes. Where a vendor publishes its own, that is the citable source.</li>
+<li><strong><a href="https://github.com/asgeirtj/system_prompts_leaks">asgeirtj/system_prompts_leaks</a></strong> — the corpus every measurement on this page comes from. CC0. Useful as evidence of <em>shape</em> across ~50 systems; its extracted entries are undated reconstructions and should be read as observations, not specifications. Note that it separates a versioned <code>official/</code> folder, which is the half to trust.</li>
+<li><strong><a href="prompt-engineering.html">Prompt engineering</a></strong> for the techniques that go inside the document, and <strong><a href="kv-reuse.html">KV reuse</a></strong> for why a stable prefix is worth more than a short one.</li>
+</ul>
+<p>Related: <a href="harness-and-loops.html">Harness &amp; loops</a> — the system prompt is one
+component of a harness, and tool schemas are another ·
+<a href="guardrails-and-security.html">Guardrails &amp; security</a> for why instructions in a
+prompt are not a security boundary · <a href="caching.html">Caching</a> for what a stable
+prefix is worth in money.</p>
+</article>
+    <div class="pager-row"><a class="pager previous" href="prompt-engineering.html"><span>previous</span>Prompt engineering & structured output</a><a class="pager next" href="multimodal.html"><span>next</span>Multimodal & vision-language</a></div>
+  </main>
+
+  <nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul><li class="d2"><a href="#1-diagram">1 · Diagram</a></li><li class="d2"><a href="#2-design-system-prompt-means-two-different-things">2 · Design — &quot;system prompt&quot; means two different things</a></li><li class="d3"><a href="#the-part-nobody-budgets-for-tool-definitions">The part nobody budgets for: tool definitions</a></li><li class="d2"><a href="#3-the-number-that-should-change-how-you-read-leaks">3 · The number that should change how you read leaks</a></li><li class="d2"><a href="#4-how-long-should-yours-be">4 · How long should yours be?</a></li><li class="d3"><a href="#ordering">Ordering</a></li><li class="d2"><a href="#5-depth-reading-an-extracted-prompt-without-being-fooled">5 · Depth — reading an extracted prompt without being fooled</a></li><li class="d2"><a href="#6-from-each-seat">6 · From each seat</a></li><li class="d2"><a href="#7-interview-questions">7 · Interview questions</a></li><li class="d2"><a href="#stop-condition">Stop condition</a></li><li class="d2"><a href="#sources-worth-reading">Sources worth reading</a></li></ul></nav>
+</div>
+
+<script type="module">
+  import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+  window.__mermaid = mermaid;
+  const dark = () => {
+    const explicit = document.documentElement.getAttribute("data-theme");
+    if (explicit) return explicit === "dark";
+    return matchMedia("(prefers-color-scheme: dark)").matches;
+  };
+  const start = () => {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: dark() ? "dark" : "neutral",
+      securityLevel: "strict",
+      fontFamily: "IBM Plex Sans, system-ui, sans-serif",
+    });
+    mermaid.run({ querySelector: "pre.mermaid" });
+  };
+  start();
+  // Diagrams carry their own colours, so they have to be re-rendered when the
+  // reader flips the theme rather than restyled by CSS.
+  window.addEventListener("themechange", () => {
+    document.querySelectorAll("pre.mermaid").forEach((el) => {
+      if (el.dataset.src) { el.innerHTML = el.dataset.src; el.removeAttribute("data-processed"); }
+    });
+    start();
+  });
+</script>
+<script src="app.js"></script>
+<script src="widgets.js"></script>
+<script src="labs.js"></script>
+<script src="sims.js"></script>
+<script src="simdefs.js"></script>
+</body>
+</html>
