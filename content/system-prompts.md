@@ -54,6 +54,12 @@ and reproducible. Divide by roughly 4 for a token estimate.
 
 ---
 
+```sim
+promptstack
+```
+
+---
+
 ## 2 · Design — "system prompt" means two different things
 
 This is the distinction that makes everything else make sense, and almost every

@@ -28196,4 +28196,249 @@ S["sqlgen"] = {
     }
   };
 
+  // ======================================================================
+  // SIM · promptstack  (system-prompts.md)
+  // Every figure is a file size in bytes from the public corpus the page
+  // cites, and the derived layers are subtractions between measured files:
+  //   behaviour        official 2026-02-05-claude-opus-4.6.md      18,813
+  //   + product        claude-opus-4.6-no-tools.md   49,660  ->  30,847
+  //   + tool schemas   claude-opus-4.6.md           179,561  -> 129,901
+  // 129,901 / 179,561 = 72.3%, and the same subtraction on Sonnet 4.6
+  // (47,414 / 174,341) gives 72.8% -- two models, one answer, which is why
+  // the page states the tool share as a measurement rather than an estimate.
+  // ======================================================================
+  var promptstack_BYTES_PER_TOK = 4;      // rough English ratio, stated on the page
+
+  function promptstack_fmt(n) {
+    return n.toLocaleString("en-US");
+  }
+  function promptstack_tok(n) {
+    var t = Math.round(n / promptstack_BYTES_PER_TOK / 100) * 100;
+    return "~" + t.toLocaleString("en-US") + " tok";
+  }
+
+  // --- tab 1: the layers stacking up ------------------------------------
+  var promptstack_L = [
+    { name: "behaviour", bytes: 18813, flag: "ok",
+      note: "What the vendor publishes: tone, refusals, formatting, the dated file in <code>official/</code>." },
+    { name: "product", bytes: 30847, flag: "warn",
+      note: "Surface wiring the deployed app adds: date, user tier, artifact rules, product conventions." },
+    { name: "tool schemas", bytes: 129901, flag: "bad",
+      note: "One definition per tool. The largest layer, and the one nobody budgets for." }
+  ];
+
+  function promptstack_layers() {
+    var steps = [{
+      shown: 0, caption: "Claude Opus 4.6, before anything is added. Press Play to stack the " +
+        "layers the deployed product actually sends."
+    }];
+    var cum = 0;
+    for (var i = 0; i < promptstack_L.length; i++) {
+      cum += promptstack_L[i].bytes;
+      steps.push({
+        shown: i + 1,
+        caption: "<b>+ " + promptstack_L[i].name + " — " + promptstack_fmt(promptstack_L[i].bytes) +
+          " bytes.</b> " + promptstack_L[i].note + " Running total <b>" + promptstack_fmt(cum) +
+          "</b> (" + promptstack_tok(cum) + ").",
+        flag: promptstack_L[i].flag
+      });
+    }
+    steps.push({
+      shown: 3, done: true,
+      caption: "<b>179,561 bytes before the user has said anything</b> — and " +
+        "<b>72%</b> of it is tool definitions. Subtract the same way on Sonnet 4.6 and you get " +
+        "73%. Two models, one answer: a tool is not a feature you add, it is permanent context " +
+        "you pay for on every request.",
+      flag: "bad"
+    });
+    return { id: "layers", label: "What the model reads", steps: steps,
+             phases: ["empty", "behaviour", "product", "tools", "total"] };
+  }
+
+  // --- tab 2: the same model, two surfaces -------------------------------
+  var promptstack_SURF = [
+    { name: "gpt-5.3-codex-api", bytes: 194, kind: "api" },
+    { name: "gpt-5.5-pro-api", bytes: 835, kind: "api" },
+    { name: "gpt-5.5-api", bytes: 862, kind: "api" },
+    { name: "gpt-5.3-chat-api", bytes: 2200, kind: "api" },
+    { name: "gpt-5.5-instant", bytes: 85051, kind: "product" },
+    { name: "gpt-5.5-thinking", bytes: 116100, kind: "product" },
+    { name: "gpt-5.6-sol", bytes: 127131, kind: "product" }
+  ];
+
+  function promptstack_surfaces() {
+    var ratio = 116100 / 862;
+    var S = [
+      [0, "Seven OpenAI surfaces from the same corpus. Press Play to reveal them in size order."],
+      [3, "<b>The API prompts.</b> 194 to 2,200 bytes — <code>gpt-5.3-codex-api</code> is " +
+          "<b>194 bytes</b>, about fifty tokens. Call the API and this is essentially all the " +
+          "instruction the model carries.", "ok"],
+      [5, "<b>Then the consumer products.</b> <code>gpt-5.5-instant</code> is <b>85,051</b> and " +
+          "<code>gpt-5.5-thinking</code> <b>116,100</b> — personality, formatting, safety " +
+          "layers, and a tool suite.", "warn"],
+      [7, "<b>gpt-5.6-sol reaches 127,131 bytes</b>, roughly 32,000 tokens spent before the " +
+          "conversation starts.", "bad"],
+      [7, "<b>" + ratio.toFixed(0) + "× between an API prompt and its product sibling.</b> " +
+          "Everything you have read about a leaked chat prompt is product engineering you do " +
+          "<i>not</i> inherit through the API — not their guardrails, and not their constraints " +
+          "either. That gap is why one model feels like two.", "bad"]
+    ];
+    var steps = [];
+    for (var i = 0; i < S.length; i++) {
+      steps.push({ shown: S[i][0], caption: S[i][1], flag: S[i][2], surf: true,
+                   done: i === S.length - 1 });
+    }
+    return { id: "surfaces", label: "API vs product", steps: steps,
+             phases: ["start", "the APIs", "the products", "the largest", "the gap"] };
+  }
+
+  // --- tab 3: what it costs over time ------------------------------------
+  var promptstack_HIST = [
+    { date: "2024-07", model: "Opus 3", bytes: 2154 },
+    { date: "2025-05", model: "Opus 4", bytes: 10863 },
+    { date: "2026-02", model: "Opus 4.6", bytes: 18813 },
+    { date: "2026-09", model: "Opus 5.5", bytes: 27216 }
+  ];
+
+  function promptstack_growth() {
+    var steps = [{ shown: 0, hist: true,
+      caption: "Anthropic's <i>published</i> prompts, dated and comparable — the one series in " +
+        "the corpus measured on a consistent basis." }];
+    for (var i = 0; i < promptstack_HIST.length; i++) {
+      var h = promptstack_HIST[i];
+      var mult = h.bytes / promptstack_HIST[0].bytes;
+      steps.push({
+        shown: i + 1, hist: true,
+        caption: "<b>" + h.date + " · " + h.model + " — " + promptstack_fmt(h.bytes) +
+          " bytes</b>" + (i === 0 ? ". The baseline." : ", <b>" + mult.toFixed(1) +
+          "×</b> the 2024 prompt."),
+        flag: i >= 3 ? "warn" : i >= 1 ? undefined : "ok"
+      });
+    }
+    steps.push({
+      shown: 4, hist: true, done: true,
+      caption: "<b>12.6× in twenty-six months</b>, and none of it decoration — it is accumulated " +
+        "edge cases, each one a behaviour somebody had to specify after watching it go wrong. " +
+        "Which is the argument against writing a long prompt <i>first</i>: those documents " +
+        "earned their length, and yours has not yet.",
+      flag: "warn"
+    });
+    return { id: "growth", label: "Growth over time", steps: steps,
+             phases: ["series", "2024", "2025", "2026-02", "2026-09", "verdict"] };
+  }
+
+  S["promptstack"] = {
+    title: "Stack up what the model actually reads",
+    note: "Every figure is a <b>file size in bytes</b> from the public corpus of published and " +
+      "extracted system prompts — size being the one property of these documents that is " +
+      "objectively checkable. Divide by about 4 for tokens. The layer sizes are subtractions " +
+      "between measured files, not estimates.",
+    interval: 1500,
+    scenarios: [promptstack_layers(), promptstack_surfaces(), promptstack_growth()],
+
+    draw: function (step, d, ctx) {
+      var i, total;
+
+      // --- tab 2: surfaces -------------------------------------------
+      if (step.surf) {
+        var maxB = 127131, bars = [];
+        for (i = 0; i < promptstack_SURF.length && i < step.shown; i++) {
+          var s = promptstack_SURF[i];
+          bars.push(d.bar({
+            label: s.name,
+            pct: (s.bytes / maxB) * 100,
+            value: promptstack_fmt(s.bytes),
+            flag: s.kind === "api" ? "ok" : "bad"
+          }));
+        }
+        if (!bars.length) bars.push(d.note("Nothing revealed yet."));
+        return d.stack([
+          d.cols([
+            d.big(step.shown >= 3 ? "862 B" : "—", "gpt-5.5-api", "ok"),
+            d.big(step.shown >= 5 ? promptstack_fmt(116100) + " B" : "—", "gpt-5.5-thinking",
+                  step.shown >= 5 ? "bad" : undefined),
+            d.node({
+              title: "the gap",
+              status: step.done ? "135×" : "—",
+              statusFlag: step.done ? "bad" : "idle",
+              flag: step.done ? "bad" : "idle",
+              rows: [{ label: "API inherits", value: step.done ? "none of it" : "—",
+                       flag: step.done ? "bad" : undefined }]
+            })
+          ]),
+          d.stack(bars),
+          d.note("Green is an API surface · red is a consumer product. Same vendor, same models.")
+        ]);
+      }
+
+      // --- tab 3: growth ---------------------------------------------
+      if (step.hist) {
+        var hmax = 27216, hb = [];
+        for (i = 0; i < promptstack_HIST.length && i < step.shown; i++) {
+          var h = promptstack_HIST[i];
+          hb.push(d.bar({
+            label: h.date + "  " + h.model,
+            pct: (h.bytes / hmax) * 100,
+            value: promptstack_fmt(h.bytes),
+            flag: i === 0 ? "ok" : i === promptstack_HIST.length - 1 ? "warn" : undefined
+          }));
+        }
+        if (!hb.length) hb.push(d.note("Press Play to walk the series."));
+        var latest = step.shown > 0 ? promptstack_HIST[Math.min(step.shown, 4) - 1] : null;
+        return d.stack([
+          d.cols([
+            d.big(latest ? promptstack_fmt(latest.bytes) : "—", "bytes",
+                  step.done ? "warn" : undefined),
+            d.big(latest ? (latest.bytes / 2154).toFixed(1) + "×" : "—", "vs 2024",
+                  step.done ? "warn" : undefined),
+            d.stat({ label: "span", value: step.done ? "26 months" : "—",
+                     sub: "Opus 3 → Opus 5.5" })
+          ]),
+          d.stack(hb),
+          d.note("These are the <b>published</b> prompts — behaviour only, no tool schemas — " +
+            "which is what makes them comparable across two years.")
+        ]);
+      }
+
+      // --- tab 1: the layers -----------------------------------------
+      var cells = [], cum = 0;
+      for (i = 0; i < promptstack_L.length; i++) {
+        var on = i < step.shown;
+        if (on) cum += promptstack_L[i].bytes;
+        cells.push(d.bar({
+          label: promptstack_L[i].name,
+          pct: on ? (promptstack_L[i].bytes / 179561) * 100 : 0,
+          value: on ? promptstack_fmt(promptstack_L[i].bytes) : "—",
+          flag: on ? promptstack_L[i].flag : "idle"
+        }));
+      }
+      total = cum;
+      var toolShare = total ? (step.shown >= 3 ? (129901 / 179561) * 100 : 0) : 0;
+
+      return d.stack([
+        d.cols([
+          d.big(promptstack_fmt(total), "bytes so far", step.done ? "bad" : undefined),
+          d.big(total ? promptstack_tok(total) : "—", "approx tokens"),
+          d.node({
+            title: "tool share",
+            status: step.shown >= 3 ? toolShare.toFixed(0) + "%" : "—",
+            statusFlag: step.shown >= 3 ? "bad" : "idle",
+            flag: step.shown >= 3 ? "bad" : "idle",
+            rows: [
+              { label: "Opus 4.6", value: step.shown >= 3 ? "72%" : "—",
+                flag: step.shown >= 3 ? "bad" : undefined },
+              { label: "Sonnet 4.6", value: step.done ? "73%" : "—",
+                flag: step.done ? "bad" : undefined }
+            ]
+          })
+        ]),
+        d.stack(cells),
+        step.done
+          ? d.note("The published prompt is <b>10.5%</b> of this. When someone says a system " +
+              "prompt is 180 KB, that is the product — not the prompt.", "bad")
+          : d.note("Each bar is scaled against the 179,561-byte total.")
+      ]);
+    }
+  };
+
 })();
