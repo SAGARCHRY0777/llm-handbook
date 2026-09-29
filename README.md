@@ -5,7 +5,7 @@ LLM systems. Every topic is written at three depths — basic, intermediate,
 advanced — and examined from **seven seats**: user, coder, tester, system
 designer, architect, CEO, and market.
 
-**Live site:** https://SAGARCHRY0777.github.io/llm-handbook/
+**Read it here → [sagarchry0777.github.io/llm-handbook](https://sagarchry0777.github.io/llm-handbook/)**
 
 ---
 
