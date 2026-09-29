@@ -1,4 +1,4 @@
 User-agent: *
 Allow: /
 
-Sitemap: https://SAGARCHRY0777.github.io/llm-handbook/sitemap.xml
+Sitemap: https://sagarchry0777.github.io/llm-handbook/sitemap.xml
