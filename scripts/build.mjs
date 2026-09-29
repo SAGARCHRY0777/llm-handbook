@@ -179,6 +179,78 @@ function tocHtml(headings) {
   return `<nav class="toc" aria-label="On this page"><div class="toc-title">On this page</div><ul>${items}</ul></nav>`;
 }
 
+
+// ---------------------------------------------------------------------------
+// Crawler and share-preview metadata.
+//
+// The site is static and served from GitHub Pages, so nothing generates these
+// at request time -- they are written into every page at build time. Without
+// them the pages are reachable but effectively undiscoverable: no canonical
+// URL, no sitemap, and every shared link renders as a bare URL.
+//
+// SITE_URL comes from package.json "homepage" so each handbook has one source
+// of truth for its own address.
+// ---------------------------------------------------------------------------
+const PKG = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf8"));
+const SITE_URL = (PKG.homepage || "").replace(/\/?$/, "/");
+
+function absUrl(slug) {
+  return SITE_URL + (slug === "index" ? "" : slug + ".html");
+}
+
+function seoBlock(page, siteName) {
+  if (!SITE_URL) return "";
+  const url = absUrl(page.slug);
+  const title = `${page.title} · ${siteName}`;
+  const desc = page.summary || "";
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "TechArticle",
+    headline: page.title,
+    description: desc,
+    url,
+    isPartOf: { "@type": "WebSite", name: siteName, url: SITE_URL },
+    inLanguage: "en",
+  };
+  return [
+    `<link rel="canonical" href="${escapeHtml(url)}">`,
+    `<meta property="og:type" content="article">`,
+    `<meta property="og:site_name" content="${escapeHtml(siteName)}">`,
+    `<meta property="og:title" content="${escapeHtml(title)}">`,
+    `<meta property="og:description" content="${escapeHtml(desc)}">`,
+    `<meta property="og:url" content="${escapeHtml(url)}">`,
+    `<meta property="og:image" content="${escapeHtml(SITE_URL + "social-card.png")}">`,
+    `<meta property="og:image:width" content="1200">`,
+    `<meta property="og:image:height" content="630">`,
+    `<meta name="twitter:card" content="summary_large_image">`,
+    `<meta name="twitter:image" content="${escapeHtml(SITE_URL + "social-card.png")}">`,
+    `<meta name="twitter:title" content="${escapeHtml(title)}">`,
+    `<meta name="twitter:description" content="${escapeHtml(desc)}">`,
+    `<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>`,
+  ].join("\n");
+}
+
+function writeSitemap(pages) {
+  if (!SITE_URL) return 0;
+  const today = new Date().toISOString().slice(0, 10);
+  const urls = ["index", ...pages.map((p) => p.slug).filter((s) => s !== "index")];
+  const body = urls
+    .map((slug) =>
+      `  <url>\n    <loc>${absUrl(slug)}</loc>\n    <lastmod>${today}</lastmod>\n` +
+      `    <changefreq>monthly</changefreq>\n    <priority>${slug === "index" ? "1.0" : "0.8"}</priority>\n  </url>`
+    )
+    .join("\n");
+  writeFileSync(
+    join(OUT, "sitemap.xml"),
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${body}\n</urlset>\n`
+  );
+  writeFileSync(
+    join(OUT, "robots.txt"),
+    `User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}sitemap.xml\n`
+  );
+  return urls.length;
+}
+
 function render(template, page, pages) {
   const prevNext = (() => {
     const index = pages.findIndex((p) => p.slug === page.slug);
@@ -196,6 +268,7 @@ function render(template, page, pages) {
     .replaceAll("{{toc}}", tocHtml(page.headings))
     .replaceAll("{{content}}", page.html)
     .replaceAll("{{pager}}", prevNext)
+    .replaceAll("{{seo}}", seoBlock(page, "LLM Handbook"))
     .replaceAll("{{slug}}", page.slug);
 }
 
@@ -233,11 +306,12 @@ function build() {
     )
   );
 
-  for (const asset of ["style.css", "app.js", "widgets.js", "labs.js", "sims.js", "simdefs.js"]) {
+  for (const asset of ["style.css", "app.js", "widgets.js", "labs.js", "sims.js", "simdefs.js", "social-card.png"]) {
     if (existsSync(join(SITE, asset))) cpSync(join(SITE, asset), join(OUT, asset));
   }
   // Pages would otherwise run the output through Jekyll and drop _-prefixed paths.
   writeFileSync(join(OUT, ".nojekyll"), "");
+  const sitemapCount = writeSitemap(pages);
 
   const drafts = pages.filter((p) => p.status === "draft").length;
   console.log(`built ${pages.length} pages -> docs/  (${drafts} still marked draft)`);
