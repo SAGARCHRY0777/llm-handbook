@@ -54,6 +54,12 @@ synthgen
 
 ---
 
+```lab
+dedup
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate — the three uses, in descending order of how well it works.**

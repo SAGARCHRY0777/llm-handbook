@@ -2717,6 +2717,251 @@
   }
 
   // ======================================================================
+  // LAB · cachesim  (caching.md)
+  // Three eviction policies run against the same trace, in your browser.
+  // Not a hit-rate formula -- the actual eviction loops, so the answer
+  // depends on the ORDER of your requests, which is the whole point: LRU
+  // wins on locality and loses on a scan, and a formula cannot show that.
+  // ======================================================================
+  function cachesim_keys(text) {
+    return String(text).split(/[\s,;\r\n\t]+/).filter(Boolean);
+  }
+
+  function cachesim_run(keys, cap, policy) {
+    var store = [], freq = {}, hits = 0, evictions = 0, timeline = [];
+    for (var i = 0; i < keys.length; i++) {
+      var k = keys[i], at = store.indexOf(k);
+      if (at >= 0) {
+        hits++;
+        timeline.push("hit");
+        if (policy === "lru") { store.splice(at, 1); store.push(k); }
+        freq[k] = (freq[k] || 0) + 1;
+        continue;
+      }
+      timeline.push("miss");
+      freq[k] = (freq[k] || 0) + 1;
+      if (store.length >= cap) {
+        evictions++;
+        if (policy === "lfu") {
+          var worst = 0;
+          for (var j = 1; j < store.length; j++) {
+            if ((freq[store[j]] || 0) < (freq[store[worst]] || 0)) worst = j;
+          }
+          store.splice(worst, 1);
+        } else {
+          store.shift();            // FIFO and LRU both drop the front
+        }
+      }
+      store.push(k);
+    }
+    return { hits: hits, n: keys.length, evictions: evictions,
+             rate: keys.length ? hits / keys.length : 0, timeline: timeline, store: store };
+  }
+
+  function cachesim(host, h) {
+    h.panel({
+      title: "Run three eviction policies on your own trace",
+      note: "Paste a request trace — one key per token, in the order they arrive. This runs " +
+        "<b>LRU</b>, <b>LFU</b> and <b>FIFO</b> as real eviction loops against it, so the answer " +
+        "depends on the <i>order</i> of your requests and not just their frequency. The default " +
+        "trace has a hot set plus a scan through cold keys, which is the pattern that separates " +
+        "the three.",
+    });
+
+    var trace = h.textarea({
+      label: "request trace", rows: 4,
+      value: "a b c a b c a b c d e f g h i a b c a b c j k l a b c",
+    });
+    var cap = h.range({ label: "cache capacity (keys)", min: 1, max: 12, value: 3 });
+
+    h.on(function () {
+      var keys = cachesim_keys(trace.value);
+      if (keys.length < 3) {
+        h.render(h.note("Paste at least three keys.", "warn"));
+        return;
+      }
+      var C = Math.round(Number(cap.value));
+      var uniq = {}, i;
+      for (i = 0; i < keys.length; i++) uniq[keys[i]] = 1;
+      var nUniq = Object.keys(uniq).length;
+
+      var runs = [
+        { name: "LRU", r: cachesim_run(keys, C, "lru") },
+        { name: "LFU", r: cachesim_run(keys, C, "lfu") },
+        { name: "FIFO", r: cachesim_run(keys, C, "fifo") },
+      ];
+      var best = runs[0];
+      for (i = 1; i < runs.length; i++) if (runs[i].r.rate > best.r.rate) best = runs[i];
+      var worst = runs[0];
+      for (i = 1; i < runs.length; i++) if (runs[i].r.rate < worst.r.rate) worst = runs[i];
+
+      var rows = runs.map(function (x) {
+        return [x.name, x.r.hits + "/" + x.r.n, (x.r.rate * 100).toFixed(1) + "%",
+                String(x.r.evictions)];
+      });
+      var bars = runs.map(function (x) {
+        return { label: x.name, value: x.r.rate * 100, max: 100,
+                 text: (x.r.rate * 100).toFixed(1) + "%",
+                 flag: x === best ? "ok" : x === worst ? "bad" : undefined };
+      });
+
+      var chips = best.r.timeline.slice(0, 40).map(function (t, idx) {
+        return { label: keys[idx], flag: t === "hit" ? "ok" : "bad" };
+      });
+
+      h.render(
+        h.big(best.name + "  " + (best.r.rate * 100).toFixed(1) + "%", "best policy on this trace", "ok") +
+        h.row("requests", h.fmt(keys.length)) +
+        h.row("distinct keys", String(nUniq) + (nUniq <= C ? "  (all fit — nothing to evict)" : ""),
+          nUniq <= C ? "warn" : undefined) +
+        h.row("capacity", String(C) + " of " + nUniq + " keys  (" +
+          ((C / nUniq) * 100).toFixed(0) + "% of the working set)") +
+        h.row("spread between best and worst",
+          ((best.r.rate - worst.r.rate) * 100).toFixed(1) + " points",
+          (best.r.rate - worst.r.rate) > 0.05 ? "warn" : "ok") +
+        h.table(["policy", "hits", "hit rate", "evictions"], rows) +
+        h.bars(bars) +
+        h.chips(chips) +
+        h.note(nUniq <= C
+          ? "<b>Every key fits in the cache</b>, so no policy ever evicts and all three are " +
+            "identical. Shrink the capacity below the number of distinct keys to make the choice " +
+            "matter — a cache sized above its working set has no policy question."
+          : (best.r.rate - worst.r.rate) >= 0.08
+          ? "Green is a hit, red a miss, in arrival order under " + best.name + ". <b>" +
+            ((best.r.rate - worst.r.rate) * 100).toFixed(1) + " points separate " + best.name +
+            " from " + worst.name + "</b> — the policy is doing real work on this trace. That " +
+            "usually means a scan: a burst of keys used once evicts the hot set under a " +
+            "recency-only policy, while a frequency-aware one protects it. Remove the scan and " +
+            "watch the gap close."
+          : "Green is a hit, red a miss, in arrival order under " + best.name + ". Only " +
+            ((best.r.rate - worst.r.rate) * 100).toFixed(1) + " points separate the policies " +
+            "here, which is the common case — on a trace without a scan, capacity is a far " +
+            "bigger lever than eviction policy.")
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · dedup  (synthetic-data.md)
+  // The page's stated failure: generated data looks varied and collapses to
+  // far fewer distinct examples than the count suggests. This measures it --
+  // real Jaccard similarity over character shingles, every pair compared, on
+  // whatever you paste. No sampling, no estimate.
+  // ======================================================================
+  function dedup_shingles(s, k) {
+    var t = String(s).toLowerCase().replace(/\s+/g, " ").trim();
+    var set = {}, n = 0;
+    for (var i = 0; i + k <= t.length; i++) {
+      var g = t.slice(i, i + k);
+      if (!set[g]) { set[g] = 1; n++; }
+    }
+    return { set: set, size: n };
+  }
+
+  function dedup_jaccard(a, b) {
+    var inter = 0;
+    for (var g in a.set) if (b.set[g]) inter++;
+    var union = a.size + b.size - inter;
+    return union ? inter / union : 0;
+  }
+
+  function dedup(host, h) {
+    h.panel({
+      title: "How much of your generated set is actually distinct?",
+      note: "Paste one example per line. This computes <b>Jaccard similarity</b> over character " +
+        "shingles for <i>every pair</i> — no sampling — and groups anything above the threshold. " +
+        "The page's warning is that a generator producing a thousand examples may be producing a " +
+        "hundred, wearing different words; this is the measurement that tells you which.",
+    });
+
+    var data = h.textarea({
+      label: "examples, one per line", rows: 8,
+      value: [
+        "How do I reset my password?",
+        "How can I reset my password?",
+        "How do I reset the password?",
+        "What is the refund policy?",
+        "Can you explain the refund policy?",
+        "My order has not arrived yet",
+        "Where is my order, it has not arrived",
+        "How do I change my email address?",
+      ].join("\n"),
+    });
+    var thr = h.range({ label: "near-duplicate threshold (Jaccard)", min: 30, max: 95, step: 5,
+                        value: 60, unit: "%" });
+    var kk = h.range({ label: "shingle size (characters)", min: 2, max: 8, value: 4 });
+
+    h.on(function () {
+      var lines = String(data.value).split(/\r?\n/).map(function (s) { return s.trim(); })
+        .filter(Boolean);
+      if (lines.length < 2) {
+        h.render(h.note("Paste at least two examples, one per line.", "warn"));
+        return;
+      }
+      var K = Math.round(Number(kk.value)), T = Number(thr.value) / 100;
+      var sh = lines.map(function (l) { return dedup_shingles(l, K); });
+
+      // union-find over the near-duplicate graph
+      var parent = lines.map(function (_, i) { return i; });
+      function find(x) { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; }
+      var pairs = 0, dupPairs = 0, maxSim = 0, maxAt = [0, 1];
+      for (var i = 0; i < lines.length; i++) {
+        for (var j = i + 1; j < lines.length; j++) {
+          pairs++;
+          var s = dedup_jaccard(sh[i], sh[j]);
+          if (s > maxSim) { maxSim = s; maxAt = [i, j]; }
+          if (s >= T) { dupPairs++; var a = find(i), b = find(j); if (a !== b) parent[a] = b; }
+        }
+      }
+      var groups = {}, i2;
+      for (i2 = 0; i2 < lines.length; i2++) {
+        var r = find(i2);
+        (groups[r] = groups[r] || []).push(i2);
+      }
+      var keys = Object.keys(groups);
+      var effective = keys.length;
+      var collapse = lines.length ? effective / lines.length : 1;
+
+      var rows = keys.map(function (g) {
+        var members = groups[g];
+        return [String(members.length),
+                lines[members[0]].slice(0, 46) + (lines[members[0]].length > 46 ? "…" : ""),
+                members.length > 1 ? "collapses " + (members.length - 1) : "—"];
+      }).sort(function (a, b) { return Number(b[0]) - Number(a[0]); });
+
+      h.render(
+        h.big(effective + " of " + lines.length,
+          "distinct after near-duplicate collapse",
+          collapse < 0.6 ? "bad" : collapse < 0.85 ? "warn" : "ok") +
+        h.row("examples pasted", String(lines.length)) +
+        h.row("pairs compared", h.fmt(pairs) + "  (all of them)") +
+        h.row("pairs above threshold", String(dupPairs), dupPairs ? "warn" : "ok") +
+        h.row("effective diversity", (collapse * 100).toFixed(0) + "%",
+          collapse < 0.6 ? "bad" : collapse < 0.85 ? "warn" : "ok") +
+        h.row("most similar pair", (maxSim * 100).toFixed(0) + "%  ·  “" +
+          lines[maxAt[0]].slice(0, 28) + "” / “" + lines[maxAt[1]].slice(0, 28) + "”",
+          maxSim >= T ? "warn" : undefined) +
+        h.bars([
+          { label: "distinct", value: effective, max: lines.length, text: String(effective),
+            flag: "ok" },
+          { label: "collapsed", value: lines.length - effective, max: lines.length,
+            text: String(lines.length - effective),
+            flag: lines.length - effective ? "bad" : undefined },
+        ]) +
+        h.table(["group size", "representative", "effect"], rows) +
+        (collapse < 0.85
+          ? h.note("You pasted " + lines.length + " examples and have <b>" + effective +
+              "</b> distinct ones at this threshold. Train or evaluate on the raw count and you " +
+              "are counting the same example several times — which inflates an eval score and " +
+              "teaches a model nothing new. Raise the threshold to see how sensitive the verdict " +
+              "is; if it moves a lot, the set is full of borderline paraphrases.", "bad")
+          : h.note("Little collapse at this threshold. Worth re-checking with a smaller shingle " +
+              "size — short shingles catch paraphrase, long ones only catch near-identical text."))
+      );
+    });
+  }
+
+  // ======================================================================
   var LABS = {
     "tokenizer": tokenizer,
     "attention": attention,
@@ -2735,7 +2980,9 @@
     "agentloop": agentloop,
     "evalsig": evalsig,
     "kappa": kappa,
-    "psi": psi
+    "psi": psi,
+    "cachesim": cachesim,
+    "dedup": dedup
   };
   window.__LABS = LABS;   // later labs register into this
 

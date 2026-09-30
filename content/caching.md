@@ -59,6 +59,12 @@ cachelayers
 
 ---
 
+```lab
+cachesim
+```
+
+---
+
 ## 2 · Design
 
 **Prefix caching is first because it is nearly free money.** Most LLM requests
