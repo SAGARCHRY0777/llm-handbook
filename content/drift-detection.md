@@ -103,6 +103,12 @@ features; the input is text. What actually works:
 
 ---
 
+```lab
+psi
+```
+
+---
+
 ## 3 · Flow
 
 What actually happens, in order, and where teams stop too early:

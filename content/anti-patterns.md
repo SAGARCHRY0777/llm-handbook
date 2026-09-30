@@ -50,6 +50,12 @@ antipattern
 
 ---
 
+```lab
+evalsig
+```
+
+---
+
 ## Retrieval
 
 **Optimising the model when retrieval never found the answer.**

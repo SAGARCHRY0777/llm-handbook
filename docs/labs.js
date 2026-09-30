@@ -174,7 +174,8 @@
         return '<div class="lab__row' + (flag ? " is-" + flag : "") + '"><span>' +
           label + "</span><b>" + value + "</b></div>";
       },
-      /** items: [{label, value, max, flag}] — horizontal bars */
+      /** items: [{label, value, max, flag, text}] — horizontal bars.
+       *  `value` sets the bar width, `text` is the label printed beside it. */
       bars: function (items) {
         var max = Math.max.apply(null, items.map(function (i) { return i.max !== undefined ? i.max : i.value; }).concat([1e-9]));
         return '<div class="lab__bars">' + items.map(function (i) {
@@ -2434,6 +2435,288 @@
   }
 
   // ======================================================================
+  // LAB · evalsig  (anti-patterns.md)
+  // The page opens with "prompt A scored 0.82, prompt B scored 0.86, ship B"
+  // and calls it noise. This computes whether it is, on your numbers.
+  //
+  // Wilson score interval, which is the right one for a proportion -- the
+  // textbook normal approximation is badly wrong near 0 and 1 and at small n,
+  // which is exactly where eval sets live. Sample size uses the standard
+  // two-proportion formula at 80% power.
+  // ======================================================================
+  var evalsig_Z = 1.959964;      // two-sided 95%
+  var evalsig_ZB = 0.8416212;    // 80% power
+
+  function evalsig_wilson(k, n) {
+    if (!n) return { lo: 0, hi: 0, p: 0 };
+    var p = k / n, z = evalsig_Z, z2 = z * z;
+    var d = 1 + z2 / n;
+    var c = (p + z2 / (2 * n)) / d;
+    var h = (z / d) * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n));
+    return { p: p, lo: Math.max(0, c - h), hi: Math.min(1, c + h) };
+  }
+
+  function evalsig_needed(p1, p2) {
+    var diff = Math.abs(p1 - p2);
+    if (diff < 1e-9) return Infinity;
+    var pbar = (p1 + p2) / 2;
+    var a = evalsig_Z * Math.sqrt(2 * pbar * (1 - pbar));
+    var b = evalsig_ZB * Math.sqrt(p1 * (1 - p1) + p2 * (1 - p2));
+    return Math.ceil(Math.pow(a + b, 2) / (diff * diff));
+  }
+
+  function evalsig(host, h) {
+    h.panel({
+      title: "Is that eval difference real?",
+      note: "The page's opening example: <b>prompt A 0.82, prompt B 0.86, on 50 items</b> — " +
+        "and the claim that shipping B on that basis is an anti-pattern. This computes the " +
+        "<b>Wilson score interval</b> for each (the correct interval for a proportion; the " +
+        "normal approximation misleads at small n, which is where eval sets live) and tells you " +
+        "how many items you would actually need. Change the numbers to your own.",
+    });
+
+    var n = h.range({ label: "items in the eval set", min: 10, max: 2000, step: 10, value: 50 });
+    var a = h.range({ label: "A — score", min: 0, max: 100, step: 1, value: 82, unit: "%" });
+    var b = h.range({ label: "B — score", min: 0, max: 100, step: 1, value: 86, unit: "%" });
+
+    h.on(function () {
+      var N = Math.round(Number(n.value));
+      var pA = Number(a.value) / 100, pB = Number(b.value) / 100;
+      var kA = Math.round(pA * N), kB = Math.round(pB * N);
+      var wA = evalsig_wilson(kA, N), wB = evalsig_wilson(kB, N);
+      var overlap = wA.hi >= wB.lo && wB.hi >= wA.lo;
+      var need = evalsig_needed(pA, pB);
+      var halfA = ((wA.hi - wA.lo) / 2) * 100;
+
+      h.render(
+        h.big(overlap ? "cannot tell them apart" : "difference holds up",
+          overlap ? "the intervals overlap" : "the intervals are disjoint",
+          overlap ? "bad" : "ok") +
+        h.row("A", (pA * 100).toFixed(1) + "%  [" + (wA.lo * 100).toFixed(1) + ", " +
+          (wA.hi * 100).toFixed(1) + "]  ·  " + kA + "/" + N) +
+        h.row("B", (pB * 100).toFixed(1) + "%  [" + (wB.lo * 100).toFixed(1) + ", " +
+          (wB.hi * 100).toFixed(1) + "]  ·  " + kB + "/" + N) +
+        h.row("interval half-width on A", "±" + halfA.toFixed(1) + " points",
+          halfA > 5 ? "warn" : "ok") +
+        h.row("observed difference", ((pB - pA) * 100).toFixed(1) + " points") +
+        h.row("items needed to detect it",
+          isFinite(need) ? h.fmt(need) + " per arm" : "— (no difference)",
+          isFinite(need) && need > N ? "bad" : "ok") +
+        h.bars([
+          { label: "you have", value: N, max: Math.max(N, isFinite(need) ? need : N),
+            text: h.fmt(N) },
+          { label: "you need", value: isFinite(need) ? need : 0,
+            max: Math.max(N, isFinite(need) ? need : N),
+            text: isFinite(need) ? h.fmt(need) : "—",
+            flag: isFinite(need) && need > N ? "bad" : "ok" },
+        ]) +
+        (overlap
+          ? h.note("The intervals overlap, so this eval cannot separate the two prompts. " +
+              "Shipping B here is choosing on noise — and it will look like a real gain in the " +
+              "writeup either way. <b>" + (isFinite(need) ? h.fmt(need) : "More") + " items per arm</b> " +
+              "is roughly what a difference this size needs at 80% power.", "bad")
+          : h.note("The intervals are disjoint at this sample size, so the difference survives " +
+              "the interval check. Note this is the <i>unpaired</i> comparison — if both prompts " +
+              "ran on the same items, a paired test (McNemar on the disagreements) is correct and " +
+              "more powerful, and would need fewer items than the figure above.", "ok"))
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · kappa  (llm-as-a-judge.md)
+  // The page's validation step: a judge score means nothing until you know it
+  // agrees with a human. Raw agreement is the number people quote and it is
+  // inflated by chance -- with two raters both saying "pass" 90% of the time,
+  // 82% agreement is what you get from guessing. Cohen's kappa is agreement
+  // corrected for that, and it is computed here from your own pasted labels.
+  // ======================================================================
+  function kappa_parse(text) {
+    var out = [], lines = String(text).split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+      var t = lines[i].trim();
+      if (!t) continue;
+      var parts = t.split(/[\s,;\t]+/).filter(Boolean);
+      if (parts.length < 2) continue;
+      out.push([parts[0], parts[1]]);
+    }
+    return out;
+  }
+
+  function kappa(host, h) {
+    h.panel({
+      title: "Does your judge agree with a human?",
+      note: "Paste one pair per line — the <b>human</b> label and the <b>judge</b> label, in any " +
+        "vocabulary you like (pass/fail, 1–5, good/bad). This computes raw agreement and " +
+        "<b>Cohen's κ</b>, which is agreement after removing what chance alone would produce. " +
+        "The gap between the two is the whole reason κ exists.",
+    });
+
+    var data = h.textarea({
+      label: "human  judge   (one pair per line)",
+      rows: 8,
+      value: [
+        "pass pass", "pass pass", "pass pass", "pass pass", "pass pass",
+        "pass pass", "pass pass", "pass fail", "fail pass", "fail fail",
+        "pass pass", "pass pass", "pass pass", "pass pass", "pass fail",
+        "fail pass", "pass pass", "pass pass", "fail fail", "pass pass",
+      ].join("\n"),
+    });
+
+    h.on(function () {
+      var pairs = kappa_parse(data.value);
+      if (pairs.length < 2) {
+        h.render(h.note("Paste at least two pairs — one per line, two labels separated by a space.", "warn"));
+        return;
+      }
+      var n = pairs.length, i;
+      var labels = {}, agree = 0, rowC = {}, colC = {};
+      for (i = 0; i < n; i++) {
+        var A = pairs[i][0], B = pairs[i][1];
+        labels[A] = 1; labels[B] = 1;
+        rowC[A] = (rowC[A] || 0) + 1;
+        colC[B] = (colC[B] || 0) + 1;
+        if (A === B) agree++;
+      }
+      var po = agree / n, pe = 0;
+      for (var L in labels) pe += ((rowC[L] || 0) / n) * ((colC[L] || 0) / n);
+      var k = pe === 1 ? 0 : (po - pe) / (1 - pe);
+
+      var verdict = k < 0 ? "worse than chance"
+        : k < 0.2 ? "slight" : k < 0.4 ? "fair" : k < 0.6 ? "moderate"
+        : k < 0.8 ? "substantial" : "almost perfect";
+      var flag = k < 0.4 ? "bad" : k < 0.6 ? "warn" : "ok";
+
+      var keys = Object.keys(labels).sort();
+      var rows = [];
+      for (i = 0; i < keys.length; i++) {
+        var cells = [keys[i]];
+        for (var j = 0; j < keys.length; j++) {
+          var c = 0;
+          for (var m = 0; m < n; m++) if (pairs[m][0] === keys[i] && pairs[m][1] === keys[j]) c++;
+          cells.push(String(c));
+        }
+        rows.push(cells);
+      }
+
+      h.render(
+        h.big("κ = " + k.toFixed(3), verdict, flag) +
+        h.row("pairs", h.fmt(n)) +
+        h.row("raw agreement", (po * 100).toFixed(1) + "%", po > 0.8 ? "ok" : "warn") +
+        h.row("agreement expected by chance", (pe * 100).toFixed(1) + "%",
+          pe > 0.6 ? "bad" : undefined) +
+        h.row("what κ corrects away", ((po - pe) * 100).toFixed(1) + " points of the raw figure") +
+        h.table(["human \\ judge"].concat(keys), rows) +
+        (pe > 0.6
+          ? h.note("<b>Chance agreement is " + (pe * 100).toFixed(0) + "%</b> here, because the " +
+              "labels are lopsided — two raters guessing independently would agree that often. " +
+              "That is why raw agreement of " + (po * 100).toFixed(0) + "% is not the reassurance " +
+              "it looks like, and why κ is the number to report.", "warn")
+          : h.note("Rule of thumb: below 0.4 the judge is not usable, 0.4–0.6 needs work, above " +
+              "0.6 is worth shipping behind a spot-check. Validate on a fresh sample, not the one " +
+              "you tuned the rubric on."))
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · psi  (drift-detection.md)
+  // Population Stability Index on your own two samples. PSI is the standard
+  // drift number and its thresholds (0.1 / 0.25) are convention rather than
+  // theory -- the lab shows the per-bin contributions so you can see WHERE the
+  // shift is, which is the part a single number hides.
+  // ======================================================================
+  function psi_nums(text) {
+    var out = [], parts = String(text).split(/[\s,;\r\n\t]+/);
+    for (var i = 0; i < parts.length; i++) {
+      var v = parseFloat(parts[i]);
+      if (isFinite(v)) out.push(v);
+    }
+    return out;
+  }
+
+  function psi(host, h) {
+    h.panel({
+      title: "Has the distribution actually moved?",
+      note: "Paste two samples of a numeric feature — a <b>baseline</b> and what you are seeing " +
+        "<b>now</b>. This bins the baseline into equal-count buckets, then computes the " +
+        "<b>Population Stability Index</b> per bin. The conventional thresholds are 0.1 and 0.25, " +
+        "and they are convention, not theory — which is why the per-bin breakdown matters more " +
+        "than the total.",
+    });
+
+    var base = h.textarea({
+      label: "baseline sample", rows: 4,
+      value: "12 15 14 13 16 11 14 15 13 12 14 16 15 13 14 12 15 14 13 16 14 15 13 14 12 16 15 14 13 15",
+    });
+    var cur = h.textarea({
+      label: "current sample", rows: 4,
+      value: "14 17 16 15 18 14 17 19 16 15 18 20 17 16 19 15 18 17 16 21 18 17 16 19 15 20 18 17 16 19",
+    });
+    var nb = h.range({ label: "bins", min: 3, max: 10, value: 5 });
+
+    h.on(function () {
+      var B = psi_nums(base.value), C = psi_nums(cur.value);
+      if (B.length < 5 || C.length < 5) {
+        h.render(h.note("Paste at least five numbers in each box.", "warn"));
+        return;
+      }
+      var k = Math.round(Number(nb.value));
+      var sorted = B.slice().sort(function (x, y) { return x - y; });
+      var edges = [], i;
+      for (i = 1; i < k; i++) edges.push(sorted[Math.floor((i / k) * sorted.length)]);
+
+      function bin(v) {
+        for (var j = 0; j < edges.length; j++) if (v < edges[j]) return j;
+        return k - 1;
+      }
+      var bc = [], cc = [];
+      for (i = 0; i < k; i++) { bc.push(0); cc.push(0); }
+      for (i = 0; i < B.length; i++) bc[bin(B[i])]++;
+      for (i = 0; i < C.length; i++) cc[bin(C[i])]++;
+
+      var total = 0, rows = [], bars = [];
+      for (i = 0; i < k; i++) {
+        // the usual guard: an empty bin makes the log term infinite
+        var pb = Math.max(bc[i] / B.length, 1e-4);
+        var pc = Math.max(cc[i] / C.length, 1e-4);
+        var contrib = (pc - pb) * Math.log(pc / pb);
+        total += contrib;
+        var range = (i === 0 ? "< " + edges[0]
+          : i === k - 1 ? "≥ " + edges[k - 2]
+          : edges[i - 1] + "–" + edges[i]);
+        rows.push([range, (pb * 100).toFixed(1) + "%", (pc * 100).toFixed(1) + "%",
+                   contrib.toFixed(4)]);
+        bars.push({ label: range, value: Math.abs(contrib), max: 0.3,
+                    text: contrib.toFixed(4),
+                    flag: contrib > 0.1 ? "bad" : contrib > 0.05 ? "warn" : undefined });
+      }
+
+      var verdict = total < 0.1 ? "no meaningful shift"
+        : total < 0.25 ? "moderate shift — investigate" : "major shift";
+      var flag = total < 0.1 ? "ok" : total < 0.25 ? "warn" : "bad";
+      var worst = 0;
+      for (i = 1; i < k; i++) if (Math.abs(Number(rows[i][3])) > Math.abs(Number(rows[worst][3]))) worst = i;
+
+      h.render(
+        h.big("PSI = " + total.toFixed(4), verdict, flag) +
+        h.row("baseline / current sample size", B.length + " / " + C.length,
+          Math.min(B.length, C.length) < 30 ? "warn" : "ok") +
+        h.row("largest single-bin contribution", rows[worst][0] + "  (" + rows[worst][3] + ")",
+          Number(rows[worst][3]) > 0.1 ? "bad" : undefined) +
+        h.table(["bin", "baseline", "current", "PSI"], rows) +
+        h.bars(bars) +
+        (Math.min(B.length, C.length) < 30
+          ? h.note("Fewer than 30 values in a sample makes PSI unstable — it will report drift " +
+              "that is only sampling noise. Treat this as a demonstration, not a decision.", "warn")
+          : h.note("Read the bins, not just the total. A PSI of " + total.toFixed(2) + " spread " +
+              "evenly is a gentle shift; the same number concentrated in one bin is a specific " +
+              "thing that changed, and that is the one you can actually go and find."))
+      );
+    });
+  }
+
+  // ======================================================================
   var LABS = {
     "tokenizer": tokenizer,
     "attention": attention,
@@ -2449,7 +2732,10 @@
     "quantize": quantize,
     "needle": needle,
     "chunker": chunker,
-    "agentloop": agentloop
+    "agentloop": agentloop,
+    "evalsig": evalsig,
+    "kappa": kappa,
+    "psi": psi
   };
   window.__LABS = LABS;   // later labs register into this
 

@@ -97,6 +97,12 @@ human raters too.
 
 ---
 
+```lab
+kappa
+```
+
+---
+
 ## 3 · Flow
 
 The order matters, and the mistake is doing steps 1 and 6 while skipping 2–5.
