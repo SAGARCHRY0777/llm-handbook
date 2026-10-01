@@ -80,6 +80,12 @@ cascade
 
 ---
 
+```lab
+cascade
+```
+
+---
+
 ## 2 · Design
 
 ### Routing — decide up front

@@ -2962,6 +2962,272 @@
   }
 
   // ======================================================================
+  // LAB · segments  (bias-and-explainability.md)
+  // The page's claim is that an aggregate metric is an average over people,
+  // and a headline can stay green while a small segment is served badly.
+  // This recomputes the headline from your own segments, puts a Wilson
+  // interval on each, and says which ones the eval set is too small to judge.
+  // ======================================================================
+  var segments_Z = 1.959964;
+
+  function segments_wilson(p, n) {
+    if (!n) return { lo: 0, hi: 1, h: 1 };
+    var z = segments_Z, z2 = z * z, d = 1 + z2 / n;
+    var c = (p + z2 / (2 * n)) / d;
+    var h = (z / d) * Math.sqrt(p * (1 - p) / n + z2 / (4 * n * n));
+    return { lo: Math.max(0, c - h), hi: Math.min(1, c + h), h: h };
+  }
+
+  function segments_parse(text) {
+    var out = [], lines = String(text).split(/\r?\n/);
+    for (var i = 0; i < lines.length; i++) {
+      var t = lines[i].trim();
+      if (!t || t.charAt(0) === "#") continue;
+      var p = t.split(/[\s,;\t]+/).filter(Boolean);
+      if (p.length < 3) continue;
+      var share = parseFloat(p[p.length - 2]), acc = parseFloat(p[p.length - 1]);
+      if (!isFinite(share) || !isFinite(acc)) continue;
+      out.push({ name: p.slice(0, p.length - 2).join(" "),
+                 share: share > 1 ? share / 100 : share,
+                 acc: acc > 1 ? acc / 100 : acc });
+    }
+    return out;
+  }
+
+  function segments(host, h) {
+    h.panel({
+      title: "What does the headline number hide?",
+      note: "One segment per line: <b>name · share of traffic · accuracy</b>. The page's own " +
+        "example is loaded. This recomputes the aggregate from the segments, puts a <b>Wilson " +
+        "interval</b> on each using the share of your eval set it actually got, and flags both " +
+        "the segments below your gate and the ones you do not have enough data to judge.",
+    });
+
+    var data = h.textarea({
+      label: "segment   share   accuracy", rows: 6,
+      value: ["A  0.78  0.95", "B  0.15  0.93", "C  0.05  0.71", "D  0.02  0.52"].join("\n"),
+    });
+    var evalN = h.range({ label: "eval set size", min: 100, max: 5000, step: 100, value: 2000 });
+    var gate = h.range({ label: "gate — minimum acceptable accuracy", min: 50, max: 99,
+                         value: 90, unit: "%" });
+    var minN = h.range({ label: "minimum items to call a segment", min: 10, max: 300, step: 10,
+                         value: 30 });
+
+    h.on(function () {
+      var segs = segments_parse(data.value);
+      if (!segs.length) {
+        h.render(h.note("One segment per line: a name, its share of traffic, then its accuracy.", "warn"));
+        return;
+      }
+      var N = Math.round(Number(evalN.value));
+      var G = Number(gate.value) / 100;
+      var MIN = Math.round(Number(minN.value));
+
+      var agg = 0, shareSum = 0, i;
+      for (i = 0; i < segs.length; i++) { agg += segs[i].share * segs[i].acc; shareSum += segs[i].share; }
+      if (shareSum > 0) agg /= shareSum;
+
+      var rows = [], bars = [], failing = [], unjudgeable = [], drag = 0, affected = 0;
+      for (i = 0; i < segs.length; i++) {
+        var s = segs[i];
+        var n = Math.round(s.share / (shareSum || 1) * N);
+        var w = segments_wilson(s.acc, n);
+        var thin = n < MIN;
+        var fails = s.acc < G;
+        if (fails) { failing.push(s.name); affected += s.share; drag += s.share * (agg - s.acc); }
+        if (thin) unjudgeable.push(s.name);
+        rows.push([s.name, (s.share * 100).toFixed(1) + "%", String(n),
+                   (s.acc * 100).toFixed(1) + "%",
+                   "±" + (w.h * 100).toFixed(1),
+                   thin ? "too thin" : fails ? "below gate" : "ok"]);
+        bars.push({ label: s.name, value: s.acc * 100, max: 100,
+                    text: (s.acc * 100).toFixed(0) + "%",
+                    flag: thin ? "warn" : fails ? "bad" : "ok" });
+      }
+
+      h.render(
+        h.big((agg * 100).toFixed(1) + "%",
+          agg >= G ? "aggregate passes the gate" : "aggregate fails the gate",
+          agg >= G ? (failing.length ? "warn" : "ok") : "bad") +
+        h.row("segments", String(segs.length) +
+          (Math.abs(shareSum - 1) > 0.01 ? "   (shares sum to " + (shareSum * 100).toFixed(0) + "%)" : "")) +
+        h.row("below the gate", failing.length ? failing.join(", ") : "none",
+          failing.length ? "bad" : "ok") +
+        h.row("traffic served below the gate", (affected * 100).toFixed(1) + "%",
+          affected > 0.02 ? "bad" : affected > 0 ? "warn" : "ok") +
+        h.row("they drag the headline by", drag.toFixed(4),
+          drag < 0.02 ? "warn" : undefined) +
+        h.row("too few items to judge", unjudgeable.length ? unjudgeable.join(", ") : "none",
+          unjudgeable.length ? "warn" : "ok") +
+        h.table(["segment", "share", "items", "accuracy", "95% CI", "verdict"], rows) +
+        h.bars(bars) +
+        (agg >= G && failing.length
+          ? h.note("<b>The headline passes and " + (affected * 100).toFixed(1) + "% of traffic " +
+              "does not.</b> Those segments move the aggregate by only " + drag.toFixed(4) +
+              ", which is why a single number cannot surface them — the arithmetic of a weighted " +
+              "mean is working exactly as designed. Disaggregation is not a nicety here; it is " +
+              "the only way the failure is visible at all.", "bad")
+          : unjudgeable.length
+          ? h.note("Some segments have too few items to say anything about. Widen the eval set " +
+              "or oversample those segments — a confidence interval that spans twenty points is " +
+              "not a measurement, and reporting it as one is worse than reporting nothing.", "warn")
+          : h.note("Every segment clears the gate at this sample size. Re-check when traffic mix " +
+              "shifts: a segment growing from 2% to 20% changes which failures matter."))
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · roofline  (kernel-and-attention-optimization.md)
+  // Arithmetic intensity against the machine balance point. Decode is memory
+  // bound and prefill is compute bound, and this computes WHERE the crossover
+  // is for your shape and your hardware rather than asserting it.
+  // ======================================================================
+  function roofline(host, h) {
+    h.panel({
+      title: "Memory bound or compute bound?",
+      note: "A kernel is memory bound when it moves more bytes per FLOP than the machine can " +
+        "feed. The crossover is the <b>machine balance</b> — peak FLOP/s divided by bandwidth — " +
+        "and anything below it is wasting arithmetic capability. This computes it for your model " +
+        "shape and batch size. Defaults are an 8B model in bf16 on an H100 SXM.",
+    });
+
+    var params = h.range({ label: "parameters", min: 1, max: 200, value: 8, unit: " B" });
+    var bits = h.select({ label: "weight precision", value: "16",
+      options: [["16", "bf16 — 2 bytes"], ["8", "int8 — 1 byte"], ["4", "int4 — 0.5 bytes"]] });
+    var batch = h.range({ label: "batch size (sequences decoding together)", min: 1, max: 512, value: 1 });
+    var bw = h.range({ label: "memory bandwidth", min: 200, max: 8000, step: 100, value: 3350,
+                       unit: " GB/s" });
+    var flops = h.range({ label: "peak dense throughput", min: 50, max: 4000, step: 50, value: 990,
+                          unit: " TFLOP/s" });
+
+    h.on(function () {
+      var P = Number(params.value) * 1e9;
+      var bytesPer = Number(bits.value) / 8;
+      var B = Math.round(Number(batch.value));
+      var BW = Number(bw.value) * 1e9;
+      var FL = Number(flops.value) * 1e12;
+
+      // one decode step: read every weight once, do 2 FLOPs per param per sequence
+      var bytes = P * bytesPer;
+      var flop = 2 * P * B;
+      var intensity = bytes ? flop / bytes : 0;       // FLOP per byte
+      var balance = BW ? FL / BW : 0;                 // the machine's crossover
+      var memTime = bytes / BW;
+      var compTime = flop / FL;
+      var bound = memTime >= compTime ? "memory" : "compute";
+      var tps = memTime || compTime ? B / Math.max(memTime, compTime) : 0;
+      var util = Math.max(memTime, compTime) ? (compTime / Math.max(memTime, compTime)) * 100 : 0;
+      var crossover = Math.max(1, Math.ceil(balance / 2));   // batch where 2B FLOP/byte = balance
+
+      h.render(
+        h.big(bound + " bound", "at batch " + B, bound === "memory" ? "bad" : "ok") +
+        h.row("weights read per step", (bytes / 1e9).toFixed(2) + " GB") +
+        h.row("arithmetic intensity", intensity.toFixed(1) + " FLOP/byte") +
+        h.row("machine balance", balance.toFixed(1) + " FLOP/byte",
+          "  ") +
+        h.row("time — moving weights", (memTime * 1000).toFixed(2) + " ms",
+          bound === "memory" ? "bad" : undefined) +
+        h.row("time — arithmetic", (compTime * 1000).toFixed(2) + " ms",
+          bound === "compute" ? "bad" : undefined) +
+        h.row("compute units actually used", util.toFixed(1) + "%",
+          util < 20 ? "bad" : util < 60 ? "warn" : "ok") +
+        h.row("throughput", h.fmt(Math.round(tps)) + " tok/s", "ok") +
+        h.row("batch size that reaches the crossover", h.fmt(crossover),
+          B >= crossover ? "ok" : "warn") +
+        h.bars([
+          { label: "memory time", value: memTime * 1000, max: Math.max(memTime, compTime) * 1000,
+            text: (memTime * 1000).toFixed(2) + " ms", flag: bound === "memory" ? "bad" : undefined },
+          { label: "compute time", value: compTime * 1000, max: Math.max(memTime, compTime) * 1000,
+            text: (compTime * 1000).toFixed(2) + " ms", flag: bound === "compute" ? "bad" : undefined },
+        ]) +
+        (bound === "memory"
+          ? h.note("Memory bound: the arithmetic finishes in " + (compTime * 1000).toFixed(2) +
+              " ms and then waits " + ((memTime - compTime) * 1000).toFixed(2) + " ms for weights. " +
+              "<b>More FLOPs buy nothing here.</b> The two levers are reading fewer bytes — drop " +
+              "the precision and watch this flip — or amortising the same read across more " +
+              "sequences, which is why batching is the first thing a serving stack does. " +
+              "You need batch <b>" + h.fmt(crossover) + "</b> to reach the crossover on this machine.", "bad")
+          : h.note("Compute bound: the weights arrive faster than the arithmetic consumes them, " +
+              "so you are using the hardware for what it is good at. Further batching now costs " +
+              "latency without buying throughput."))
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · cascade  (ensembles-and-routing.md)
+  // A cascade pays the cheap model on EVERY request and the expensive one on
+  // the escalated fraction, so it only saves money below a break-even
+  // escalation rate -- and that rate is set entirely by the price ratio.
+  // Computed here rather than guessed, because the intuition is usually wrong:
+  // the break-even is far higher than people expect.
+  // ======================================================================
+  function cascade(host, h) {
+    h.panel({
+      title: "When does a cascade actually save money?",
+      note: "A cascade runs a cheap model first and escalates what it cannot handle. You pay the " +
+        "cheap model on <i>every</i> request and the expensive one on the escalated fraction — so " +
+        "it saves money only below a break-even escalation rate, and that rate depends only on " +
+        "the price ratio. Most people guess far too low.",
+    });
+
+    var cheapC = h.range({ label: "cheap model — cost per 1k requests", min: 1, max: 200, value: 10,
+                           unit: " ¢" });
+    var bigC = h.range({ label: "strong model — cost per 1k requests", min: 10, max: 2000, step: 10,
+                         value: 200, unit: " ¢" });
+    var esc = h.range({ label: "escalation rate", min: 0, max: 100, value: 30, unit: "%" });
+    var cheapA = h.range({ label: "cheap model accuracy on what it keeps", min: 50, max: 100,
+                           value: 92, unit: "%" });
+    var bigA = h.range({ label: "strong model accuracy", min: 50, max: 100, value: 97, unit: "%" });
+
+    h.on(function () {
+      var c = Number(cheapC.value), b = Number(bigC.value);
+      var p = Number(esc.value) / 100;
+      var aC = Number(cheapA.value) / 100, aB = Number(bigA.value) / 100;
+
+      var cascadeCost = c + p * b;          // cheap always, strong on the escalated share
+      var alwaysBig = b;
+      var saving = alwaysBig - cascadeCost;
+      var breakEven = b > 0 ? 1 - c / b : 0;
+      var blended = (1 - p) * aC + p * aB;
+      var lost = (aB - blended) * 100;
+
+      h.render(
+        h.big(saving > 0 ? (saving / alwaysBig * 100).toFixed(0) + "% cheaper"
+                         : Math.abs(saving / alwaysBig * 100).toFixed(0) + "% more expensive",
+          "than always using the strong model", saving > 0 ? "ok" : "bad") +
+        h.row("cascade cost per 1k", cascadeCost.toFixed(1) + " ¢") +
+        h.row("strong model alone", alwaysBig.toFixed(1) + " ¢") +
+        h.row("break-even escalation rate", (breakEven * 100).toFixed(1) + "%",
+          p < breakEven ? "ok" : "bad") +
+        h.row("you are escalating", (p * 100).toFixed(0) + "%",
+          p < breakEven ? "ok" : "bad") +
+        h.row("blended accuracy", (blended * 100).toFixed(2) + "%") +
+        h.row("accuracy given up", lost.toFixed(2) + " points",
+          lost > 2 ? "bad" : lost > 0.5 ? "warn" : "ok") +
+        h.bars([
+          { label: "cascade", value: cascadeCost, max: Math.max(cascadeCost, alwaysBig),
+            text: cascadeCost.toFixed(1) + " ¢", flag: saving > 0 ? "ok" : "bad" },
+          { label: "strong only", value: alwaysBig, max: Math.max(cascadeCost, alwaysBig),
+            text: alwaysBig.toFixed(1) + " ¢" },
+        ]) +
+        (p >= breakEven
+          ? h.note("<b>Above break-even, so the cascade costs more than just using the strong " +
+              "model</b> — and it is also less accurate, because everything the cheap model kept " +
+              "was answered by the cheap model. The worst of both. Break-even here is <b>" +
+              (breakEven * 100).toFixed(0) + "%</b>, which is <i>1 − cheap/strong</i> and nothing " +
+              "else: quality does not enter the cost question at all.", "bad")
+          : h.note("Below break-even, so the cascade saves <b>" + saving.toFixed(1) + " ¢ per 1k</b> " +
+              "and gives up " + lost.toFixed(2) + " points of accuracy. Note how high break-even " +
+              "is — <b>" + (breakEven * 100).toFixed(0) + "%</b>. Because the cheap model costs " +
+              "so much less, a cascade survives escalating most of its traffic; the usual mistake " +
+              "is assuming you need a low escalation rate for it to pay.", "ok"))
+      );
+    });
+  }
+
+  // ======================================================================
   var LABS = {
     "tokenizer": tokenizer,
     "attention": attention,
@@ -2982,7 +3248,10 @@
     "kappa": kappa,
     "psi": psi,
     "cachesim": cachesim,
-    "dedup": dedup
+    "dedup": dedup,
+    "segments": segments,
+    "roofline": roofline,
+    "cascade": cascade
   };
   window.__LABS = LABS;   // later labs register into this
 

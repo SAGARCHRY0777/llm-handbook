@@ -2023,13 +2023,14 @@ S["antipattern"] = {
 // CONFIG — every number on screen is computed from these. Nothing typed in.
 //
 //   Taken verbatim from the page's section-1 diagram:
-//     overall accuracy      0.91      "the number in the deck"
+//     overall accuracy      0.93      "the number in the deck" -- which is the
+//                                     weighted mean of the four segments, 0.9264
 //     segment A  78% of traffic, 0.95
 //     segment B  15%,            0.93
 //     segment C   5%,            0.71   "unusable, invisible in the average"
 //     segment D   2%,            0.52   "moves the mean by 0.008"
 //   The 0.008 is reproduced here rather than quoted:
-//     share x (headline - score) = 0.02 x (0.91 - 0.52) = 0.0078
+//     share x (headline - score) = 0.02 x (0.9264 - 0.52) = 0.0081
 //
 //   Stated sim fixtures, declared in the note:
 //     eval set        2,000 items sampled in proportion to traffic, so the
@@ -2057,7 +2058,7 @@ S["antipattern"] = {
 //   Interval:  Wilson score, z = 1.959964 (95%).
 // ======================================================================
 
-var biasaudit_HEADLINE = 0.91;          // the page's deck number
+var biasaudit_HEADLINE = 0.9264;        // the weighted mean of the segments below
 var biasaudit_GATE = 0.90;              // the aggregate gate it passes
 var biasaudit_EVAL_N = 2000;            // stated eval-set size
 var biasaudit_TRAFFIC = 50000;          // stated requests/day

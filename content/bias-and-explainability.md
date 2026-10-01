@@ -24,7 +24,7 @@ basis.*
 ```
    WHY THE AGGREGATE LIES
 
-   overall accuracy 0.91   <- the number in the deck
+   overall accuracy 0.93   <- the number in the deck
 
      segment A (78% of traffic)   0.95
      segment B (15%)              0.93
@@ -46,6 +46,12 @@ basis.*
 
 ```sim
 biasaudit
+```
+
+---
+
+```lab
+segments
 ```
 
 ---

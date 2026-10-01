@@ -85,6 +85,12 @@ sparsekernel
 
 ---
 
+```lab
+roofline
+```
+
+---
+
 ## 2 · Design — sparse attention
 
 Dense attention computes every query against every key. Sparse attention
