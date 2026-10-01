@@ -3228,6 +3228,269 @@
   }
 
   // ======================================================================
+  // LAB · envelope  (numbers-to-know.md)
+  // The whiteboard calculation, done properly. The page's shortcut is
+  // "actions/day / 100,000 = average QPS", which is 86,400 rounded for mental
+  // arithmetic; this shows both so you can see what the shortcut costs you.
+  // ======================================================================
+  var envelope_SEC = 86400;
+
+  function envelope(host, h) {
+    h.panel({
+      title: "The back-of-envelope, with your numbers",
+      note: "Every figure the page says you should be able to produce on a whiteboard without " +
+        "looking anything up. The <b>÷100,000</b> shortcut for average QPS is 86,400 rounded — " +
+        "both are shown, because knowing the shortcut's error is part of trusting it.",
+    });
+
+    var dau = h.range({ label: "daily active users", min: 10, max: 200, value: 50, unit: " M" });
+    var acts = h.range({ label: "actions per user per day", min: 1, max: 200, value: 40 });
+    var peak = h.range({ label: "peak multiplier", min: 1, max: 10, step: 0.5, value: 3, decimals: 1 });
+    var tin = h.range({ label: "input tokens per request", min: 100, max: 20000, step: 100, value: 2000 });
+    var tout = h.range({ label: "output tokens per request", min: 10, max: 4000, step: 10, value: 400 });
+    var pin = h.range({ label: "input price per 1M tokens", min: 1, max: 100, step: 1, value: 3, unit: " $" });
+    var pout = h.range({ label: "output price per 1M tokens", min: 1, max: 200, step: 1, value: 15, unit: " $" });
+    var cap = h.range({ label: "requests per second per server", min: 1000, max: 50000, step: 1000,
+                        value: 10000 });
+
+    h.on(function () {
+      var D = Number(dau.value) * 1e6, A = Number(acts.value);
+      var daily = D * A;
+      var avgTrue = daily / envelope_SEC;
+      var avgShort = daily / 1e5;
+      var err = avgTrue ? ((avgShort - avgTrue) / avgTrue) * 100 : 0;
+      var pk = avgTrue * Number(peak.value);
+      var servers = Math.ceil(pk / Number(cap.value)) + 1;   // +1 spare, as the page does
+
+      var tokIn = daily * Number(tin.value), tokOut = daily * Number(tout.value);
+      var perReq = (Number(tin.value) * Number(pin.value) + Number(tout.value) * Number(pout.value)) / 1e6;
+      var dayCost = perReq * daily;
+
+      h.render(
+        h.big(h.fmt(Math.round(avgTrue)) + " avg", h.fmt(Math.round(pk)) + " peak QPS", "ok") +
+        h.row("requests per day", h.fmt(daily)) +
+        h.row("÷ 86,400 (exact)", h.fmt(Math.round(avgTrue)) + " QPS") +
+        h.row("÷ 100,000 (the shortcut)", h.fmt(Math.round(avgShort)) + " QPS  ·  " +
+          err.toFixed(1) + "% low", Math.abs(err) > 20 ? "warn" : "ok") +
+        h.row("servers at peak", h.fmt(servers) + "   (" + h.fmt(Number(cap.value)) +
+          " rps each, +1 spare)") +
+        h.row("tokens per day", h.fmt(Math.round((tokIn + tokOut) / 1e9)) + " B  (" +
+          h.fmt(Math.round(tokIn / 1e9)) + " in / " + h.fmt(Math.round(tokOut / 1e9)) + " out)") +
+        h.row("cost per request", "$" + perReq.toFixed(5)) +
+        h.row("cost per day", "$" + h.fmt(Math.round(dayCost)), dayCost > 1e5 ? "bad" : "warn") +
+        h.row("cost per year", "$" + h.fmt(Math.round(dayCost * 365)), "bad") +
+        h.bars([
+          { label: "input tokens", value: tokIn, max: tokIn + tokOut,
+            text: h.fmt(Math.round(tokIn / 1e9)) + " B" },
+          { label: "output tokens", value: tokOut, max: tokIn + tokOut,
+            text: h.fmt(Math.round(tokOut / 1e9)) + " B" },
+          { label: "input spend", value: tokIn * Number(pin.value) / 1e6,
+            max: (tokIn * Number(pin.value) + tokOut * Number(pout.value)) / 1e6,
+            text: "$" + h.fmt(Math.round(tokIn * Number(pin.value) / 1e6)) },
+          { label: "output spend", value: tokOut * Number(pout.value) / 1e6,
+            max: (tokIn * Number(pin.value) + tokOut * Number(pout.value)) / 1e6,
+            text: "$" + h.fmt(Math.round(tokOut * Number(pout.value) / 1e6)), flag: "bad" },
+        ]) +
+        h.note("Output tokens are <b>" + (Number(pout.value) / Number(pin.value)).toFixed(1) +
+          "×</b> the price of input here, so a prompt that is mostly context is cheaper than its " +
+          "token count suggests — and a chatty response is more expensive than its length " +
+          "suggests. The ÷100,000 shortcut runs " + Math.abs(err).toFixed(0) +
+          "% low, which is the right kind of wrong for a whiteboard: it under-promises.")
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · ftmem  (training-methods.md)
+  // Fine-tuning memory from the page's own accounting: 12 bytes per parameter
+  // for full fine-tuning -- 2 weights + 2 gradients + 8 Adam states -- against
+  // LoRA, where the base is frozen, and QLoRA, where it is also quantised.
+  // The adapter size is computed from rank and shape, not assumed.
+  // ======================================================================
+  function ftmem(host, h) {
+    h.panel({
+      title: "Will this fine-tune fit?",
+      note: "Full fine-tuning costs <b>12 bytes per parameter</b> — 2 for weights, 2 for " +
+        "gradients, 8 for Adam's two moments — which is the page's accounting. LoRA freezes the " +
+        "base so only the adapter pays that, and QLoRA quantises the frozen base on top. The " +
+        "adapter size here is computed from your rank and shape rather than guessed.",
+    });
+
+    var pb = h.range({ label: "parameters", min: 1, max: 180, value: 8, unit: " B" });
+    var layers = h.range({ label: "layers", min: 8, max: 128, value: 32 });
+    var dmodel = h.range({ label: "hidden size", min: 512, max: 16384, step: 256, value: 4096 });
+    var rank = h.range({ label: "LoRA rank", min: 1, max: 256, value: 16 });
+    var act = h.range({ label: "activations + overhead", min: 0, max: 60, value: 20, unit: " GB" });
+    var vram = h.range({ label: "GPU memory available", min: 8, max: 640, step: 8, value: 80, unit: " GB" });
+
+    h.on(function () {
+      var P = Number(pb.value) * 1e9;
+      var L = Math.round(Number(layers.value)), D = Math.round(Number(dmodel.value));
+      var R = Math.round(Number(rank.value));
+      var over = Number(act.value), V = Number(vram.value);
+
+      // LoRA on the four attention projections: each d x d matrix gets A (d x r)
+      // and B (r x d), so 2 * r * d per matrix, 4 matrices per layer.
+      var adapter = L * 4 * 2 * R * D;
+      var G = 1e9;
+
+      var full = (P * 12) / G + over;
+      var lora = (P * 2 + adapter * 12) / G + over;
+      var qlora = (P * 0.5 + adapter * 12) / G + over;
+
+      var rows = [
+        ["full fine-tune", (P * 12 / G).toFixed(1), over.toFixed(0), full.toFixed(1),
+         full <= V ? "fits" : "does not fit"],
+        ["LoRA", ((P * 2 + adapter * 12) / G).toFixed(1), over.toFixed(0), lora.toFixed(1),
+         lora <= V ? "fits" : "does not fit"],
+        ["QLoRA", ((P * 0.5 + adapter * 12) / G).toFixed(1), over.toFixed(0), qlora.toFixed(1),
+         qlora <= V ? "fits" : "does not fit"],
+      ];
+      var mx = Math.max(full, lora, qlora, V);
+
+      h.render(
+        h.big(qlora <= V ? "QLoRA fits" : lora <= V ? "LoRA fits" : full <= V ? "full fits" : "nothing fits",
+          "in " + V + " GB", qlora <= V ? "ok" : "bad") +
+        h.row("trainable parameters", h.fmt(Math.round(adapter / 1e6)) + " M  (" +
+          ((adapter / P) * 100).toFixed(2) + "% of the model)") +
+        h.row("full fine-tune", full.toFixed(1) + " GB", full <= V ? "ok" : "bad") +
+        h.row("LoRA", lora.toFixed(1) + " GB", lora <= V ? "ok" : "bad") +
+        h.row("QLoRA", qlora.toFixed(1) + " GB", qlora <= V ? "ok" : "bad") +
+        h.row("LoRA saves against full", (full - lora).toFixed(1) + " GB  (" +
+          ((1 - lora / full) * 100).toFixed(0) + "%)", "ok") +
+        h.table(["method", "model+optimiser GB", "overhead GB", "total GB", "verdict"], rows) +
+        h.bars([
+          { label: "full", value: full, max: mx, text: full.toFixed(0) + " GB",
+            flag: full <= V ? "ok" : "bad" },
+          { label: "LoRA", value: lora, max: mx, text: lora.toFixed(0) + " GB",
+            flag: lora <= V ? "ok" : "bad" },
+          { label: "QLoRA", value: qlora, max: mx, text: qlora.toFixed(0) + " GB",
+            flag: qlora <= V ? "ok" : "bad" },
+          { label: "your GPU", value: V, max: mx, text: V + " GB" },
+        ]) +
+        h.note("Almost all of full fine-tuning's cost is the optimiser, not the weights: Adam's " +
+          "two moments are <b>8 of the 12 bytes</b>. That is why freezing the base removes " +
+          "roughly " + ((1 - lora / full) * 100).toFixed(0) + "% of the memory while still " +
+          "training " + ((adapter / P) * 100).toFixed(2) + "% of the parameters — the saving " +
+          "comes from what you <i>stop storing</i>, not from what you stop learning. Raise the " +
+          "rank and watch how little the total moves.")
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · retrieve  (query-transformation.md)
+  // Real BM25 over a corpus you can edit, scoring the original query against a
+  // rewrite. The page's argument is that the user's phrasing is rarely the
+  // phrasing that finds the answer; this lets you try to prove it wrong.
+  // ======================================================================
+  var retrieve_K1 = 1.5, retrieve_B = 0.75;
+
+  function retrieve_tok(s) {
+    return String(s).toLowerCase().replace(/[^a-z0-9\s]/g, " ").split(/\s+/)
+      .filter(function (w) { return w.length > 2; });
+  }
+
+  function retrieve_score(query, docs) {
+    var N = docs.length, i, j;
+    var toks = docs.map(retrieve_tok);
+    var avgdl = toks.reduce(function (a, t) { return a + t.length; }, 0) / (N || 1);
+    var df = {};
+    for (i = 0; i < N; i++) {
+      var seen = {};
+      for (j = 0; j < toks[i].length; j++) {
+        if (!seen[toks[i][j]]) { seen[toks[i][j]] = 1; df[toks[i][j]] = (df[toks[i][j]] || 0) + 1; }
+      }
+    }
+    var q = retrieve_tok(query), out = [];
+    for (i = 0; i < N; i++) {
+      var tf = {}, s = 0;
+      for (j = 0; j < toks[i].length; j++) tf[toks[i][j]] = (tf[toks[i][j]] || 0) + 1;
+      for (j = 0; j < q.length; j++) {
+        var w = q[j], f = tf[w] || 0;
+        if (!f) continue;
+        var idf = Math.log(1 + (N - (df[w] || 0) + 0.5) / ((df[w] || 0) + 0.5));
+        s += idf * (f * (retrieve_K1 + 1)) /
+             (f + retrieve_K1 * (1 - retrieve_B + retrieve_B * toks[i].length / (avgdl || 1)));
+      }
+      out.push({ i: i, score: s });
+    }
+    out.sort(function (a, b) { return b.score - a.score; });
+    return out;
+  }
+
+  function retrieve(host, h) {
+    h.panel({
+      title: "Does rewriting the query actually find the answer?",
+      note: "Real <b>BM25</b> over the corpus below — one document per line. Score the user's " +
+        "phrasing against a rewrite and watch where the answer lands. The page's claim is that " +
+        "the question as typed is rarely the phrasing that retrieves; this is where you test it " +
+        "on your own text.",
+    });
+
+    var corpus = h.textarea({
+      label: "corpus — one document per line", rows: 7,
+      value: [
+        "Requests are rejected with status 429 when the token bucket is empty.",
+        "The rate limiter uses a token bucket refilled at a steady rate per tenant.",
+        "Latency rose after the cache was disabled during the migration.",
+        "Backpressure is signalled upstream using Retry-After headers.",
+        "The deployment pipeline runs integration tests before promoting a build.",
+        "Connection pool exhaustion causes queueing and raises p99 latency.",
+      ].join("\n"),
+    });
+    var q1 = h.text({ label: "the user's question", value: "why am I getting errors", wide: true });
+    var q2 = h.text({ label: "a rewrite", value: "rate limit token bucket 429 rejected", wide: true });
+
+    h.on(function () {
+      var docs = String(corpus.value).split(/\r?\n/).map(function (s) { return s.trim(); })
+        .filter(Boolean);
+      if (docs.length < 2) {
+        h.render(h.note("Give the corpus at least two documents, one per line.", "warn"));
+        return;
+      }
+      var a = retrieve_score(q1.value, docs), b = retrieve_score(q2.value, docs);
+      var aHit = a[0].score > 0, bHit = b[0].score > 0;
+
+      function list(r) {
+        return r.slice(0, 4).map(function (x, idx) {
+          return [String(idx + 1), x.score.toFixed(3),
+                  docs[x.i].slice(0, 54) + (docs[x.i].length > 54 ? "…" : "")];
+        });
+      }
+      var matched = 0;
+      for (var i = 0; i < docs.length; i++) if (retrieve_score(q1.value, docs)[i].score > 0) matched++;
+
+      h.render(
+        h.big(aHit ? a[0].score.toFixed(2) : "0.00",
+          "best score for the question as typed", aHit ? "warn" : "bad") +
+        h.row("question as typed", aHit ? "top doc scores " + a[0].score.toFixed(3) :
+          "no document shares a term — nothing retrieved", aHit ? "warn" : "bad") +
+        h.row("rewritten", bHit ? "top doc scores " + b[0].score.toFixed(3) :
+          "no document shares a term", bHit ? "ok" : "bad") +
+        h.row("documents the question touches at all", String(matched) + " of " + docs.length,
+          matched === 0 ? "bad" : matched < docs.length / 2 ? "warn" : "ok") +
+        h.table(["#", "score", "as typed"], list(a)) +
+        h.table(["#", "score", "rewritten"], list(b)) +
+        (!aHit && bHit
+          ? h.note("<b>The question as typed retrieves nothing.</b> BM25 matches terms, and the " +
+              "user's words — “" + retrieve_tok(q1.value).join(", ") + "” — appear in no " +
+              "document. The rewrite shares vocabulary with the corpus and finds it immediately. " +
+              "This is the whole argument for query transformation, and it is a vocabulary " +
+              "mismatch rather than a ranking problem: no amount of reranking fixes an empty " +
+              "candidate set.", "bad")
+          : aHit && b[0].score > a[0].score
+          ? h.note("Both retrieve something, but the rewrite scores higher. Worth asking whether " +
+              "it also retrieves the <i>right</i> thing — a higher BM25 score on the wrong " +
+              "document is a confident failure, which is the mode this page warns about.", "warn")
+          : h.note("The question as typed already does as well as the rewrite here. That is the " +
+              "case the page says to leave alone: transformation costs a model call and adds a " +
+              "failure mode, so it has to earn its place on your traffic."))
+      );
+    });
+  }
+
+  // ======================================================================
   var LABS = {
     "tokenizer": tokenizer,
     "attention": attention,
@@ -3251,7 +3514,10 @@
     "dedup": dedup,
     "segments": segments,
     "roofline": roofline,
-    "cascade": cascade
+    "cascade": cascade,
+    "envelope": envelope,
+    "ftmem": ftmem,
+    "retrieve": retrieve
   };
   window.__LABS = LABS;   // later labs register into this
 

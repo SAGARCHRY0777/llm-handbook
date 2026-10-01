@@ -44,6 +44,12 @@ envelope
 
 ---
 
+```lab
+envelope
+```
+
+---
+
 ## KV cache
 
 ```

@@ -53,6 +53,12 @@ queryrewrite
 
 ---
 
+```lab
+retrieve
+```
+
+---
+
 ## 2 · Design
 
 **Basic.** Query transformation means: do not retrieve with the raw user string.

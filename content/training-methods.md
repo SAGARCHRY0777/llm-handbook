@@ -50,6 +50,12 @@ flowchart TD
 
 ---
 
+```lab
+ftmem
+```
+
+---
+
 ## 1 · Pretraining stage
 
 ### 1. Full pretraining from scratch
