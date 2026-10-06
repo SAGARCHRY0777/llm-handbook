@@ -294,6 +294,49 @@ const FACTS = {
     ],
   },
 
+  // --- regression-gates: can a 200-item set see a 1-point drop?
+  gate: {
+    page: null,
+    facts: [
+      {
+        name: "observed − baseline = −1.0 pts, 178/200 vs 180/200",
+        want: () => "−1.0 pts",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "pooled two-proportion z gives this p-value",
+        want: () => "= " + gateStats(200).pval.toFixed(3),
+        has: (t, w) => t.includes(w),
+      },
+      {
+        // The panel's instruction: read the interval, it straddles zero, so
+        // the same system could have produced either score.
+        name: "the 95% interval on the difference straddles zero",
+        want: () => {
+          const g = gateStats(200);
+          if (!(g.lo <= 0 && g.hi >= 0)) {
+            throw new Error(`interval [${g.lo.toFixed(4)}, ${g.hi.toFixed(4)}] does not contain 0`);
+          }
+          return "= " + g.pval.toFixed(3);
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        // And: drag items to the top and it STILL contains zero. That is the
+        // point of the lab -- the gate is unachievable at any size it offers.
+        name: "it still straddles zero at the maximum 2000 items",
+        want: () => {
+          const g = gateStats(2000);
+          if (!(g.lo <= 0 && g.hi >= 0)) {
+            throw new Error(`at n=2000 the interval [${g.lo.toFixed(4)}, ${g.hi.toFixed(4)}] excludes 0 — the panel's claim no longer holds`);
+          }
+          return "= " + gateStats(200).pval.toFixed(3);
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
   // --- chunking: the fixed-window arithmetic and what overlap costs
   chunker: {
     page: null,
@@ -1257,6 +1300,35 @@ const FACTS = {
     ],
   },
 };
+
+/** Standard normal CDF, Abramowitz & Stegun 26.2.17. |error| < 7.5e-8. */
+function normalCdf(z) {
+  const t = 1 / (1 + 0.2316419 * Math.abs(z));
+  const d = 0.3989422804014327 * Math.exp((-z * z) / 2);
+  const tail = d * t * (0.31938153 + t * (-0.356563782 + t * (1.781477937 +
+    t * (-1.821255978 + t * 1.330274429))));
+  return Math.min(1, Math.max(0, z > 0 ? 1 - tail : tail));
+}
+
+/**
+ * The two-proportion test behind the gate: a pooled z for the p-value and a
+ * Wald interval on the difference, at 90% baseline against 89% observed.
+ */
+function gateStats(items, basePct = 90, obsPct = 89, zc = 1.959964) {
+  const x0 = Math.round((basePct / 100) * items);
+  const x1 = Math.round((obsPct / 100) * items);
+  const p0 = x0 / items, p1 = x1 / items, d = p1 - p0;
+  const pool = (x0 + x1) / (2 * items);
+  const sePool = Math.sqrt((2 * pool * (1 - pool)) / items);
+  const z = sePool > 0 ? d / sePool : 0;
+  const seDiff = Math.sqrt((p0 * (1 - p0)) / items + (p1 * (1 - p1)) / items);
+  return {
+    d,
+    pval: Math.min(1, 2 * (1 - normalCdf(Math.abs(z)))),
+    lo: d - zc * seDiff,
+    hi: d + zc * seDiff,
+  };
+}
 
 /**
  * Fixed-window chunking over the lab's default document: a window of C
