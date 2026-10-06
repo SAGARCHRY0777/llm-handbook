@@ -294,6 +294,102 @@ const FACTS = {
     ],
   },
 
+  // --- fine-tuning: LoRA parameter and memory arithmetic
+  lora: {
+    page: null,
+    facts: [
+      {
+        name: "trainable params = L · Σ r(in+out) for q,k,v,o at d=4096, r=16, L=32",
+        want: () => n(loraTrain(4096, 32, 16, ["q", "k", "v", "o"])),
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "base is Llama-2-7B shaped (6.74B params, MLP width 11008)",
+        want: () => {
+          const base = loraBase(4096, 32);
+          if (base < 6.7e9 || base > 6.8e9) throw new Error(`expected ~6.74B base, got ${base}`);
+          return n(base + loraTrain(4096, 32, 16, ["q", "k", "v", "o"]));
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "trainable share of the whole model",
+        want: () => {
+          const base = loraBase(4096, 32);
+          const train = loraTrain(4096, 32, 16, ["q", "k", "v", "o"]);
+          return ((100 * train) / (base + train)).toFixed(3) + "%";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "adapter file at fp16 = 2 bytes per trainable param",
+        want: () => {
+          const bytes = loraTrain(4096, 32, 16, ["q", "k", "v", "o"]) * 2;
+          return (bytes / 1048576).toFixed(1) + " MiB";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "base is this many times larger than the adapter",
+        want: () => {
+          const base = loraBase(4096, 32);
+          return n(Math.floor(base / loraTrain(4096, 32, 16, ["q", "k", "v", "o"])));
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
+  // --- quantization: the affine quantizer, and what one outlier costs
+  quantize: {
+    page: null,
+    facts: [
+      {
+        name: "INT4 per-tensor RMSE on the default outlier vector",
+        want: () => {
+          const r = runQuantize(4, 16);
+          return r.rmse.toFixed(4);
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        // The lab's point: one weight 20x larger than the rest consumes the
+        // range, so most of the tensor rounds onto the zero code and is gone.
+        name: "most of the tensor is flattened to exactly zero",
+        want: () => {
+          const r = runQuantize(4, 16);
+          if (r.dead < 8) throw new Error(`expected most weights dead, got ${r.dead}/16`);
+          return `${r.dead} / 16`;
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "deleting the outlier collapses the error",
+        want: () => {
+          const withIt = runQuantize(4, 16).rmse;
+          const without = runQuantize(4, 15, true).rmse;
+          if (!(without < withIt / 10)) {
+            throw new Error(`removing 9.20 should collapse RMSE: ${withIt.toFixed(4)} -> ${without.toFixed(4)}`);
+          }
+          return runQuantize(4, 16).rmse.toFixed(4); // the default render still shows the outlier case
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "per-block confines the damage to one block",
+        want: () => {
+          const tensor = runQuantize(4, 16).rmse;
+          const block = runQuantize(4, 4).rmse;
+          if (!(block < tensor)) {
+            throw new Error(`per-block should beat per-tensor: ${block.toFixed(4)} vs ${tensor.toFixed(4)}`);
+          }
+          return runQuantize(4, 16).rmse.toFixed(4);
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
   // --- bias-and-explainability: the weighted mean that was once wrong
   segments: {
     page: null,
@@ -636,6 +732,66 @@ const FACTS = {
     ],
   },
 };
+
+/**
+ * LoRA shapes, from the Llama-2 architecture the lab models: an untied
+ * lm_head, four square attention projections, and a 3-matrix MLP whose width
+ * is 8d/3 rounded up to a multiple of 256.
+ */
+const LORA_VOCAB = 32000;
+const mlpWidth = (d) => Math.ceil(Math.ceil((8 * d) / 3) / 256) * 256;
+
+function loraBase(d, L) {
+  const m = mlpWidth(d);
+  return 2 * LORA_VOCAB * d + L * (4 * d * d + 3 * d * m + 2 * d) + d;
+}
+
+function loraTrain(d, L, r, names) {
+  const m = mlpWidth(d);
+  const shape = (name) =>
+    name === "gate" || name === "up" ? [m, d] : name === "down" ? [d, m] : [d, d];
+  return L * names.reduce((s, name) => {
+    const [a, b] = shape(name);
+    return s + r * (a + b);
+  }, 0);
+}
+
+/**
+ * The affine quantizer, from the definition rather than the lab's code:
+ *   scale = (max − min) / qmax     with 0 forced into the range
+ *   zp    = round(−min / scale)
+ *   q     = clamp(round(w/scale) + zp, 0, qmax)
+ *   ŵ     = scale · (q − zp)
+ * `blockSize` of 16 is per-tensor for this vector; `drop` removes the outlier.
+ */
+const QUANT_WEIGHTS = [
+  0.12, -0.35, 0.44, -0.08, 0.21, -0.51, 0.33, 9.2,
+  -0.17, 0.06, 0.29, -0.42, 0.15, -0.23, 0.38, -0.11,
+];
+
+function runQuantize(bits, blockSize, drop = false) {
+  const vals = drop ? QUANT_WEIGHTS.filter((v) => v !== 9.2) : QUANT_WEIGHTS.slice();
+  const qmax = 2 ** bits - 1;
+  const deq = [];
+  for (let s = 0; s < vals.length; s += blockSize) {
+    const seg = vals.slice(s, s + blockSize);
+    const mn = Math.min(0, ...seg), mx = Math.max(0, ...seg);
+    let scale = (mx - mn) / qmax;
+    if (!(scale > 0)) scale = 1;
+    const zp = Math.min(qmax, Math.max(0, Math.round(-mn / scale)));
+    for (const w of seg) {
+      const q = Math.min(qmax, Math.max(0, Math.round(w / scale) + zp));
+      deq.push(scale * (q - zp));
+    }
+  }
+  let sq = 0, dead = 0;
+  for (let i = 0; i < vals.length; i++) {
+    const e = vals[i] - deq[i];
+    sq += e * e;
+    if (vals[i] !== 0 && deq[i] === 0) dead++;
+  }
+  return { rmse: Math.sqrt(sq / vals.length), dead, n: vals.length };
+}
 
 /**
  * The roofline for one decode step: read every weight once, do 2 FLOPs per
