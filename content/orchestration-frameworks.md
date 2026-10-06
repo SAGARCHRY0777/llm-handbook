@@ -57,6 +57,12 @@ framehop
 
 ---
 
+```lab
+critpath
+```
+
+---
+
 ## 2 · Design
 
 **Basic — LangChain's primitives.** Four things account for most of what you

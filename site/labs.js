@@ -4702,6 +4702,600 @@
     });
   }
 
+  // ======================================================================
+  // LAB · cragroute  (corrective-rag.md)
+  // CRAG is two thresholds and three branches. The branches cost wildly
+  // different amounts, so where you put the thresholds IS the cost model --
+  // and the expensive middle band is the one people set by eyeballing.
+  // ======================================================================
+  function cragroute_parse(text) {
+    return String(text).split(/[\s,\r\n]+/).map(Number)
+      .filter(function (v) { return isFinite(v) && v >= 0 && v <= 1; });
+  }
+
+  function cragroute(host, h) {
+    h.panel({
+      title: "Price the three branches before you pick the thresholds",
+      note: "Corrective RAG grades each retrieval, then routes: <b>correct</b> answers straight " +
+        "from the retrieved docs, <b>ambiguous</b> adds a web search, <b>incorrect</b> throws the " +
+        "retrieval away and rewrites the query. Paste your own grader scores and this computes " +
+        "where the traffic lands and what it costs. The middle band is the expensive one.",
+    });
+
+    var scores = h.textarea({
+      label: "retrieval grader scores, 0–1 (one per query)", rows: 4,
+      value: "0.95 0.91 0.88 0.84 0.81 0.78 0.74 0.71 0.68 0.66 0.63 0.61 0.58 0.55 " +
+             "0.52 0.49 0.46 0.42 0.38 0.34 0.29 0.24 0.19 0.12 0.07",
+    });
+    var hi = h.range({ label: "upper threshold — above this, trust the retrieval", min: 0, max: 100, value: 70, unit: "%" });
+    var lo = h.range({ label: "lower threshold — below this, discard and rewrite", min: 0, max: 100, value: 30, unit: "%" });
+    var cCorrect = h.range({ label: "cost of the correct path ($/1k)", min: 1, max: 60, value: 8 });
+    var cAmbig = h.range({ label: "cost of the ambiguous path ($/1k)", min: 1, max: 200, value: 45 });
+    var cIncorrect = h.range({ label: "cost of the rewrite path ($/1k)", min: 1, max: 200, value: 70 });
+
+    h.on(function () {
+      var s = cragroute_parse(scores.value);
+      if (s.length < 3) {
+        h.render(h.note("Paste at least three scores between 0 and 1.", "warn"));
+        return;
+      }
+      var HI = Number(hi.value) / 100, LO = Number(lo.value) / 100;
+      var swapped = LO > HI;
+      if (swapped) { var t = HI; HI = LO; LO = t; }
+
+      var nC = 0, nA = 0, nI = 0, i;
+      for (i = 0; i < s.length; i++) {
+        if (s[i] >= HI) nC++;
+        else if (s[i] >= LO) nA++;
+        else nI++;
+      }
+      var N = s.length;
+      var CC = Number(cCorrect.value) / 1000, CA = Number(cAmbig.value) / 1000,
+          CI = Number(cIncorrect.value) / 1000;
+      var total = nC * CC + nA * CA + nI * CI;
+      var per = total / N;
+      var allCorrect = CC;                       // the floor: if every query were clean
+      var overhead = per / allCorrect - 1;
+
+      // what the middle band alone costs, versus sending it down the cheap path
+      var ambigPremium = nA * (CA - CC);
+
+      var rows = [
+        ["correct — answer directly", nC, ((nC / N) * 100).toFixed(0) + "%",
+          "$" + (nC * CC).toFixed(3)],
+        ["ambiguous — add web search", nA, ((nA / N) * 100).toFixed(0) + "%",
+          "$" + (nA * CA).toFixed(3)],
+        ["incorrect — rewrite and retry", nI, ((nI / N) * 100).toFixed(0) + "%",
+          "$" + (nI * CI).toFixed(3)],
+      ];
+
+      var bars = [
+        { label: "correct", value: nC, max: N, text: String(nC), flag: "ok" },
+        { label: "ambiguous", value: nA, max: N, text: String(nA),
+          flag: nA / N > 0.4 ? "bad" : nA / N > 0.2 ? "warn" : undefined },
+        { label: "incorrect", value: nI, max: N, text: String(nI),
+          flag: nI / N > 0.3 ? "bad" : undefined },
+      ];
+
+      var chips = s.slice().sort(function (a, b) { return b - a; }).map(function (v) {
+        return { label: v.toFixed(2),
+                 flag: v >= HI ? "ok" : v >= LO ? "warn" : "bad",
+                 title: v >= HI ? "correct" : v >= LO ? "ambiguous" : "incorrect" };
+      });
+
+      h.render(
+        h.big("$" + (per * 1000).toFixed(2), "per 1,000 queries",
+          overhead > 2 ? "bad" : overhead > 1 ? "warn" : "ok") +
+        (swapped ? h.note("Your lower threshold is above the upper one — they have been swapped " +
+          "so the bands still make sense.", "warn") : "") +
+        h.row("queries", String(N)) +
+        h.row("bands", "correct ≥ " + HI.toFixed(2) + "  ·  ambiguous " + LO.toFixed(2) + "–" +
+          HI.toFixed(2) + "  ·  incorrect < " + LO.toFixed(2)) +
+        h.row("cost if every retrieval were clean", "$" + (allCorrect * 1000).toFixed(2) + " / 1k") +
+        h.row("correction overhead", "+" + (overhead * 100).toFixed(0) + "%",
+          overhead > 2 ? "bad" : overhead > 1 ? "warn" : "ok") +
+        h.row("paid for the ambiguous band alone",
+          "$" + (ambigPremium * 1000 / N * 1000).toFixed(2) + " / 1k  (" +
+          (total ? ((nA * CA / total) * 100).toFixed(0) : "0") + "% of total spend from " +
+          ((nA / N) * 100).toFixed(0) + "% of traffic)",
+          nA * CA > total * 0.5 ? "bad" : undefined) +
+        h.table(["branch", "queries", "share", "cost"], rows) +
+        h.bars(bars) +
+        h.chips(chips) +
+        h.note(nA * CA > total * 0.5
+          ? "<b>The ambiguous band is over half your spend.</b> That band exists because the " +
+            "grader is unsure — you are paying the most for the queries you understand least. " +
+            "Two honest moves: narrow the band (raise the lower threshold, lower the upper) and " +
+            "accept more mistakes on either side, or improve the grader so fewer queries land " +
+            "there. Widening the band to be safe is the expensive reflex."
+          : nI / N > 0.3
+          ? "<b>" + ((nI / N) * 100).toFixed(0) + "% of queries are being discarded and " +
+            "rewritten.</b> At that rate the problem is upstream — your index does not cover " +
+            "this traffic, and a correction loop is an expensive way to discover that every " +
+            "single time. Fix retrieval before tuning thresholds."
+          : "A healthy split: most traffic takes the cheap path and the correction loop handles " +
+            "the tail. Keep watching the <i>overhead</i> row rather than the hit rate — CRAG's " +
+            "cost is dominated by how often it escalates, not by how well it answers.")
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · unitecon  (market-and-business.md)
+  // Flat pricing against a long-tailed usage distribution. The average user
+  // is profitable and the business still loses money, because the mean is
+  // not where the cost is. This computes per-user margin on your own numbers.
+  // ======================================================================
+  function unitecon_parse(text) {
+    return String(text).split(/[\s,\r\n]+/).map(Number)
+      .filter(function (v) { return isFinite(v) && v >= 0; });
+  }
+
+  function unitecon(host, h) {
+    h.panel({
+      title: "Find the users your flat price does not cover",
+      note: "Paste monthly requests per user — one number each, real or modelled. With a flat " +
+        "subscription the mean tells you almost nothing: usage is long-tailed, so a minority of " +
+        "users can erase the margin of everyone else. This computes margin per user and finds " +
+        "the break-even usage line.",
+    });
+
+    var usage = h.textarea({
+      label: "monthly requests per user", rows: 4,
+      value: "12 18 23 25 31 34 38 41 44 47 52 55 58 63 67 71 78 84 92 101 " +
+             "115 134 158 190 240 310 420 580 870 1400",
+    });
+    var price = h.range({ label: "subscription $/user/month", min: 1, max: 200, value: 20 });
+    var costPer = h.range({ label: "cost per request ($)", min: 0.001, max: 0.5, step: 0.001, value: 0.03, decimals: 3 });
+    var fixed = h.range({ label: "fixed cost per user/month ($) — support, infra", min: 0, max: 20, step: 0.5, value: 2, decimals: 2 });
+
+    h.on(function () {
+      var u = unitecon_parse(usage.value);
+      if (u.length < 3) {
+        h.render(h.note("Paste at least three usage numbers.", "warn"));
+        return;
+      }
+      var P = Number(price.value), C = Number(costPer.value), F = Number(fixed.value);
+      var sorted = u.slice().sort(function (a, b) { return a - b; });
+      var n = sorted.length;
+
+      function margin(reqs) { return P - F - reqs * C; }
+      var breakEven = C > 0 ? (P - F) / C : Infinity;
+
+      var totalMargin = 0, losers = 0, lossAmount = 0, i;
+      for (i = 0; i < n; i++) {
+        var m = margin(sorted[i]);
+        totalMargin += m;
+        if (m < 0) { losers++; lossAmount += -m; }
+      }
+      var mean = sorted.reduce(function (a, b) { return a + b; }, 0) / n;
+      var median = n % 2 ? sorted[(n - 1) / 2] : (sorted[n / 2 - 1] + sorted[n / 2]) / 2;
+      var p90 = sorted[Math.min(n - 1, Math.floor(0.9 * n))];
+      var revenue = P * n;
+      var grossPct = revenue ? (totalMargin / revenue) * 100 : 0;
+      var meanOk = margin(mean) >= 0, medianOk = margin(median) >= 0;
+
+      var rows = [
+        ["median user", h.fmt(Math.round(median)), "$" + margin(median).toFixed(2),
+          margin(median) >= 0 ? "profitable" : "<b>loss</b>"],
+        ["mean user", h.fmt(Math.round(mean)), "$" + margin(mean).toFixed(2),
+          margin(mean) >= 0 ? "profitable" : "<b>loss</b>"],
+        ["p90 user", h.fmt(Math.round(p90)), "$" + margin(p90).toFixed(2),
+          margin(p90) >= 0 ? "profitable" : "<b>loss</b>"],
+        ["heaviest user", h.fmt(sorted[n - 1]), "$" + margin(sorted[n - 1]).toFixed(2),
+          margin(sorted[n - 1]) >= 0 ? "profitable" : "<b>loss</b>"],
+      ];
+
+      var deciles = [];
+      for (i = 0; i < 5; i++) {
+        var lo2 = Math.floor((i / 5) * n), hi2 = Math.floor(((i + 1) / 5) * n);
+        var slice = sorted.slice(lo2, Math.max(hi2, lo2 + 1));
+        var mm = slice.reduce(function (a, b) { return a + margin(b); }, 0);
+        deciles.push({ label: "quintile " + (i + 1), value: Math.abs(mm),
+                       max: 1, text: (mm >= 0 ? "+$" : "−$") + Math.abs(mm).toFixed(2),
+                       flag: mm >= 0 ? "ok" : "bad" });
+      }
+      var dmax = Math.max.apply(null, deciles.map(function (d) { return d.value; }).concat([1e-9]));
+      deciles.forEach(function (d) { d.max = dmax; });
+
+      h.render(
+        h.big((grossPct >= 0 ? "" : "−") + Math.abs(grossPct).toFixed(0) + "%",
+          "gross margin across " + n + " users",
+          grossPct < 0 ? "bad" : grossPct < 30 ? "warn" : "ok") +
+        h.row("break-even usage", C > 0
+          ? h.fmt(Math.floor(breakEven)) + " requests/month — above this a user loses money"
+          : "no per-request cost") +
+        h.row("users above it", losers + " of " + n + "  (" +
+          ((losers / n) * 100).toFixed(0) + "%)", losers ? "warn" : "ok") +
+        h.row("they cost you", "$" + lossAmount.toFixed(2) + " / month  (" +
+          (totalMargin + lossAmount > 0
+            ? ((lossAmount / (totalMargin + lossAmount)) * 100).toFixed(0) + "% of the margin " +
+              "everyone else generates"
+            : "more than everyone else generates") + ")",
+          lossAmount > 0 ? "bad" : "ok") +
+        h.row("median vs mean usage", h.fmt(Math.round(median)) + " vs " +
+          h.fmt(Math.round(mean)) + "  — mean is " +
+          (median ? (mean / median).toFixed(2) : "∞") + "× the median",
+          mean / median > 1.5 ? "warn" : undefined) +
+        h.row("total margin", "$" + totalMargin.toFixed(2) + " / month",
+          totalMargin < 0 ? "bad" : "ok") +
+        h.table(["user", "requests", "margin", ""], rows) +
+        h.bars(deciles) +
+        h.note(medianOk && !meanOk
+          ? "<b>The median user is profitable and the mean user is not.</b> That gap is the whole " +
+            "problem with quoting averages: the mean has been dragged above break-even by a tail " +
+            "that loses money on every request. Price on the distribution — usage tiers, a fair " +
+            "use cap, or overage — not on the average, which describes nobody."
+          : losers && totalMargin > 0
+          ? "Profitable overall, but " + losers + " user" + (losers === 1 ? "" : "s") + " are " +
+            "subsidised by the rest. That is survivable and often deliberate — until the mix " +
+            "shifts. The number to watch is not today's margin but whether heavy users are " +
+            "growing as a <i>share</i>, because this arithmetic inverts quickly when they do."
+          : totalMargin < 0
+          ? "<b>The book loses money at this price.</b> Raising the price is one lever, but look " +
+            "at the break-even line first: at $" + P + " and $" + C.toFixed(3) + "/request you " +
+            "cover only " + h.fmt(Math.floor(breakEven)) + " requests, and " +
+            ((losers / n) * 100).toFixed(0) + "% of users are past it. Either the per-request " +
+            "cost comes down or the price has to stop being flat."
+          : "Every user is profitable at this price, which usually means the price is high enough " +
+            "to be leaving growth on the table, or the usage data has not yet seen a real power " +
+            "user. Push the heaviest number up tenfold and see whether the model survives it.")
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · critpath  (orchestration-frameworks.md)
+  // Orchestrators sell parallelism. This computes how much is actually
+  // there: a real topological sort and longest-path over your own step
+  // graph. The critical path is the floor no framework gets you under,
+  // and knowing it tells you whether an orchestrator is worth its weight.
+  // ======================================================================
+  function critpath_parse(text) {
+    var steps = {}, order = [];
+    String(text).split(/\r?\n/).forEach(function (line) {
+      var s = line.trim();
+      if (!s || s.charAt(0) === "#") return;
+      var parts = s.split(/\s*,\s*/);
+      var name = (parts[0] || "").trim();
+      var dur = Number(parts[1]);
+      if (!name || !isFinite(dur) || dur < 0) return;
+      var deps = (parts[2] || "").split(/\s+/).map(function (d) { return d.trim(); })
+        .filter(Boolean);
+      steps[name] = { name: name, dur: dur, deps: deps };
+      order.push(name);
+    });
+    return { steps: steps, order: order };
+  }
+
+  function critpath_solve(g) {
+    var finish = {}, start = {}, state = {}, cyclic = false, missing = [];
+    function visit(n) {
+      if (state[n] === 2) return finish[n];
+      if (state[n] === 1) { cyclic = true; return 0; }
+      state[n] = 1;
+      var st = 0, s = g.steps[n], i;
+      for (i = 0; i < s.deps.length; i++) {
+        var d = s.deps[i];
+        if (!g.steps[d]) { if (missing.indexOf(d) < 0) missing.push(d); continue; }
+        var f = visit(d);
+        if (f > st) st = f;
+      }
+      state[n] = 2;
+      start[n] = st;
+      finish[n] = st + s.dur;
+      return finish[n];
+    }
+    for (var i = 0; i < g.order.length; i++) visit(g.order[i]);
+    return { start: start, finish: finish, cyclic: cyclic, missing: missing };
+  }
+
+  function critpath(host, h) {
+    h.panel({
+      title: "Measure the parallelism your pipeline actually has",
+      note: "One step per line: <code>name, duration, dep1 dep2</code> (leave deps blank for a " +
+        "root). This runs a real topological sort and longest-path. The <b>critical path</b> is " +
+        "the floor — no orchestrator, no amount of concurrency, gets you below it. Compare it " +
+        "to the sequential total and you know what parallelism is worth here.",
+    });
+
+    var spec = h.textarea({
+      label: "steps — name, duration (ms), dependencies", rows: 10,
+      value: [
+        "classify,     120,",
+        "embed,        180,",
+        "retrieve,     240, embed",
+        "web-search,   900, classify",
+        "rerank,       160, retrieve",
+        "expand-query, 140, classify",
+        "retrieve2,    240, expand-query",
+        "merge,         40, rerank retrieve2 web-search",
+        "generate,     800, merge",
+        "guardrail,    110, generate",
+      ].join("\n"),
+    });
+
+    h.on(function () {
+      var g = critpath_parse(spec.value);
+      var names = g.order;
+      if (names.length < 2) {
+        h.render(h.note("Give at least two steps, like <code>a, 100,</code> and " +
+          "<code>b, 50, a</code>.", "warn"));
+        return;
+      }
+      var r = critpath_solve(g);
+      if (r.cyclic) {
+        h.render(h.note("<b>This graph has a cycle.</b> A step depends, directly or " +
+          "indirectly, on itself — so there is no valid order to run it in. Every orchestrator " +
+          "will either deadlock or silently drop an edge here; find the loop before you pick a " +
+          "framework.", "bad"));
+        return;
+      }
+
+      var seq = 0, makespan = 0, i;
+      for (i = 0; i < names.length; i++) {
+        seq += g.steps[names[i]].dur;
+        if (r.finish[names[i]] > makespan) makespan = r.finish[names[i]];
+      }
+      var speedup = makespan ? seq / makespan : 1;
+
+      // peak concurrency: sweep the start/finish events
+      var events = [];
+      for (i = 0; i < names.length; i++) {
+        if (g.steps[names[i]].dur <= 0) continue;
+        events.push({ t: r.start[names[i]], d: 1 });
+        events.push({ t: r.finish[names[i]], d: -1 });
+      }
+      events.sort(function (a, b) { return a.t - b.t || a.d - b.d; });
+      var cur = 0, peak = 0;
+      for (i = 0; i < events.length; i++) { cur += events[i].d; if (cur > peak) peak = cur; }
+
+      // walk the critical path back from the latest finisher
+      var end = names[0];
+      for (i = 1; i < names.length; i++) if (r.finish[names[i]] > r.finish[end]) end = names[i];
+      var path = [], node = end, guard = 0;
+      while (node && guard++ < names.length + 1) {
+        path.unshift(node);
+        var deps = g.steps[node].deps.filter(function (d) { return g.steps[d]; });
+        var prev = null;
+        for (i = 0; i < deps.length; i++) {
+          if (Math.abs(r.finish[deps[i]] - r.start[node]) < 1e-9) { prev = deps[i]; break; }
+        }
+        node = prev;
+      }
+
+      var onPath = {};
+      path.forEach(function (p) { onPath[p] = 1; });
+      var slackRows = names.slice().sort(function (a, b) { return r.start[a] - r.start[b]; })
+        .map(function (nm) {
+          return [nm, h.fmt(g.steps[nm].dur) + " ms", h.fmt(r.start[nm]) + " ms",
+                  h.fmt(r.finish[nm]) + " ms", onPath[nm] ? "<b>critical</b>" : "—"];
+        });
+
+      h.render(
+        h.big(h.fmt(makespan) + " ms", "critical path — the floor on latency", "ok") +
+        (r.missing.length ? h.note("Unknown dependenc" + (r.missing.length === 1 ? "y" : "ies") +
+          " ignored: <code>" + r.missing.map(h.esc).join("</code>, <code>") + "</code>. " +
+          "A typo in a dependency name silently removes an ordering constraint, which is how a " +
+          "pipeline passes locally and races in production.", "bad") : "") +
+        h.row("steps", String(names.length)) +
+        h.row("sequential total", h.fmt(seq) + " ms  — one at a time") +
+        h.row("perfect parallelism", h.fmt(makespan) + " ms  — unlimited workers") +
+        h.row("best possible speedup", speedup.toFixed(2) + "×",
+          speedup < 1.3 ? "bad" : speedup < 2 ? "warn" : "ok") +
+        h.row("peak concurrency", peak + " step" + (peak === 1 ? "" : "s") + " at once" +
+          (peak <= 1 ? "  — the graph is a chain" : ""), peak <= 1 ? "warn" : "ok") +
+        h.row("critical path", path.join(" → ")) +
+        h.table(["step", "duration", "starts", "finishes", "slack"], slackRows) +
+        h.bars(path.map(function (p) {
+          return { label: p, value: g.steps[p].dur, max: makespan,
+                   text: h.fmt(g.steps[p].dur) + " ms",
+                   flag: g.steps[p].dur > makespan * 0.3 ? "bad" : undefined };
+        })) +
+        h.note(speedup < 1.3
+          ? "<b>There is almost nothing to parallelise here</b> — " + speedup.toFixed(2) +
+            "× is the ceiling, and that is before any orchestrator overhead. A framework that " +
+            "adds scheduling latency and a dependency will make this pipeline <i>slower</i>. " +
+            "Run it as a function."
+          : "Parallelism can take you from " + h.fmt(seq) + " ms to " + h.fmt(makespan) +
+            " ms — a " + speedup.toFixed(2) + "× ceiling. But look at the critical path: the " +
+            "longest single step is <b>" +
+            path.reduce(function (a, b) { return g.steps[a].dur >= g.steps[b].dur ? a : b; }) +
+            "</b>, and shortening that moves the floor in a way adding workers never will. " +
+            "Orchestrators buy you the difference between the two totals; making the slowest " +
+            "step faster is usually the cheaper win.")
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · specdec  (reasoning-inference-optimization.md)
+  // Speculative decoding has a closed form and an interior optimum, which
+  // is exactly the combination people get wrong -- longer drafts look
+  // strictly better until the wasted draft work overtakes the acceptances.
+  // E[accepted] = (1 - a^(k+1)) / (1 - a).
+  // ======================================================================
+  function specdec_speedup(a, k, c) {
+    var expected = a === 1 ? (k + 1) : (1 - Math.pow(a, k + 1)) / (1 - a);
+    var cost = 1 + k * c;                 // one target verify + k draft steps
+    return { expected: expected, cost: cost, speedup: expected / cost };
+  }
+
+  function specdec(host, h) {
+    h.panel({
+      title: "Pick the draft length instead of guessing it",
+      note: "A draft model proposes <i>k</i> tokens and the target verifies them in one pass. " +
+        "Expected accepted tokens is <code>(1−α<sup>k+1</sup>)/(1−α)</code> — it rises with k but " +
+        "<i>saturates</i>, while draft cost rises linearly forever. So there is an optimum in " +
+        "the middle, and it moves with both the acceptance rate and how cheap your draft model is.",
+    });
+
+    var alpha = h.range({ label: "acceptance rate α", min: 10, max: 99, value: 80, unit: "%" });
+    var cost = h.range({ label: "draft cost — % of one target forward pass", min: 1, max: 60, value: 10, unit: "%" });
+    var kSel = h.range({ label: "draft length k you are using", min: 1, max: 16, value: 4 });
+
+    h.on(function () {
+      var A = Number(alpha.value) / 100, C = Number(cost.value) / 100;
+      var K = Math.round(Number(kSel.value));
+
+      var best = null, rows = [], bars = [], k;
+      for (k = 1; k <= 16; k++) {
+        var r = specdec_speedup(A, k, C);
+        if (!best || r.speedup > best.speedup) best = { k: k, speedup: r.speedup,
+          expected: r.expected, cost: r.cost };
+      }
+      var mine = specdec_speedup(A, K, C);
+      var lost = best.speedup ? 1 - mine.speedup / best.speedup : 0;
+
+      for (k = 1; k <= 12; k++) {
+        var rr = specdec_speedup(A, k, C);
+        rows.push([String(k), rr.expected.toFixed(2), rr.cost.toFixed(2),
+                   rr.speedup.toFixed(3) + (k === best.k ? "  ← best" : k === K ? "  ← yours" : "")]);
+        bars.push({ label: "k=" + k, value: rr.speedup, max: best.speedup,
+                    text: rr.speedup.toFixed(2) + "×",
+                    flag: k === best.k ? "ok" : k === K && K !== best.k ? "warn" : undefined });
+      }
+
+      // where does speculation stop paying at all?
+      var breakEvenA = null;
+      for (var a2 = 5; a2 <= 99; a2++) {
+        if (specdec_speedup(a2 / 100, best.k, C).speedup > 1) { breakEvenA = a2 / 100; break; }
+      }
+
+      h.render(
+        h.big(best.speedup.toFixed(2) + "×", "best speedup, at k = " + best.k,
+          best.speedup > 1.5 ? "ok" : best.speedup > 1 ? "warn" : "bad") +
+        h.row("your k = " + K, mine.speedup.toFixed(3) + "×  (" +
+          mine.expected.toFixed(2) + " tokens per " + mine.cost.toFixed(2) + " passes)",
+          K === best.k ? "ok" : "warn") +
+        h.row("left on the table", K === best.k ? "nothing — you are at the optimum"
+          : (lost * 100).toFixed(1) + "% slower than k = " + best.k,
+          K === best.k ? "ok" : lost > 0.1 ? "bad" : "warn") +
+        h.row("saturation ceiling", "at α = " + (A * 100).toFixed(0) +
+          "%, no k ever beats " + (A === 1 ? "∞" : (1 / (1 - A)).toFixed(2)) +
+          " accepted tokens per cycle") +
+        h.row("speculation stops paying below", breakEvenA !== null
+          ? "α ≈ " + (breakEvenA * 100).toFixed(0) + "%  at this draft cost"
+          : "it never pays at this draft cost",
+          breakEvenA === null ? "bad" : undefined) +
+        h.table(["k", "E[accepted]", "cost (passes)", "speedup"], rows) +
+        h.bars(bars) +
+        h.note(best.speedup <= 1
+          ? "<b>Speculation is a loss here.</b> At α = " + (A * 100).toFixed(0) + "% with a draft " +
+            "costing " + (C * 100).toFixed(0) + "% of a target pass, you spend more on rejected " +
+            "drafts than you save on accepted ones. Either the draft model is too expensive or " +
+            "it disagrees with the target too often — and a bigger draft model fixes the second " +
+            "by worsening the first."
+          : K > best.k
+          ? "<b>Your draft is too long.</b> Past k = " + best.k + " each extra token is accepted " +
+            "with probability α<sup>k</sup>, which is already small, while you pay the full draft " +
+            "cost whether or not it survives. The acceptance curve saturates at " +
+            (1 / (1 - A)).toFixed(2) + " tokens; the cost curve does not saturate at all."
+          : K < best.k
+          ? "<b>Your draft is too short.</b> At α = " + (A * 100).toFixed(0) + "% the drafts are " +
+            "being accepted often enough to justify proposing more before each verify — k = " +
+            best.k + " is worth " + ((best.speedup / mine.speedup - 1) * 100).toFixed(0) +
+            "% more throughput than k = " + K + "."
+          : "You are at the optimum for these parameters. Worth re-checking when either number " +
+            "moves: α is workload-dependent — code and boilerplate draft far better than prose — " +
+            "so a single global k is usually leaving throughput on the table across routes.")
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · capacity  (system-design-walkthroughs.md)
+  // The first five minutes of a design round, done arithmetically. Not a
+  // formula to memorise -- the point is which number dominates, and it is
+  // almost never the one people spend the whiteboard on.
+  // ======================================================================
+  function capacity(host, h) {
+    h.panel({
+      title: "The back-of-envelope, computed",
+      note: "Every design round opens here, and the useful output is not the numbers themselves " +
+        "but <b>which one is the binding constraint</b>. Change the inputs and watch which line " +
+        "turns red first — storage, write throughput, or egress. That is the system you are " +
+        "actually designing.",
+    });
+
+    var dau = h.range({ label: "daily active users", min: 1000, max: 50000000, step: 1000, value: 2000000 });
+    var perUser = h.range({ label: "writes per user per day", min: 1, max: 500, value: 12 });
+    var readRatio = h.range({ label: "reads per write", min: 1, max: 1000, value: 100 });
+    var peak = h.range({ label: "peak-to-average multiplier", min: 1, max: 10, step: 0.5, value: 3, decimals: 1 });
+    var payload = h.range({ label: "bytes per write", min: 100, max: 1000000, step: 100, value: 2000 });
+    var retain = h.range({ label: "retention (days)", min: 1, max: 3650, value: 365 });
+    var replicas = h.range({ label: "replicas", min: 1, max: 6, value: 3 });
+
+    h.on(function () {
+      var U = Number(dau.value), W = Number(perUser.value), RR = Number(readRatio.value);
+      var PK = Number(peak.value), B = Number(payload.value), D = Number(retain.value);
+      var REP = Number(replicas.value);
+
+      var writesDay = U * W;
+      var wQps = writesDay / 86400;
+      var rQps = wQps * RR;
+      var wPeak = wQps * PK, rPeak = rQps * PK;
+
+      var bytesDay = writesDay * B;
+      var stored = bytesDay * D * REP;
+      var egressPeak = rPeak * B;                 // bytes/sec served at peak
+
+      function human(bytes) {
+        var u = ["B", "KB", "MB", "GB", "TB", "PB"], i = 0, v = bytes;
+        while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+        return v.toFixed(v < 10 ? 2 : 0) + " " + u[i];
+      }
+
+      // which constraint binds first, measured against rough commodity ceilings
+      var limits = [
+        { name: "write QPS", value: wPeak, ceiling: 50000,
+          note: "a sharded OLTP tier handles this; one node does not" },
+        { name: "read QPS", value: rPeak, ceiling: 500000,
+          note: "cacheable — this is what a CDN or read replica tier is for" },
+        { name: "stored bytes", value: stored, ceiling: 100 * 1024 * 1024 * 1024 * 1024,
+          note: "past ~100 TB, storage layout stops being an afterthought" },
+        { name: "peak egress", value: egressPeak, ceiling: 10 * 1024 * 1024 * 1024,
+          note: "10 GB/s is a serious CDN bill before it is an engineering problem" },
+      ];
+      limits.forEach(function (l) { l.ratio = l.value / l.ceiling; });
+      var binding = limits[0];
+      limits.forEach(function (l) { if (l.ratio > binding.ratio) binding = l; });
+
+      var bars = limits.map(function (l) {
+        return { label: l.name, value: Math.min(l.ratio, 2), max: 2,
+                 text: (l.ratio * 100).toFixed(l.ratio < 0.1 ? 1 : 0) + "% of ceiling",
+                 flag: l.ratio > 1 ? "bad" : l.ratio > 0.5 ? "warn" : "ok" };
+      });
+
+      h.render(
+        h.big(binding.name, "the binding constraint at this scale",
+          binding.ratio > 1 ? "bad" : binding.ratio > 0.5 ? "warn" : "ok") +
+        h.row("writes", h.fmt(Math.round(wQps)) + " QPS average  ·  " +
+          h.fmt(Math.round(wPeak)) + " QPS peak") +
+        h.row("reads", h.fmt(Math.round(rQps)) + " QPS average  ·  " +
+          h.fmt(Math.round(rPeak)) + " QPS peak") +
+        h.row("new data per day", human(bytesDay)) +
+        h.row("stored at " + h.fmt(D) + " days × " + REP + " replicas", human(stored),
+          stored > 100 * 1024 * 1024 * 1024 * 1024 ? "bad" : undefined) +
+        h.row("peak egress", human(egressPeak) + " / s",
+          egressPeak > 10 * 1024 * 1024 * 1024 ? "bad" : undefined) +
+        h.row("read:write ratio", "1 : " + h.fmt(RR) +
+          (RR >= 50 ? "  — read-dominated, so caching is the main lever"
+                    : "  — write-dominated, so caching will not save you"),
+          RR < 10 ? "warn" : "ok") +
+        h.bars(bars) +
+        h.note("<b>" + binding.name + " binds first</b> — " + binding.note + ". That is the " +
+          "sentence worth saying out loud in a design round, because it decides the " +
+          "architecture: a read-dominated system is a caching and replication problem, a " +
+          "write-dominated one is a partitioning problem, and a storage-dominated one is a " +
+          "tiering and lifecycle problem. Running the arithmetic takes a minute and rules out " +
+          "most of the designs you would otherwise spend the hour defending. The ceilings here " +
+          "are deliberately round numbers — they are for ranking the constraints, not sizing " +
+          "a cluster.")
+      );
+    });
+  }
+
   var LABS = {
     "tokenizer": tokenizer,
     "attention": attention,
@@ -4739,7 +5333,12 @@
     "promptcost": promptcost,
     "injection": injection,
     "hops": hops,
-    "thinkbudget": thinkbudget
+    "thinkbudget": thinkbudget,
+    "cragroute": cragroute,
+    "unitecon": unitecon,
+    "critpath": critpath,
+    "specdec": specdec,
+    "capacity": capacity
   };
   window.__LABS = LABS;   // later labs register into this
 

@@ -127,6 +127,12 @@ designwalk
 
 ---
 
+```lab
+capacity
+```
+
+---
+
 ## 2 · A customer support agent that can act
 
 ### Clarify

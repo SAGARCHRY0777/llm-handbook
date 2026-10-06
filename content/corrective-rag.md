@@ -58,6 +58,12 @@ cragloop
 
 ---
 
+```lab
+cragroute
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate.** Three named variants, often conflated. They differ in *where*
