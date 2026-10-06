@@ -49,3 +49,14 @@ jobs:
         run: npm run check:labs
         env:
           PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
+
+      # The step above proves a lab responds; it cannot tell you the number
+      # is wrong. This pins what each lab should print at its defaults, with
+      # the expected values recomputed independently rather than copied from
+      # the output -- a constant lifted out of the page would just pin
+      # today's bug. Verified complementary: halving the draft cost in the
+      # speculative-decoding lab leaves check:labs at 42/42 and fails here.
+      - name: Lab arithmetic is right
+        run: npm run check:facts
+        env:
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome

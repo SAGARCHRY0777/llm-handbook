@@ -31,24 +31,11 @@
 import { readdirSync, readFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { launch } from "./browser.mjs";
 
 const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const CONTENT = join(ROOT, "content");
 const DOCS = join(ROOT, "docs");
-
-// A Chromium-family binary, in the order worth trying. The CI runner has
-// Chrome preinstalled, which is why puppeteer-core (no bundled browser) is
-// enough and the heavyweight `puppeteer` package is not a dependency here.
-const BROWSERS = [
-  process.env.PUPPETEER_EXECUTABLE_PATH,
-  "/usr/bin/google-chrome",
-  "/usr/bin/chromium-browser",
-  "/usr/bin/chromium",
-  "C:/Program Files/BraveSoftware/Brave-Browser/Application/brave.exe",
-  "C:/Program Files/Google/Chrome/Application/chrome.exe",
-  "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
-  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-].filter(Boolean);
 
 const only = process.argv.slice(2).filter((a) => !a.startsWith("-"));
 
@@ -74,28 +61,7 @@ if (missingPage) {
   process.exit(1);
 }
 
-const exe = BROWSERS.find((p) => existsSync(p));
-if (!exe) {
-  console.error(
-    "No Chromium-family browser found. Set PUPPETEER_EXECUTABLE_PATH to one.\nTried:\n  " +
-      BROWSERS.join("\n  "),
-  );
-  process.exit(1);
-}
-
-let puppeteer;
-try {
-  puppeteer = (await import("puppeteer-core")).default;
-} catch {
-  console.error("puppeteer-core is not installed. Run 'npm ci'.");
-  process.exit(1);
-}
-
-const browser = await puppeteer.launch({
-  executablePath: exe,
-  headless: true,
-  args: ["--no-sandbox", "--disable-gpu"],
-});
+const browser = await launch();
 const page = await browser.newPage();
 
 const pageErrors = [];
