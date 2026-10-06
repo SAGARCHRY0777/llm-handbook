@@ -294,6 +294,132 @@ const FACTS = {
     ],
   },
 
+  // --- embeddings-and-vector-databases: BM25, scored independently below
+  bm25: {
+    page: null, // resolved from the fences at run time
+    facts: [
+      {
+        name: "D1 wins at k1=1.2, b=0.75 — not the keyword-stuffed or padded doc",
+        want: () => {
+          const r = scoreBm25(1.2, 0.75);
+          if (r[0].n !== 1) throw new Error(`expected D1 to win, got D${r[0].n}`);
+          return "top score — D1";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "top score to three decimals",
+        want: () => scoreBm25(1.2, 0.75)[0].score.toFixed(3),
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "6 documents, average length 9.5 tokens",
+        want: () => "6 · 9.5 tokens",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "pushing k1 to 3.5 hands first place to the keyword-stuffed D2",
+        // The panel claims this; if saturation stops behaving, the claim is
+        // wrong and the page is lying to the reader.
+        want: () => {
+          const r = scoreBm25(3.5, 0.75);
+          if (r[0].n !== 2) throw new Error(`k1=3.5 should favour D2, got D${r[0].n}`);
+          return "top score — D1"; // the DEFAULT render still shows D1
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "dragging b to 0 hands first place to the padded D3",
+        want: () => {
+          const r = scoreBm25(1.2, 0);
+          if (r[0].n !== 3) throw new Error(`b=0 should favour D3, got D${r[0].n}`);
+          return "top score — D1";
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
+  // --- drift-detection: PSI, recomputed from the binning rule
+  psi: {
+    page: null,
+    facts: [
+      {
+        name: "PSI total over the default baseline and current samples",
+        want: () => "PSI = " + computePsi().total.toFixed(4),
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "the shift is large enough to be called a major shift",
+        want: () => {
+          const { total } = computePsi();
+          if (total < 0.25) throw new Error(`expected PSI >= 0.25, got ${total.toFixed(4)}`);
+          return "major shift";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      { name: "30 values in each sample", want: () => "30 / 30", has: (t, w) => t.includes(w) },
+    ],
+  },
+
+  // --- caching: three eviction policies over the same trace
+  cachesim: {
+    page: null,
+    facts: [
+      {
+        // LFU, not LRU. The default trace has a hot set plus a scan through
+        // cold keys, and a scan is exactly what thrashes LRU -- it evicts the
+        // hot set to make room for keys it will never see again, while LFU's
+        // counters protect them. The lab's own note says LRU "wins on
+        // locality and loses on a scan"; this is the losing case.
+        name: "LFU wins on the default trace, because the scan thrashes LRU",
+        want: () => {
+          const r = runCache(3);
+          const best = r.reduce((m, x) => (x.rate > m.rate ? x : m));
+          if (best.name !== "LFU") throw new Error(`expected LFU to win, got ${best.name}`);
+          return `${best.name} ${(best.rate * 100).toFixed(1)}%`;
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "27 requests, 12 distinct keys",
+        want: () => `requests${CACHE_TRACE.length}distinct keys12`,
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "every policy's hit rate",
+        want: () => runCache(3).map((x) => (x.rate * 100).toFixed(1) + "%").join(" "),
+        has: (t, w) => w.split(" ").every((v) => t.includes(v)),
+      },
+    ],
+  },
+
+  // --- synthetic-data: Jaccard over character shingles, every pair
+  dedup: {
+    page: null,
+    facts: [
+      {
+        name: "8 pasted examples collapse to the computed distinct count",
+        want: () => {
+          const { groups, lines } = runDedup(0.6, 4);
+          if (groups >= lines) throw new Error("expected some collapse at 60% / 4-char shingles");
+          return `${groups} of ${lines}`;
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "all 28 pairs compared, not sampled",
+        want: () => `${(8 * 7) / 2}  (all of them)`.replace(/\s+/g, " "),
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "pairs above the threshold",
+        want: () => String(runDedup(0.6, 4).dupPairs),
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
   // --- llm-as-a-judge: Cohen's kappa over the default 20 rated pairs
   kappa: {
     page: "llm-as-a-judge.html",
@@ -434,6 +560,155 @@ const FACTS = {
 };
 
 /**
+ * BM25 over the lab's default corpus, from the textbook formula:
+ *   idf  = ln(1 + (N − df + 0.5) / (df + 0.5))
+ *   score = Σ idf · f(k1+1) / (f + k1(1 − b + b·|D|/avgdl))
+ * Independent of the lab's implementation, so a slipped term shows up.
+ */
+const BM25_DOCS = [
+  "the cat sat on the mat",
+  "cat cat cat cat cat cat cat cat",
+  "the dog chased the cat around the garden while the mat stayed rolled up in the hall cupboard for weeks",
+  "the mat is a flat piece of woven fabric",
+  "the dog barked at the postman",
+  "the weather forecast for the weekend is dry",
+];
+
+function scoreBm25(k1, b) {
+  const tok = (s) => s.toLowerCase().match(/[0-9a-z]+/g) || [];
+  const docs = BM25_DOCS.map((text, i) => {
+    const t = tok(text);
+    const tf = {};
+    for (const w of t) tf[w] = (tf[w] || 0) + 1;
+    return { n: i + 1, tf, len: t.length };
+  });
+  const N = docs.length;
+  const avgdl = docs.reduce((a, d) => a + d.len, 0) / N;
+  const terms = [...new Set(tok("the cat mat"))];
+  const idf = {};
+  for (const w of terms) {
+    const df = docs.filter((d) => d.tf[w]).length;
+    idf[w] = Math.log(1 + (N - df + 0.5) / (df + 0.5));
+  }
+  return docs
+    .map((d) => {
+      const K = k1 * (1 - b + (b * d.len) / avgdl);
+      let score = 0;
+      for (const w of terms) {
+        const f = d.tf[w] || 0;
+        if (f) score += ((f * (k1 + 1)) / (f + K)) * idf[w];
+      }
+      return { n: d.n, score };
+    })
+    .sort((a, c) => c.score - a.score);
+}
+
+/** PSI over the lab's two default samples, binned into 5 equal-count buckets. */
+function computePsi() {
+  const nums = (s) => s.split(/\s+/).map(Number).filter(Number.isFinite);
+  const B = nums("12 15 14 13 16 11 14 15 13 12 14 16 15 13 14 12 15 14 13 16 14 15 13 14 12 16 15 14 13 15");
+  const C = nums("14 17 16 15 18 14 17 19 16 15 18 20 17 16 19 15 18 17 16 21 18 17 16 19 15 20 18 17 16 19");
+  const k = 5;
+  const sorted = B.slice().sort((x, y) => x - y);
+  const edges = [];
+  for (let i = 1; i < k; i++) edges.push(sorted[Math.floor((i / k) * sorted.length)]);
+  const bin = (v) => {
+    for (let j = 0; j < edges.length; j++) if (v < edges[j]) return j;
+    return k - 1;
+  };
+  const bc = Array(k).fill(0), cc = Array(k).fill(0);
+  for (const v of B) bc[bin(v)]++;
+  for (const v of C) cc[bin(v)]++;
+  let total = 0;
+  for (let i = 0; i < k; i++) {
+    const pb = Math.max(bc[i] / B.length, 1e-4);
+    const pc = Math.max(cc[i] / C.length, 1e-4);
+    total += (pc - pb) * Math.log(pc / pb);
+  }
+  return { total, nB: B.length, nC: C.length };
+}
+
+/**
+ * The three eviction policies over the lab's default trace. This is a
+ * reimplementation rather than a cross-check -- there is no second way to
+ * define LRU -- so its value is catching a behaviour change in a refactor,
+ * not catching a wrong formula.
+ */
+const CACHE_TRACE = "a b c a b c a b c d e f g h i a b c a b c j k l a b c".split(" ");
+
+function runCache(cap) {
+  const one = (policy) => {
+    const store = [], freq = {};
+    let hits = 0;
+    for (const key of CACHE_TRACE) {
+      const at = store.indexOf(key);
+      if (at >= 0) {
+        hits++;
+        if (policy === "lru") { store.splice(at, 1); store.push(key); }
+        freq[key] = (freq[key] || 0) + 1;
+        continue;
+      }
+      freq[key] = (freq[key] || 0) + 1;
+      if (store.length >= cap) {
+        if (policy === "lfu") {
+          let worst = 0;
+          for (let j = 1; j < store.length; j++) {
+            if ((freq[store[j]] || 0) < (freq[store[worst]] || 0)) worst = j;
+          }
+          store.splice(worst, 1);
+        } else store.shift();           // FIFO and LRU both drop the front
+      }
+      store.push(key);
+    }
+    return hits / CACHE_TRACE.length;
+  };
+  return [
+    { name: "LRU", rate: one("lru") },
+    { name: "LFU", rate: one("lfu") },
+    { name: "FIFO", rate: one("fifo") },
+  ];
+}
+
+/** Jaccard over character shingles for every pair, then union-find grouping. */
+const DEDUP_LINES = [
+  "How do I reset my password?",
+  "How can I reset my password?",
+  "How do I reset the password?",
+  "What is the refund policy?",
+  "Can you explain the refund policy?",
+  "My order has not arrived yet",
+  "Where is my order, it has not arrived",
+  "How do I change my email address?",
+];
+
+function runDedup(threshold, k) {
+  const shingle = (s) => {
+    const t = s.toLowerCase().replace(/\s+/g, " ").trim();
+    const set = new Set();
+    for (let i = 0; i + k <= t.length; i++) set.add(t.slice(i, i + k));
+    return set;
+  };
+  const sets = DEDUP_LINES.map(shingle);
+  const parent = DEDUP_LINES.map((_, i) => i);
+  const find = (x) => { while (parent[x] !== x) { parent[x] = parent[parent[x]]; x = parent[x]; } return x; };
+  let dupPairs = 0;
+  for (let i = 0; i < sets.length; i++) {
+    for (let j = i + 1; j < sets.length; j++) {
+      let inter = 0;
+      for (const g of sets[i]) if (sets[j].has(g)) inter++;
+      const union = sets[i].size + sets[j].size - inter;
+      if (union && inter / union >= threshold) {
+        dupPairs++;
+        const a = find(i), b = find(j);
+        if (a !== b) parent[a] = b;
+      }
+    }
+  }
+  const roots = new Set(DEDUP_LINES.map((_, i) => find(i)));
+  return { groups: roots.size, lines: DEDUP_LINES.length, dupPairs };
+}
+
+/**
  * OpenAI's image tiling: fit 2048 on the long side, then 768 on the short,
  * then count 512px tiles. Reimplemented from the published rule so a changed
  * threshold in the lab shows up as a disagreement.
@@ -487,6 +762,19 @@ function solveDag() {
   };
 }
 
+// -- which page is each lab fenced on --------------------------------------
+// Looked up rather than hardcoded, so moving a lab to another page does not
+// need an edit here. An entry may still pin `page` explicitly.
+const fencedOn = new Map();
+for (const file of readdirSync(CONTENT).filter((f) => f.endsWith(".md"))) {
+  const lines = readFileSync(join(CONTENT, file), "utf8").split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() === "```lab" && lines[i + 1]) {
+      fencedOn.set(lines[i + 1].trim(), file.replace(/\.md$/, ".html"));
+    }
+  }
+}
+
 // -- run --------------------------------------------------------------------
 const only = process.argv.slice(2).filter((a) => !a.startsWith("-"));
 const names = Object.keys(FACTS).filter((k) => !only.length || only.includes(k));
@@ -501,7 +789,13 @@ const failures = [];
 let checked = 0;
 
 for (const lab of names) {
-  const { page: file, facts } = FACTS[lab];
+  const { facts } = FACTS[lab];
+  const file = FACTS[lab].page || fencedOn.get(lab);
+  if (!file) {
+    console.error(`${lab.padEnd(12)} NO FENCE — nothing in content/ mounts this lab`);
+    failures.push(lab);
+    continue;
+  }
   if (!existsSync(join(DOCS, file))) {
     console.error(`${lab.padEnd(12)} docs/${file} missing — run 'npm run build' first.`);
     failures.push(lab);
