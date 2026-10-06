@@ -109,9 +109,7 @@ Every tool you add is permanent context, paid on every request, before the user
 says anything.</p>
 <hr>
 <h2 id="3-the-number-that-should-change-how-you-read-leaks"><a class="anchor" href="#3-the-number-that-should-change-how-you-read-leaks">#</a>3 · The number that should change how you read leaks</h2><p>API prompts and consumer-product prompts are not the same order of magnitude:</p>
-<div class="table-scroll"><table><thead><tr><th>Surface</th><th>Bytes</th><th>≈ tokens</th></tr></thead><tbody><tr><td><code>gpt-5.5-pro-api</code></td><td>835</td><td>~210</td></tr><tr><td><code>gpt-5.5-api</code></td><td>862</td><td>~215</td></tr><tr><td><code>gpt-5.3-codex-api</code></td><td><strong>194</strong></td><td>~50</td></tr><tr><td><code>gpt-5.3-chat-api</code></td><td>2,200</td><td>~550</td></tr><tr><td><code>gpt-5.5-instant</code> (product)</td><td>85,051</td><td>~21,000</td></tr><tr><td><code>gpt-5.5-thinking</code> (product)</td><td>116,100</td><td>~29,000</td></tr><tr><td><code>gpt-5.6-sol</code> (product)</td><td>127,131</td><td>~32,000</td></tr></tbody></table></div><div class="callout warn">
-
-<p><strong>The API gives you a nearly empty system prompt.</strong> <code>gpt-5.5-api</code> at 862 bytes
+<div class="table-scroll"><table><thead><tr><th>Surface</th><th>Bytes</th><th>≈ tokens</th></tr></thead><tbody><tr><td><code>gpt-5.5-pro-api</code></td><td>835</td><td>~210</td></tr><tr><td><code>gpt-5.5-api</code></td><td>862</td><td>~215</td></tr><tr><td><code>gpt-5.3-codex-api</code></td><td><strong>194</strong></td><td>~50</td></tr><tr><td><code>gpt-5.3-chat-api</code></td><td>2,200</td><td>~550</td></tr><tr><td><code>gpt-5.5-instant</code> (product)</td><td>85,051</td><td>~21,000</td></tr><tr><td><code>gpt-5.5-thinking</code> (product)</td><td>116,100</td><td>~29,000</td></tr><tr><td><code>gpt-5.6-sol</code> (product)</td><td>127,131</td><td>~32,000</td></tr></tbody></table></div><div class="callout warn"><p><strong>The API gives you a nearly empty system prompt.</strong> <code>gpt-5.5-api</code> at 862 bytes
 against <code>gpt-5.5-thinking</code> at 116,100 is a <strong>135× difference</strong>, and the pattern
 holds across every API/product pair in the corpus. Everything you have read
 about a leaked ChatGPT or Claude.ai prompt — the personality rules, the
@@ -121,9 +119,7 @@ engineering you do not inherit when you call the API.</strong></p>
 fighting their instructions either. The behaviour you get from a raw API call is
 much closer to the model itself, which is why the same model can feel different
 through two surfaces.</p>
-</div>
-
-<p>The surface variation <em>within</em> one vendor is nearly as wide: <code>claude-voice-mode</code>
+</div><p>The surface variation <em>within</em> one vendor is nearly as wide: <code>claude-voice-mode</code>
 is <strong>1,085 B</strong> while <code>claude-in-chrome</code> is <strong>74,050 B</strong> — a 68× spread driven
 almost entirely by how many tools the surface exposes.</p>
 <hr>

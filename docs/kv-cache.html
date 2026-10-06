@@ -135,11 +135,7 @@ ones: identical free memory, two allocators, one of which cannot use it.</p>
   <g class="reject">
     <text class="lbl-b" x="20" y="80" fill="currentColor">4 blocks free — but only in runs of 2. REQUEST REJECTED.</text>
   </g>
-  <text class="lbl" x="20" y="98">external fragmentation: the memory exists, the shape is wrong</text>
-
-  <line x1="20" y1="114" x2="490" y2="114" stroke="currentColor" stroke-width="1" opacity=".18"/>
-
-<p>  <text class="lbl-b" x="20" y="140">PAGED — takes any 4, wherever they are</text>
+  <text class="lbl" x="20" y="98">external fragmentation: the memory exists, the shape is wrong</text>  <line x1="20" y1="114" x2="490" y2="114" stroke="currentColor" stroke-width="1" opacity=".18"/><p>  <text class="lbl-b" x="20" y="140">PAGED — takes any 4, wherever they are</text>
   <g>
     <rect class="k" x="20"  y="152" width="30" height="26" rx="3"/>
     <rect class="k" x="54"  y="152" width="30" height="26" rx="3"/>
@@ -162,9 +158,7 @@ ones: identical free memory, two allocators, one of which cannot use it.</p>
   <text class="lbl" x="20" y="214">contiguous to the kernel, scattered in memory. Waste &lt;1 block.</text>
 </svg></p>
 <figcaption>Neither allocator has more memory than the other. Fixed-size blocks make every free block interchangeable, which is what turns 20–40% utilisation into 96%+ — and utilisation is batch size, and batch size is throughput.</figcaption>
-</figure>
-
-<hr>
+</figure><hr>
 <div class="sim" data-sim="kvcache"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
 <h2 id="2-design-the-thirteen-techniques"><a class="anchor" href="#2-design-the-thirteen-techniques">#</a>2 · Design — the thirteen techniques</h2><p>Counted as thirteen by splitting the two pairs that behave differently in practice:
 MQA and GQA are separate design points (one is a special case of the other, and
@@ -348,16 +342,12 @@ metric users feel. The lever is usually scheduling rather than arithmetic:
 admit the request sooner, chunk the prompt so it interleaves with ongoing
 decode, and stream the first token the moment it exists.</li>
 </ul>
-<div class="callout note">
-
-<p><strong>These are not interchangeable with chunked prefill, and the distinction is
+<div class="callout note"><p><strong>These are not interchangeable with chunked prefill, and the distinction is
 worth holding.</strong> Chunked and layered prefill are <em>scheduling</em> — the same work,
 rearranged so one long prompt stops stalling everyone else. The four above are
 <em>elimination</em>: work that is genuinely never done. A serving stack usually wants
 both, and they compose.</p>
-</div>
-
-<h2 id="3-flow-how-to-actually-choose"><a class="anchor" href="#3-flow-how-to-actually-choose">#</a>3 · Flow — how to actually choose</h2><p>Do them in this order. The ordering is by <em>risk</em>, not by size of win: everything
+</div><h2 id="3-flow-how-to-actually-choose"><a class="anchor" href="#3-flow-how-to-actually-choose">#</a>3 · Flow — how to actually choose</h2><p>Do them in this order. The ordering is by <em>risk</em>, not by size of win: everything
 above the line is free, everything below trades quality for memory.</p>
 <pre class="code"><code>  1. What model?           -&gt; GQA is probably already there. Check the config.
      |                        num_key_value_heads vs num_attention_heads.

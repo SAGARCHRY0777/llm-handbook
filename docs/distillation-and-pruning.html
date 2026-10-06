@@ -147,9 +147,7 @@ distance between input and output is the common proxy) and cut the flattest.</li
 </ul>
 <h3 id="early-exit-dynamic-depth-pruning-and-the-kv-problem-nobody-mentions"><a class="anchor" href="#early-exit-dynamic-depth-pruning-and-the-kv-problem-nobody-mentions">#</a>Early exit — dynamic depth pruning, and the KV problem nobody mentions</h3><p>Early exit stops at layer <em>k</em> when the prediction is already settled, pruning
 every layer above it <em>for that token</em>. The exit policy is the design decision:</p>
-<div class="table-scroll"><table><thead><tr><th>Policy</th><th>Exit when</th><th>Cost</th></tr></thead><tbody><tr><td><strong>Confidence-based</strong></td><td>Top-1 probability passes a threshold</td><td>One softmax per candidate exit</td></tr><tr><td><strong>Entropy-based</strong></td><td>Distribution entropy falls below a threshold</td><td>Same, but calibrates better across domains</td></tr><tr><td><strong>Patience-based</strong></td><td><em>N</em> consecutive layers agree on the same token</td><td>Robust to a single over-confident layer</td></tr><tr><td><strong>Learned</strong></td><td>A small trained classifier decides</td><td>Best accuracy, another thing to train and version</td></tr></tbody></table></div><div class="callout warn">
-
-<p><strong>The reason early exit is rare in production is the KV cache.</strong> If a token
+<div class="table-scroll"><table><thead><tr><th>Policy</th><th>Exit when</th><th>Cost</th></tr></thead><tbody><tr><td><strong>Confidence-based</strong></td><td>Top-1 probability passes a threshold</td><td>One softmax per candidate exit</td></tr><tr><td><strong>Entropy-based</strong></td><td>Distribution entropy falls below a threshold</td><td>Same, but calibrates better across domains</td></tr><tr><td><strong>Patience-based</strong></td><td><em>N</em> consecutive layers agree on the same token</td><td>Robust to a single over-confident layer</td></tr><tr><td><strong>Learned</strong></td><td>A small trained classifier decides</td><td>Best accuracy, another thing to train and version</td></tr></tbody></table></div><div class="callout warn"><p><strong>The reason early exit is rare in production is the KV cache.</strong> If a token
 exits at layer 12, layers 13–32 never computed its K and V. The next token&#39;s
 attention at layer 20 then needs a cache entry that does not exist. Three fixes
 exist and all cost something: compute the missing layers lazily when a later
@@ -157,9 +155,7 @@ token needs them (unpredictable latency), copy or propagate the layer-12 state
 upward as an approximation (accuracy loss that compounds), or only permit exits
 at a depth where you accept recomputing the rest. This is why early exit reads
 well in papers and appears in very few serving stacks.</p>
-</div>
-
-<p>Early exit also composes with two things worth knowing: <strong>early-exit
+</div><p>Early exit also composes with two things worth knowing: <strong>early-exit
 distillation</strong>, where the student is trained so intermediate layers are
 independently decodable, and <strong>early-exit speculative decoding</strong>, where the
 shallow exit <em>is</em> the draft model and the full stack verifies it — which
