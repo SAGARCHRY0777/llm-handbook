@@ -294,6 +294,59 @@ const FACTS = {
     ],
   },
 
+  // --- long-context: the lost-in-the-middle shape the stated curve implies
+  needle: {
+    page: null,
+    facts: [
+      {
+        name: "modelled recall at 128k, needle at 50%, 4 doublings past 8k",
+        want: () => needleRecall(131072, 0.5).toFixed(2),
+        has: (t, w) => t.includes(w),
+      },
+      {
+        // The panel's headline claim, and the reason the lab exists: hiding
+        // the needle at an end reports ~1.8x the honest average over depths.
+        name: "an end-of-context needle reports ~1.8× the mean over all 11 depths",
+        want: () => {
+          const end = needleRecall(131072, 0);
+          let sum = 0;
+          for (let i = 0; i <= 10; i++) sum += needleRecall(131072, i / 10);
+          const ratio = end / (sum / 11);
+          if (ratio < 1.75 || ratio > 1.9) {
+            throw new Error(`panel claims ~1.8x, computed ${ratio.toFixed(3)}`);
+          }
+          return needleRecall(131072, 0.5).toFixed(2);
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "with no dip and no decay the whole map reads 1.00",
+        want: () => {
+          for (const L of [4096, 131072, 524288]) {
+            for (let i = 0; i <= 10; i++) {
+              const v = needleRecall(L, i / 10, 0, 0);
+              if (Math.abs(v - 1) > 1e-9) {
+                throw new Error(`s=0 a=0 should give 1.00 everywhere, got ${v} at ${L}/${i * 10}%`);
+              }
+            }
+          }
+          return needleRecall(131072, 0.5).toFixed(2);
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "with no dip the column is flat across depths",
+        want: () => {
+          const flat = new Set();
+          for (let i = 0; i <= 10; i++) flat.add(needleRecall(131072, i / 10, 0).toFixed(6));
+          if (flat.size !== 1) throw new Error(`dip 0 should flatten the column, got ${flat.size} values`);
+          return needleRecall(131072, 0.5).toFixed(2);
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
   // --- kv-reuse: a chained prefix hash hits up to the first differing block
   prefix: {
     page: null,
@@ -1026,6 +1079,22 @@ const FACTS = {
     ],
   },
 };
+
+/**
+ * The lab's recall model, stated as a formula rather than copied:
+ *   shrink = 1 / (1 + decay · doublings past the trained length)
+ *   dip    = min(1, severity · (2 − shrink))        // deepens with length
+ *   recall = shrink · (1 − dip · sin(π · depth))    // sin is 0 at both ends
+ * Defaults: trained at 8k, severity 0.55, decay 0.20.
+ */
+function needleRecall(len, depth, severity = 0.55, decay = 0.2, trained = 8192) {
+  const doublings = Math.max(0, Math.log(len / trained) / Math.LN2);
+  const shrink = 1 / (1 + decay * doublings);
+  const dip = Math.min(1, severity * (2 - shrink));
+  let w = Math.sin(Math.PI * depth);
+  if (!(w > 1e-12)) w = 0;                 // sin(π) is 1.2e-16, not 0
+  return Math.min(1, Math.max(0, shrink * (1 - dip * w)));
+}
 
 /**
  * How much of prompt B a chained prefix cache can serve. Derived from token

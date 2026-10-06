@@ -143,9 +143,7 @@ cannot be undone. <strong>Undo covers the filesystem, not the world</strong>, wh
 precisely why permissions exist as a separate component.</p>
 <h3 id="how-much-does-the-harness-actually-move-the-number"><a class="anchor" href="#how-much-does-the-harness-actually-move-the-number">#</a>How much does the harness actually move the number?</h3><p>This is where the field is loudest and least careful, so here are the numbers
 that survive checking.</p>
-<div class="callout warn">
-
-<p><strong>Three widely-quoted harness results do not mean what they are used to mean.</strong></p>
+<div class="callout warn"><p><strong>Three widely-quoted harness results do not mean what they are used to mean.</strong></p>
 <ul>
 <li><strong>SWE-agent&#39;s &quot;3.8% → 12.5%&quot;</strong> is not a same-model ablation. The 3.8% is
 Claude 3 Opus with BM25 retrieval — the paper&#39;s cited previous best. Held at
@@ -156,9 +154,7 @@ the low end, not a harness-quality result.</li>
 <li><strong>A &quot;7.8× harness-to-model variance ratio&quot;</strong> circulates as a measurement. It
 is not one; do not quote it.</li>
 </ul>
-</div>
-
-<p>The defensible figure: on <strong>Terminal-Bench 2.1</strong> (89 tasks, repeated trials,
+</div><p>The defensible figure: on <strong>Terminal-Bench 2.1</strong> (89 tasks, repeated trials,
 published confidence intervals), the same model under different scaffolds spans
 roughly <strong>3–23 percentage points</strong>:</p>
 <div class="table-scroll"><table><thead><tr><th>Model</th><th>Native harness</th><th>Standardised Terminus 2</th><th>Gap</th></tr></thead><tbody><tr><td>Gemini 3 Flash</td><td>56.9% (Gemini CLI)</td><td>54.2%</td><td>2.7pp</td></tr><tr><td>Claude Opus 4.6</td><td>70.1% (Claude Code)</td><td>63.8%</td><td>6.3pp</td></tr><tr><td>GPT-5.3-Codex</td><td>79.1% (Codex CLI)</td><td>68.5%</td><td>10.6pp</td></tr></tbody></table></div><p>That range is <strong>comparable to or larger than the gap between adjacent frontier
@@ -179,17 +175,13 @@ or above, stop after 5 tries</em>. <strong>Every stop condition you can make det
 is one the model cannot get wrong.</strong></p>
 <h3 id="the-framework-defaults-are-not-what-you-think"><a class="anchor" href="#the-framework-defaults-are-not-what-you-think">#</a>The framework defaults are not what you think</h3><p>Three of four commonly-cited values are wrong. These were read from shipped
 packages, not documentation:</p>
-<div class="table-scroll"><table><thead><tr><th>Framework</th><th>Commonly cited</th><th>Actually</th></tr></thead><tbody><tr><td><strong>LangGraph</strong> <code>recursion_limit</code></td><td>25</td><td><strong>25 → 10,000 (v1.1.0) → 10,007 (v1.2.0+)</strong></td></tr><tr><td><strong>CrewAI</strong> <code>max_iter</code></td><td>20</td><td><strong>25</strong> (and <code>LiteAgent.max_iterations</code> is 15)</td></tr><tr><td><strong>OpenAI Agents SDK</strong> <code>DEFAULT_MAX_TURNS</code></td><td>10</td><td>10 ✓ (guard is strict <code>&gt;</code>, so 10 errors on turn 11)</td></tr></tbody></table></div><div class="callout bad">
-
-<p><strong>LangGraph&#39;s recursion limit is effectively gone and almost nobody has
+<div class="table-scroll"><table><thead><tr><th>Framework</th><th>Commonly cited</th><th>Actually</th></tr></thead><tbody><tr><td><strong>LangGraph</strong> <code>recursion_limit</code></td><td>25</td><td><strong>25 → 10,000 (v1.1.0) → 10,007 (v1.2.0+)</strong></td></tr><tr><td><strong>CrewAI</strong> <code>max_iter</code></td><td>20</td><td><strong>25</strong> (and <code>LiteAgent.max_iterations</code> is 15)</td></tr><tr><td><strong>OpenAI Agents SDK</strong> <code>DEFAULT_MAX_TURNS</code></td><td>10</td><td>10 ✓ (guard is strict <code>&gt;</code>, so 10 errors on turn 11)</td></tr></tbody></table></div><div class="callout bad"><p><strong>LangGraph&#39;s recursion limit is effectively gone and almost nobody has
 noticed.</strong> Every blog post and the docs still say 25; the shipped default is
 10,007. A maintainer issue confirms the number was never intended as a safety
 bound — only a placeholder for a sentinel — and notes a config-merge bug that
 can silently reset it to 25. So the value is simultaneously effectively infinite
 and unreliable. <strong>Set it yourself.</strong></p>
-</div>
-
-<p>Frameworks also disagree on what <em>happens</em> at exhaustion — raise, hand off to an
+</div><p>Frameworks also disagree on what <em>happens</em> at exhaustion — raise, hand off to an
 error handler, or spend one more model call to force a final answer. Three
 shipped behaviours, three different contracts. Know which one you have, because
 it decides whether exhaustion is an exception or a plausible-looking answer.</p>
@@ -239,17 +231,13 @@ false success accounts for 45–48% of failures and is <strong>nearly undetectab
 LLM judges</strong>. A critic that shares the generator&#39;s blind spots confirms rather
 than catches.</li>
 </ul>
-<div class="callout warn">
-
-<p><strong>The verifier that works checks the environment, not the answer.</strong> Did the test
+<div class="callout warn"><p><strong>The verifier that works checks the environment, not the answer.</strong> Did the test
 pass, did the file change, does the record exist, does the JSON validate against
 the schema. A verifier that reads the agent&#39;s output and forms an opinion is a
 second opinion from the same mind. This is the single most useful thing to get
 right in an agent loop, and it is why &quot;add a critic agent&quot; so often fails to
 move the numbers.</p>
-</div>
-
-<h3 id="routers-the-verifier-that-runs-first"><a class="anchor" href="#routers-the-verifier-that-runs-first">#</a>Routers — the verifier that runs first</h3><p>A <strong>router</strong> decides which specialist handles a request before any work starts:
+</div><h3 id="routers-the-verifier-that-runs-first"><a class="anchor" href="#routers-the-verifier-that-runs-first">#</a>Routers — the verifier that runs first</h3><p>A <strong>router</strong> decides which specialist handles a request before any work starts:
 technical → the technical agent, billing → the billing agent, everything else →
 a general one. It is the same act of judgement as a verifier, moved to the front
 of the loop, and it has a property nothing else in the harness does: <strong>every
@@ -322,17 +310,13 @@ increment — including on trivial retrieval and text-replication tasks.
 environment description the same task requires:</p>
 <div class="table-scroll"><table><thead><tr><th>Model</th><th>8K</th><th>32K</th><th>96K</th><th>256K</th></tr></thead><tbody><tr><td>Claude-4.5-Opus</td><td>96.0</td><td>84.0</td><td>45.3</td><td><strong>14.7</strong></td></tr><tr><td>GPT-5.2-Medium</td><td>72.0</td><td>60.0</td><td>44.0</td><td><strong>21.3</strong></td></tr><tr><td>Gemini-3-Flash <em>(1,050K window)</em></td><td>64.0</td><td>40.0</td><td>32.0</td><td><strong>17.3</strong></td></tr></tbody></table></div><p>Note the third row: a model with a <strong>million-token window</strong> loses three quarters
 of its accuracy by 256K. <strong>Window size is not working memory.</strong></p>
-<div class="callout note">
-
-<p><strong>The counterintuitive one.</strong> Chroma found models perform <em>worse</em> when
+<div class="callout note"><p><strong>The counterintuitive one.</strong> Chroma found models perform <em>worse</em> when
 surrounding context has coherent logical flow, and that randomly shuffling
 sentences <strong>consistently improves performance</strong> — across all 18 models and every
 configuration. Coherent filler distracts more than incoherent filler. This
 quietly undermines the instinct to hand agents tidy narrative context, and
 nobody appears to have followed up on why.</p>
-</div>
-
-<h3 id="compaction-has-the-weakest-evidence-of-anything-here"><a class="anchor" href="#compaction-has-the-weakest-evidence-of-anything-here">#</a>Compaction has the weakest evidence of anything here</h3><p>Compaction — summarise the history, continue — is the flagship technique, now
+</div><h3 id="compaction-has-the-weakest-evidence-of-anything-here"><a class="anchor" href="#compaction-has-the-weakest-evidence-of-anything-here">#</a>Compaction has the weakest evidence of anything here</h3><p>Compaction — summarise the history, continue — is the flagship technique, now
 shipped as a server-side API feature. It is also the least supported:</p>
 <ul>
 <li><strong>Plain FIFO truncation matched or beat summary-based compaction</strong> on
