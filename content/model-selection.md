@@ -53,6 +53,12 @@ modelpick
 
 ---
 
+```lab
+pareto
+```
+
+---
+
 ## 2 · Design
 
 **Basic — the mechanics you are actually buying.** Every hosted API exposes

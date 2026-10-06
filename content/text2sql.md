@@ -61,6 +61,12 @@ sqlgen
 
 ---
 
+```lab
+sqlcheck
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate — the pipeline that works.**

@@ -3730,6 +3730,485 @@
     });
   }
 
+  // ======================================================================
+  // LAB · bubble  (parallelism.md)
+  // The pipeline bubble, built rather than asserted. This fills the actual
+  // stage-by-step occupancy grid and divides busy cells by total cells, then
+  // checks that against the closed form (p-1)/(m+p-1). They agree, which is
+  // the point: the bubble is pure scheduling geometry, and it does not care
+  // how big your model is.
+  // ======================================================================
+  function bubble_grid(p, m) {
+    // stage i is busy during steps [i, i+m-1] of m+p-1 total steps
+    var total = m + p - 1, rows = [], i, t;
+    for (i = 0; i < p; i++) {
+      var row = [];
+      for (t = 0; t < total; t++) row.push(t >= i && t < i + m);
+      rows.push(row);
+    }
+    return { total: total, rows: rows };
+  }
+
+  function bubble(host, h) {
+    h.panel({
+      title: "Build the pipeline bubble instead of quoting it",
+      note: "Pipeline parallelism splits a model across devices, and the cost is that every " +
+        "device idles while the pipeline fills and drains. This lays out the real occupancy " +
+        "grid — which stage is busy on which step — and measures the idle fraction from the " +
+        "grid itself. Watch what the two sliders do: one of them barely helps.",
+    });
+
+    var stages = h.range({ label: "pipeline stages (devices)", min: 2, max: 16, value: 8 });
+    var micro = h.range({ label: "microbatches per optimiser step", min: 1, max: 64, value: 4 });
+
+    h.on(function () {
+      var P = Math.round(Number(stages.value));
+      var M = Math.round(Number(micro.value));
+      var g = bubble_grid(P, M);
+
+      var busy = P * M, slots = P * g.total;
+      var util = busy / slots;
+      var bub = 1 - util;
+      var closed = (P - 1) / (M + P - 1);          // the textbook formula
+      var agree = Math.abs(bub - closed) < 1e-9;
+
+      // the timeline, capped so a 16x79 grid does not swamp the page
+      var CAP = 40, shown = Math.min(g.total, CAP), rowsHtml = "", i;
+      for (i = 0; i < P; i++) {
+        var cells = [];
+        for (var t = 0; t < shown; t++) {
+          cells.push({
+            label: g.rows[i][t] ? "#" : "·",
+            flag: g.rows[i][t] ? "ok" : "bad",
+            title: "stage " + (i + 1) + ", step " + (t + 1) + (g.rows[i][t] ? " — working" : " — idle"),
+          });
+        }
+        rowsHtml += h.chips(cells);
+      }
+
+      function bubbleAt(m) { return (P - 1) / (m + P - 1); }
+      var ladder = [1, P, 4 * P].map(function (m) {
+        return { label: m === 1 ? "m = 1" : m === P ? "m = p = " + P : "m = 4p = " + 4 * P,
+                 value: bubbleAt(m) * 100, max: 100,
+                 text: (bubbleAt(m) * 100).toFixed(1) + "%",
+                 flag: bubbleAt(m) > 0.3 ? "bad" : bubbleAt(m) > 0.1 ? "warn" : "ok" };
+      });
+
+      h.render(
+        h.big((bub * 100).toFixed(1) + "%", "of every device-step is a bubble",
+          bub > 0.3 ? "bad" : bub > 0.1 ? "warn" : "ok") +
+        h.row("occupancy grid", P + " stages × " + g.total + " steps = " + h.fmt(slots) + " device-steps") +
+        h.row("busy", h.fmt(busy) + "  (" + (util * 100).toFixed(1) + "% utilisation)", "ok") +
+        h.row("idle", h.fmt(slots - busy) + "  (" + (bub * 100).toFixed(1) + "%)",
+          bub > 0.3 ? "bad" : undefined) +
+        h.row("measured vs formula (p−1)/(m+p−1)",
+          (bub * 100).toFixed(4) + "%  vs  " + (closed * 100).toFixed(4) + "%" +
+          (agree ? "  — identical" : "  — MISMATCH"), agree ? "ok" : "bad") +
+        (shown < g.total ? h.note("Timeline truncated to the first " + CAP + " of " + g.total +
+          " steps.") : "") +
+        rowsHtml +
+        h.bars(ladder) +
+        h.note(M >= 4 * P
+          ? "At " + M + " microbatches against " + P + " stages the bubble is down to <b>" +
+            (bub * 100).toFixed(1) + "%</b>. This is the whole trick, and notice what paid for " +
+            "it: nothing about the model changed. But more microbatches means more activations " +
+            "in flight at once, so you buy throughput with memory — which is the constraint " +
+            "that eventually stops you adding more."
+          : "Drag <b>microbatches</b> up and the bubble collapses; drag <b>stages</b> up and it " +
+            "grows. Both sliders move the same number, but only one of them is free — adding " +
+            "stages costs you utilisation, so a deeper pipeline has to earn its keep in memory " +
+            "savings. Note the bubble never depends on how large the model is.")
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · pareto  (model-selection.md)
+  // A real dominance test over your own candidate list. The page's argument
+  // is that "best model" is not a ranking but a frontier, and that the metric
+  // people quote (cost per request) is the wrong one -- cost per ACCEPTED
+  // answer is what you pay. This computes both and shows where they disagree.
+  // ======================================================================
+  function pareto_parse(text) {
+    return String(text).split(/\r?\n/).map(function (l) { return l.trim(); })
+      .filter(function (l) { return l && l.charAt(0) !== "#"; })
+      .map(function (l) {
+        var c = l.split(/\s*,\s*/);
+        return { name: c[0] || "?", cin: Number(c[1]), cout: Number(c[2]),
+                 ms: Number(c[3]), q: Number(c[4]) };
+      })
+      .filter(function (r) {
+        return isFinite(r.cin) && isFinite(r.cout) && isFinite(r.ms) &&
+               isFinite(r.q) && r.q > 0 && r.q <= 1;
+      });
+  }
+
+  function pareto(host, h) {
+    h.panel({
+      title: "Find the frontier, not the winner",
+      note: "One row per candidate: <code>name, $/1M in, $/1M out, p95 ms, pass rate 0–1</code>. " +
+        "This runs a real dominance test — a model is on the frontier when nothing else is " +
+        "cheaper <i>and</i> faster <i>and</i> better. Then it divides by pass rate, because a " +
+        "model you retry is a model you pay for twice.",
+    });
+
+    var data = h.textarea({
+      label: "candidates — name, $/1M in, $/1M out, p95 ms, pass rate", rows: 7,
+      value: [
+        "frontier-large,  15.00, 75.00, 4200, 0.94",
+        "frontier-small,   3.00, 15.00, 1400, 0.88",
+        "mid-tier,         0.80,  4.00,  900, 0.79",
+        "small-fast,       0.25,  1.25,  350, 0.61",
+        "open-7b,          0.05,  0.10,  280, 0.44",
+      ].join("\n"),
+    });
+    var inTok = h.range({ label: "input tokens / request", min: 100, max: 20000, step: 100, value: 2500 });
+    var outTok = h.range({ label: "output tokens / request", min: 50, max: 4000, step: 50, value: 400 });
+
+    h.on(function () {
+      var rows = pareto_parse(data.value);
+      if (rows.length < 2) {
+        h.render(h.note("Give at least two complete rows: name, $/1M in, $/1M out, p95 ms, " +
+          "pass rate between 0 and 1.", "warn"));
+        return;
+      }
+      var IN = Number(inTok.value), OUT = Number(outTok.value), i, j;
+
+      rows.forEach(function (r) {
+        r.cost = (IN / 1e6) * r.cin + (OUT / 1e6) * r.cout;
+        r.effective = r.cost / r.q;          // what one ACCEPTED answer costs
+      });
+
+      // dominance: cheaper AND faster AND better, with at least one strict
+      for (i = 0; i < rows.length; i++) {
+        rows[i].dominatedBy = null;
+        for (j = 0; j < rows.length; j++) {
+          if (i === j) continue;
+          var a = rows[j], b = rows[i];
+          if (a.cost <= b.cost && a.ms <= b.ms && a.q >= b.q &&
+              (a.cost < b.cost || a.ms < b.ms || a.q > b.q)) {
+            rows[i].dominatedBy = a.name;
+            break;
+          }
+        }
+      }
+      var front = rows.filter(function (r) { return !r.dominatedBy; });
+
+      var byCost = rows.slice().sort(function (a, b) { return a.cost - b.cost; })[0];
+      var byEff = rows.slice().sort(function (a, b) { return a.effective - b.effective; })[0];
+      var flipped = byCost.name !== byEff.name;
+
+      var table = rows.slice().sort(function (a, b) { return a.effective - b.effective; })
+        .map(function (r) {
+          return [
+            r.name,
+            "$" + r.cost.toFixed(5),
+            "$" + r.effective.toFixed(5),
+            Math.round(r.ms) + " ms",
+            (r.q * 100).toFixed(0) + "%",
+            r.dominatedBy ? "dominated by " + r.dominatedBy : "<b>frontier</b>",
+          ];
+        });
+
+      var maxEff = Math.max.apply(null, rows.map(function (r) { return r.effective; }));
+      var bars = rows.slice().sort(function (a, b) { return a.effective - b.effective; })
+        .map(function (r) {
+          return { label: r.name, value: r.effective, max: maxEff,
+                   text: "$" + r.effective.toFixed(4),
+                   flag: r === byEff ? "ok" : r.dominatedBy ? "bad" : undefined };
+        });
+
+      h.render(
+        h.big(byEff.name, "cheapest per accepted answer", "ok") +
+        h.row("candidates", String(rows.length)) +
+        h.row("on the frontier", front.length + " of " + rows.length + "  (" +
+          front.map(function (r) { return r.name; }).join(", ") + ")",
+          front.length === rows.length ? "warn" : "ok") +
+        h.row("cheapest per request", byCost.name + "  ($" + byCost.cost.toFixed(5) + ")") +
+        h.row("cheapest per accepted answer", byEff.name + "  ($" + byEff.effective.toFixed(5) + ")",
+          flipped ? "warn" : "ok") +
+        h.row("cost of 1M requests at " + byEff.name,
+          "$" + h.fmt(Math.round(byEff.effective * 1e6))) +
+        h.table(["model", "$/request", "$/accepted", "p95", "pass", "verdict"], table) +
+        h.bars(bars) +
+        h.note(flipped
+          ? "<b>The ranking flips.</b> " + byCost.name + " is cheapest per request, but " +
+            byEff.name + " is cheapest per <i>accepted</i> answer — the gap is what you spend " +
+            "retrying, re-prompting and apologising. Budget from the per-request price of " +
+            byCost.name + " and you are short by " +
+            ((1 / byCost.q - 1) * 100).toFixed(0) + "%, because a " +
+            (byCost.q * 100).toFixed(0) + "% pass rate means you buy " +
+            (1 / byCost.q).toFixed(2) + " answers for every one you keep."
+          : (front.length === rows.length
+            ? "Every candidate is on the frontier, which means no option is strictly worse than " +
+              "another — each one trades something real. That is the honest case where the " +
+              "decision is genuinely yours and no metric will make it for you."
+            : "Dominated rows are not close calls — something else beats them on cost, latency " +
+              "<i>and</i> quality at once. Delete them from the shortlist before you start " +
+              "arguing, because arguing about a dominated option is how evaluations lose weeks."))
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · sqlcheck  (text2sql.md)
+  // The failure the page warns about: generated SQL that parses, reads well,
+  // and references a column that does not exist. This extracts every
+  // identifier the query actually touches and diffs it against your schema.
+  // A hallucinated column is a set-membership test, not a judgement call.
+  // ======================================================================
+  var SQLCHECK_KW = ("select from where join inner left right full outer on as and or not in is null " +
+    "group by order having limit offset distinct count sum avg min max case when then else end " +
+    "union all asc desc like between exists with insert update delete set values into true false " +
+    "cast int text date interval now current_date coalesce round abs").split(" ");
+
+  function sqlcheck_schema(text) {
+    var tables = {};
+    String(text).split(/\r?\n/).forEach(function (line) {
+      var m = line.match(/^\s*([A-Za-z_][\w]*)\s*\(([^)]*)\)/);
+      if (!m) return;
+      tables[m[1].toLowerCase()] = m[2].split(/\s*,\s*/)
+        .map(function (c) { return c.trim().split(/\s+/)[0].toLowerCase(); })
+        .filter(Boolean);
+    });
+    return tables;
+  }
+
+  function sqlcheck_refs(sql) {
+    var lower = " " + String(sql).replace(/--[^\n]*/g, " ").replace(/\s+/g, " ") + " ";
+    var tables = [], aliases = {}, re, m;
+
+    // FROM / JOIN <table> [AS] [alias]
+    re = /\b(?:from|join)\s+([A-Za-z_][\w]*)(?:\s+(?:as\s+)?([A-Za-z_][\w]*))?/gi;
+    while ((m = re.exec(lower)) !== null) {
+      var t = m[1].toLowerCase();
+      if (SQLCHECK_KW.indexOf(t) >= 0) continue;
+      if (tables.indexOf(t) < 0) tables.push(t);
+      if (m[2] && SQLCHECK_KW.indexOf(m[2].toLowerCase()) < 0) aliases[m[2].toLowerCase()] = t;
+    }
+
+    // qualified refs  alias.col  /  table.col
+    var qualified = [];
+    re = /\b([A-Za-z_][\w]*)\.([A-Za-z_][\w]*)/g;
+    while ((m = re.exec(lower)) !== null) {
+      qualified.push({ q: m[1].toLowerCase(), col: m[2].toLowerCase(), raw: m[1] + "." + m[2] });
+    }
+
+    // bare identifiers that are not keywords, tables, aliases or qualified halves
+    var bare = [], seen = {};
+    var stripped = lower.replace(/\b[A-Za-z_][\w]*\.[A-Za-z_][\w]*/g, " ")
+                        .replace(/'[^']*'/g, " ").replace(/"[^"]*"/g, " ");
+    re = /\b([A-Za-z_][\w]*)\b/g;
+    while ((m = re.exec(stripped)) !== null) {
+      var id = m[1].toLowerCase();
+      if (SQLCHECK_KW.indexOf(id) >= 0) continue;
+      if (tables.indexOf(id) >= 0 || aliases[id]) continue;
+      if (seen[id]) continue;
+      seen[id] = 1;
+      bare.push(id);
+    }
+    return { tables: tables, aliases: aliases, qualified: qualified, bare: bare };
+  }
+
+  function sqlcheck(host, h) {
+    h.panel({
+      title: "Catch the column the model invented",
+      note: "Generated SQL that parses cleanly and references a column that does not exist is " +
+        "the failure mode that reaches production, because it reads correctly to a human. " +
+        "Paste your schema and a query: this extracts every table and column the SQL actually " +
+        "touches and checks each one against the schema. <b>Not a judgement — a set difference.</b>",
+    });
+
+    var schemaIn = h.textarea({
+      label: "schema — one table(col, col, …) per line", rows: 4,
+      value: [
+        "customers(id, name, email, country, created_at)",
+        "orders(id, customer_id, total_cents, status, placed_at)",
+        "refunds(id, order_id, amount_cents, reason)",
+      ].join("\n"),
+    });
+    var sqlIn = h.textarea({
+      label: "generated SQL", rows: 7,
+      value: "SELECT c.name, c.email, SUM(o.total_cents) AS lifetime_value\n" +
+        "FROM customers c\n" +
+        "JOIN orders o ON o.customer_id = c.id\n" +
+        "WHERE c.signup_date > '2024-01-01'\n" +
+        "  AND o.status = 'completed'\n" +
+        "GROUP BY c.name, c.email, c.tier\n" +
+        "ORDER BY lifetime_value DESC",
+    });
+
+    h.on(function () {
+      var schema = sqlcheck_schema(schemaIn.value);
+      var tableNames = Object.keys(schema);
+      if (!tableNames.length) {
+        h.render(h.note("Give at least one schema line like <code>users(id, name)</code>.", "warn"));
+        return;
+      }
+      var r = sqlcheck_refs(sqlIn.value);
+      if (!r.tables.length) {
+        h.render(h.note("No table found — the query needs a FROM or JOIN clause.", "warn"));
+        return;
+      }
+
+      var problems = [], okRefs = [];
+
+      // tables that are not in the schema at all
+      r.tables.forEach(function (t) {
+        if (!schema[t]) problems.push([t, "table", "not in the schema"]);
+      });
+
+      // every qualified reference: resolve the alias, then check the column
+      var derived = {};   // AS aliases are legitimate names that are not columns
+      var asRe = /\bas\s+([A-Za-z_][\w]*)/gi, am;
+      var sqlRaw = String(sqlIn.value);
+      while ((am = asRe.exec(sqlRaw)) !== null) derived[am[1].toLowerCase()] = 1;
+
+      r.qualified.forEach(function (q) {
+        var table = r.aliases[q.q] || (schema[q.q] ? q.q : null);
+        if (!table) { problems.push([q.raw, "qualifier", '"' + q.q + '" is not a table or alias']); return; }
+        if (!schema[table]) return;        // already reported as an unknown table
+        if (schema[table].indexOf(q.col) < 0) {
+          problems.push([q.raw, "column", "not a column of " + table]);
+        } else okRefs.push(q.raw);
+      });
+
+      // bare identifiers must belong to SOME referenced table, or be an AS alias
+      var allCols = {};
+      r.tables.forEach(function (t) {
+        (schema[t] || []).forEach(function (c) { allCols[c] = t; });
+      });
+      r.bare.forEach(function (id) {
+        if (derived[id]) return;           // defined by AS in this query
+        if (allCols[id]) { okRefs.push(id); return; }
+        problems.push([id, "column", "not a column of any table in this query"]);
+      });
+
+      var clean = problems.length === 0;
+      var chips = r.tables.map(function (t) {
+        return { label: t, flag: schema[t] ? "ok" : "bad",
+                 title: schema[t] ? "in the schema" : "NOT in the schema" };
+      });
+
+      h.render(
+        h.big(clean ? "clean" : problems.length + " bad reference" + (problems.length === 1 ? "" : "s"),
+          clean ? "every identifier exists" : "this query would fail or lie",
+          clean ? "ok" : "bad") +
+        h.row("tables referenced", r.tables.length + "  of " + tableNames.length + " in the schema") +
+        h.row("identifiers checked", String(okRefs.length + problems.length)) +
+        h.row("resolved cleanly", String(okRefs.length), okRefs.length ? "ok" : undefined) +
+        h.row("aliases", Object.keys(r.aliases).length
+          ? Object.keys(r.aliases).map(function (a) { return a + "→" + r.aliases[a]; }).join(", ")
+          : "none") +
+        h.chips(chips) +
+        (problems.length ? h.table(["reference", "kind", "problem"], problems) : "") +
+        h.note(clean
+          ? "Every identifier resolves. Note the limit of what that proves: the query is " +
+            "<i>well-formed against this schema</i>, not <i>correct</i>. It could join on the " +
+            "wrong key, filter the wrong direction, or answer a different question than the one " +
+            "asked. This check removes a whole class of silent failure and leaves the harder one."
+          : "<b>Each row is a lookup the database will reject — or worse, silently mis-resolve.</b> " +
+            "This is the cheapest guard in a text-to-SQL pipeline: you already have the schema, " +
+            "so run it before execution and feed the failures back as a repair prompt. A model " +
+            "that invented <code>" + problems[0][0] + "</code> will usually fix it when told the " +
+            "column does not exist.", clean ? undefined : "bad")
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · reliability  (agents.md)
+  // Why long agent loops fail even when every step looks fine. 95% per step
+  // is a good step and a terrible loop. This computes the compounding, then
+  // what a retry with an imperfect verifier actually buys -- because the
+  // verifier's recall, not the retry count, is the binding constraint.
+  // ======================================================================
+  function reliability_step(p, k, r) {
+    // Success within k attempts when a failure is only noticed with prob r.
+    // Reaching attempt i needs i-1 failures that were each CAUGHT, so the
+    // per-round continuation probability is q*r, not q. At r=1 this reduces
+    // to the familiar 1-(1-p)^k; at r=0 it collapses to a single attempt.
+    var q = 1 - p, qr = q * r;
+    var geo = (1 - Math.pow(qr, k)) / (1 - qr || 1);   // qr=1 is impossible: q<1 or r<1
+    return { ok: p * geo, tries: geo };
+  }
+
+  function reliability(host, h) {
+    h.panel({
+      title: "Why a 95% step is a 36% agent",
+      note: "An agent loop multiplies. A step that works 95% of the time, run twenty times in " +
+        "sequence, finishes 36% of the time — and no individual step looks broken in the logs. " +
+        "This computes the compounding, then what retries actually recover once you admit your " +
+        "verifier misses things.",
+    });
+
+    var p = h.range({ label: "per-step success rate", min: 50, max: 100, value: 95, unit: "%" });
+    var n = h.range({ label: "steps in the loop", min: 1, max: 50, value: 20 });
+    var k = h.range({ label: "attempts allowed per step", min: 1, max: 5, value: 1 });
+    var rec = h.range({ label: "verifier recall — failures actually caught", min: 0, max: 100, step: 5, value: 70, unit: "%" });
+
+    h.on(function () {
+      var P = Number(p.value) / 100, N = Math.round(Number(n.value));
+      var K = Math.round(Number(k.value)), R = Number(rec.value) / 100;
+
+      var naive = Math.pow(P, N);
+      var st = reliability_step(P, K, R);
+      var withRetry = Math.pow(st.ok, N);
+      var perfect = Math.pow(1 - Math.pow(1 - P, K), N);     // r = 1.0 ceiling
+      var costMult = st.tries;
+
+      var ladder = [5, 10, 20, 50].map(function (steps) {
+        var v = Math.pow(st.ok, steps);
+        return { label: steps + " steps", value: v * 100, max: 100,
+                 text: (v * 100).toFixed(1) + "%",
+                 flag: v < 0.5 ? "bad" : v < 0.8 ? "warn" : "ok" };
+      });
+
+      var rows = [
+        ["no retry", (naive * 100).toFixed(1) + "%", "1.00×"],
+        [K + " attempt" + (K === 1 ? "" : "s") + ", recall " + (R * 100).toFixed(0) + "%",
+          (withRetry * 100).toFixed(1) + "%", costMult.toFixed(2) + "×"],
+        [K + " attempt" + (K === 1 ? "" : "s") + ", perfect verifier",
+          (perfect * 100).toFixed(1) + "%", "—"],
+      ];
+
+      var gapToPerfect = perfect - withRetry;
+
+      h.render(
+        h.big((withRetry * 100).toFixed(1) + "%", "of runs finish all " + N + " steps",
+          withRetry < 0.5 ? "bad" : withRetry < 0.8 ? "warn" : "ok") +
+        h.row("per-step success", (P * 100).toFixed(0) + "%") +
+        h.row("without retries", (naive * 100).toFixed(1) + "%", naive < 0.5 ? "bad" : undefined) +
+        h.row("retries recover", "+" + ((withRetry - naive) * 100).toFixed(1) + " points",
+          withRetry - naive > 0.05 ? "ok" : "warn") +
+        h.row("token cost multiplier", costMult.toFixed(2) + "×  (expected attempts per step)",
+          costMult > 1.5 ? "warn" : undefined) +
+        h.row("left on the table by the verifier",
+          (gapToPerfect * 100).toFixed(1) + " points  (recall " + (R * 100).toFixed(0) + "% → 100%)",
+          gapToPerfect > 0.1 ? "bad" : gapToPerfect > 0.03 ? "warn" : "ok") +
+        h.table(["configuration", "end-to-end success", "cost"], rows) +
+        h.bars(ladder) +
+        h.note(K === 1
+          ? "<b>Retries are off</b> — at one attempt per step there is nothing to recover with, " +
+            "so the verifier recall slider does nothing and end-to-end success is just " +
+            (P * 100).toFixed(0) + "%<sup>" + N + "</sup> = " + (naive * 100).toFixed(1) + "%. " +
+            "Drag <b>attempts</b> up to see what retrying buys, and watch the cost multiplier " +
+            "move with it."
+          : gapToPerfect > (withRetry - naive)
+          ? "<b>Your verifier is the bottleneck, not your retry budget.</b> Going from " +
+            (R * 100).toFixed(0) + "% to 100% recall is worth " + (gapToPerfect * 100).toFixed(1) +
+            " points, more than the " + ((withRetry - naive) * 100).toFixed(1) +
+            " points the retries themselves bought. A retry you never trigger is not a retry — " +
+            "spend the effort on detecting failure, not on handling it."
+          : "Retries are carrying this configuration. But watch the cost multiplier: you are " +
+            "paying " + costMult.toFixed(2) + "× the tokens for " +
+            ((withRetry - naive) * 100).toFixed(1) + " points of reliability. The cheaper lever " +
+            "is almost always fewer steps — drag <b>steps</b> down and watch the curve, because " +
+            "the exponent hurts more than the base.")
+      );
+    });
+  }
+
   var LABS = {
     "tokenizer": tokenizer,
     "attention": attention,
@@ -3759,7 +4238,11 @@
     "retrieve": retrieve,
     "imgtok": imgtok,
     "schema": schema,
-    "sparsity": sparsity
+    "sparsity": sparsity,
+    "bubble": bubble,
+    "pareto": pareto,
+    "sqlcheck": sqlcheck,
+    "reliability": reliability
   };
   window.__LABS = LABS;   // later labs register into this
 

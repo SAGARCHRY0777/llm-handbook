@@ -76,6 +76,12 @@ pipebubble
 
 ---
 
+```lab
+bubble
+```
+
+---
+
 ## 2 · Design — the four axes
 
 ### Data parallelism — the one that saves no memory

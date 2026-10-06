@@ -62,6 +62,12 @@ agentturn
 
 ---
 
+```lab
+reliability
+```
+
+---
+
 ## 2 · Design
 
 **Basic — the spectrum, from safest to least safe.** "Agent" covers a wide range
