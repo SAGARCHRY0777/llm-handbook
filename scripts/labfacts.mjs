@@ -294,6 +294,50 @@ const FACTS = {
     ],
   },
 
+  // --- kv-cache: paged vs contiguous on the same pool and queue
+  paged: {
+    page: null,
+    facts: [
+      {
+        name: "paged admits every request; contiguous admits pool ÷ max_seq_len",
+        want: () => {
+          const p = pagedAlloc();
+          if (p.pagedAdmit !== 10 || p.contigAdmit !== 4) {
+            throw new Error(`expected 10 / 4, computed ${p.pagedAdmit} / ${p.contigAdmit}`);
+          }
+          return `${p.pagedAdmit} / ${p.contigAdmit}`;
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "paged utilisation = live tokens ÷ slots committed",
+        want: () => (pagedAlloc().pagedUtil * 100).toFixed(1) + "%",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "contiguous utilisation on the same pool",
+        want: () => (pagedAlloc().contigUtil * 100).toFixed(1) + "%",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        // The panel tells the reader to check this against the bound line:
+        // internal waste is strictly below one block per request, whatever
+        // the block size. That ceiling is the argument for fixed blocks.
+        name: "internal waste stays under one block per request at every block size",
+        want: () => {
+          for (const B of [8, 16, 24, 32, 40, 48, 56, 64]) {
+            const { waste, admitted } = pagedAlloc(B);
+            if (waste >= admitted * B) {
+              throw new Error(`waste ${waste} reached the ${admitted * B} bound at block ${B}`);
+            }
+          }
+          return (pagedAlloc().pagedUtil * 100).toFixed(1) + "%";
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
   // --- long-context: the lost-in-the-middle shape the stated curve implies
   needle: {
     page: null,
@@ -1079,6 +1123,35 @@ const FACTS = {
     ],
   },
 };
+
+/**
+ * Paged vs contiguous allocation over the lab's default queue. Paged takes
+ * ceil(tokens/block) blocks; contiguous reserves max_seq_len per request
+ * whether it is used or not. Both get the same 2048-slot pool.
+ */
+const PAGED_REQS = [37, 250, 8, 512, 96, 140, 61, 200, 19, 430];
+
+function pagedAlloc(block = 16, pool = 2048, maxSeq = 512) {
+  const valid = PAGED_REQS.filter((t) => t <= maxSeq);
+  const poolBlocks = Math.floor(pool / block);
+  let used = 0, admitted = 0, live = 0;
+  for (const t of valid) {
+    const need = Math.ceil(t / block);
+    if (used + need > poolBlocks) break;
+    used += need; admitted++; live += t;
+  }
+  const committed = used * block;
+  const contigAdmit = Math.min(valid.length, Math.floor(pool / maxSeq));
+  const contigLive = valid.slice(0, contigAdmit).reduce((a, t) => a + t, 0);
+  return {
+    pagedAdmit: admitted,
+    contigAdmit,
+    pagedUtil: committed ? live / committed : 0,
+    contigUtil: contigAdmit ? contigLive / (contigAdmit * maxSeq) : 0,
+    waste: committed - live,
+    admitted,
+  };
+}
 
 /**
  * The lab's recall model, stated as a formula rather than copied:
