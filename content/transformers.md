@@ -228,7 +228,7 @@ is really *N independent KV caches* that happen to be indexed by the same token
 positions — which is why `layers` appears as a term in the size formula below.
 
 Once that cache becomes the thing limiting your batch size — which it will, at
-production context lengths — [KV cache optimization](kv-cache.html) covers the
+production context lengths — [KV cache optimization](kv-cache.md) covers the
 thirteen ways to shrink it and what each one costs.
 
 ```

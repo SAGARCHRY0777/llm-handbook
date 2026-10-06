@@ -16,7 +16,7 @@ summary: Every field in config.json is an inference cost you inherit and cannot 
 > config file.
 
 Every other page in this module is about a knob. This one is about the numbers
-that were fixed before you arrived. [KV cache optimization](kv-cache.html)
+that were fixed before you arrived. [KV cache optimization](kv-cache.md)
 already tells you to check `num_key_value_heads` against
 `num_attention_heads` — this is the full version of that advice, including the
 fields that are new enough that most people skip them.
@@ -86,8 +86,8 @@ most interestingly for this module, it **removes the attention sink**. The
 gate gives the model somewhere to put surplus attention mass, so it stops
 dumping it on the first few tokens.
 
-That has a direct consequence for everything on the [KV cache](kv-cache.html)
-and [KV reuse](kv-reuse.html) pages: **sink-preservation logic is tuned for
+That has a direct consequence for everything on the [KV cache](kv-cache.md)
+and [KV reuse](kv-reuse.md) pages: **sink-preservation logic is tuned for
 models that have sinks.** An eviction policy that religiously protects the first
 four tokens is protecting nothing in particular on a gated-attention model. Not
 a bug, but worth knowing before you port a policy between architectures.
@@ -137,7 +137,7 @@ RoPE**, with up to 10× savings on the rotary cache. DeepSeek-V3's MLA is a
 production instance — `qk_rope_head_dim = 64` inside a 192-dimension head, so
 two thirds of each head is a scaled passthrough.
 
-It also interacts with [KV reuse](kv-reuse.html) in a pleasant way: the fewer
+It also interacts with [KV reuse](kv-reuse.md) in a pleasant way: the fewer
 dimensions carry position, the less of a cached block is position-locked, and
 the cheaper a shift is.
 
@@ -156,13 +156,13 @@ one. It halves the cache by construction, since the leading 2 in the size
 formula becomes a 1.
 
 The practical consequence is a warning about the formula on the
-[KV cache page](kv-cache.html): it assumes every layer has its own K and V. On a
+[KV cache page](kv-cache.md): it assumes every layer has its own K and V. On a
 cross-layer-sharing model, **`num_hidden_layers` is not the number of caches**,
 and using it will overstate your memory by whatever the sharing factor is.
 
 ### Hybrid MoE — a dense FFN alongside the routed experts
 
-The generalisation of [shared experts](transformers.html). A hybrid MoE keeps a
+The generalisation of [shared experts](transformers.md). A hybrid MoE keeps a
 dense FFN path that every token traverses, with routed experts on top. Same
 reasoning as shared experts: the dense path carries what every token needs so
 the routed ones can specialise, rather than each expert independently relearning
@@ -357,7 +357,7 @@ config does the opposite.
 **Partial RoPE quietly makes reuse cheaper.** If only 10% of each head carries
 position, then 90% of a cached block is position-independent, and the correction
 needed to move it is proportionally smaller. Nobody markets it this way, but for
-a workload built on [KV reuse](kv-reuse.html) it is a genuine selection
+a workload built on [KV reuse](kv-reuse.md) it is a genuine selection
 criterion.
 
 | Failure | Looks like | Actual cause |
@@ -442,8 +442,8 @@ You are done with this page when you can:
 - **Partial RoPE** — [*Fractional Rotation, Full Potential?*](https://arxiv.org/abs/2603.11611) (2026) — the 10% finding.
 - **Cross-layer KV sharing** — [CLA](https://arxiv.org/abs/2405.12981) and [MLKV](https://arxiv.org/abs/2406.09297).
 
-Related: [KV cache optimization](kv-cache.html) for the formula this page keeps
-qualifying · [KV reuse](kv-reuse.html) for why partial RoPE matters to reuse ·
-[Transformers](transformers.html) for GQA, MoE and shared experts ·
-[LLM APIs & model selection](model-selection.html) for choosing a vendor rather
-than a shape · [Long context](long-context.html) for `rope_scaling` risk.
+Related: [KV cache optimization](kv-cache.md) for the formula this page keeps
+qualifying · [KV reuse](kv-reuse.md) for why partial RoPE matters to reuse ·
+[Transformers](transformers.md) for GQA, MoE and shared experts ·
+[LLM APIs & model selection](model-selection.md) for choosing a vendor rather
+than a shape · [Long context](long-context.md) for `rope_scaling` risk.

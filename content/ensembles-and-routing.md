@@ -135,7 +135,7 @@ and a large one *from the same family*, so they share a tokenizer and often a
 prompt format. Same prompt, same tooling, no per-model adaptation. The small
 model handles the bulk; the large one handles what escalates.
 
-It pairs naturally with [speculative decoding](decoding.html), where a draft
+It pairs naturally with [speculative decoding](decoding.md), where a draft
 model already exists — although note the two are doing different jobs. Speculative
 decoding uses the small model's tokens and *verifies every one*; a cascade uses
 the small model's whole answer and verifies none of them unless it escalates.
@@ -301,7 +301,7 @@ member B catches what member A misses. If you cannot, it does not exist.
 
 **This composes with, and is often confused for, adaptive compute.** Routing by
 difficulty across *models* and
-[adaptive inference-time compute](reasoning-inference-optimization.html) within
+[adaptive inference-time compute](reasoning-inference-optimization.md) within
 one model attack the same waste from two sides, and they stack. What they share
 is the finding that most traffic is easy; what differs is whether you respond by
 changing the model or the thinking budget.
@@ -382,8 +382,8 @@ You are done when you can:
 - **Verification over confidence** — [*Let's Verify Step by Step*](https://arxiv.org/abs/2305.20050) (2023) — process supervision, and why checking beats asking.
 - **Self-consistency** — [Wang et al.](https://arxiv.org/abs/2203.11171) (2022) — ensembling one model's own samples, the cheapest form of diversity.
 
-Related: [LLM APIs & model selection](model-selection.html) for choosing the
-members · [Reasoning inference optimization](reasoning-inference-optimization.html)
-for adaptive compute within one model · [Decoding](decoding.html) for speculative
-decoding, the exact cousin of a cascade · [Regression gates](regression-gates.html)
+Related: [LLM APIs & model selection](model-selection.md) for choosing the
+members · [Reasoning inference optimization](reasoning-inference-optimization.md)
+for adaptive compute within one model · [Decoding](decoding.md) for speculative
+decoding, the exact cousin of a cascade · [Regression gates](regression-gates.md)
 for evaluating a system rather than a model.

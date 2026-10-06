@@ -15,7 +15,7 @@ summary: Nineteen ways to make a reasoning model cheaper, organised by which of 
 > and every technique here moves exactly one of them, or removes the work
 > entirely.
 
-[Reasoning models](reasoning-models.html) is about *whether* to reason: routing,
+[Reasoning models](reasoning-models.md) is about *whether* to reason: routing,
 when thinking helps, when it is expensive superstition. This page assumes you
 have already decided the reasoning is worth doing, and the bill has arrived.
 
@@ -23,7 +23,7 @@ That bill is unlike a normal inference bill in one specific way: **you are payin
 output-token prices for tokens the user never sees.** A 4,000-token chain that
 produces a 200-word answer is 95% invisible cost. Which is why this is a
 distinct optimisation surface rather than a footnote on
-[KV cache optimization](kv-cache.html) — the techniques are about the *shape of
+[KV cache optimization](kv-cache.md) — the techniques are about the *shape of
 the thinking*, not the memory it sits in.
 
 ---
@@ -110,7 +110,7 @@ prompt change you can ship this afternoon.
 | # | Technique | What it does | Factor | Ready? |
 |---|---|---|---|---|
 | 12 | **CoT distillation** | Fine-tune a small model on a strong model's reasoning traces. The clearest current case where distillation genuinely transfers capability | cost/token | ✅ Ship today — mind the licence |
-| 13 | **Long-context CoT** | Not a saving — a cost to manage. A 32k chain is a 32k KV cache that grows for the whole generation, so reasoning length is a *memory* problem too | cost/token | ✅ Manage it, via [KV cache optimization](kv-cache.html) |
+| 13 | **Long-context CoT** | Not a saving — a cost to manage. A 32k chain is a 32k KV cache that grows for the whole generation, so reasoning length is a *memory* problem too | cost/token | ✅ Manage it, via [KV cache optimization](kv-cache.md) |
 | 14 | **Small Reasoning Model (SRM)** | A small model trained specifically to reason, rather than a general small model prompted to. 7B-class SRMs beat much larger general models on narrow reasoning | cost/token | ✅ Ship today |
 | 18 | **Augmented scaffold + SRM** | Give the small model tools instead of asking it to think harder: a calculator, a code interpreter, a verifier, a retriever. Offloads the part it is worst at | cost/token | ✅ Ship today — best accuracy-per-dollar on this page |
 
@@ -145,7 +145,7 @@ order of both payoff and risk:
    is much higher than people expect.
 2. **Prefix cache on the reasoning preamble.** The system prompt and any shared
    scaffolding are identical across requests; that KV is reusable by the normal
-   [prefix-caching](kv-cache.html) mechanism. Cuts TTFT, not reasoning tokens.
+   [prefix-caching](kv-cache.md) mechanism. Cuts TTFT, not reasoning tokens.
 3. **Semantic / trace cache.** Retrieve a *similar* solved problem and give its
    trace to the model as an exemplar, so it reasons less from scratch. This is
    the one with real payoff and real danger: near-miss retrieval hands the model
@@ -240,7 +240,7 @@ flowchart TB
 Two things the diagram is trying to make obvious. **The KV loop is not
 decorative** — every reasoning token is a token in the cache for the rest of the
 generation, so a long chain is a memory cost as well as a token cost, and this
-is where this page and the [KV cache page](kv-cache.html) meet. And **the
+is where this page and the [KV cache page](kv-cache.md) meet. And **the
 verify-retry edge is cheaper than more thinking**: where an answer is checkable,
 checking it costs a fraction of what generating a longer chain costs.
 
@@ -512,8 +512,8 @@ You are done with this page when you can:
 - **Test-time scaling** — [Snell et al., *Scaling LLM Test-Time Compute Optimally*](https://arxiv.org/abs/2408.03314) (2024) — the evidence behind adaptive allocation.
 - **Distilled reasoning** — [*DeepSeek-R1*](https://arxiv.org/abs/2501.12948) (2025) — long-form RL-trained reasoning, and the distilled small models released with it.
 
-Related: [Reasoning models](reasoning-models.html) for whether to reason at all ·
-[KV cache optimization](kv-cache.html) for the memory a long chain occupies ·
-[Decoding](decoding.html) for sampling and speculative decoding ·
-[Distillation & pruning](distillation-and-pruning.html) for the licence caution ·
-[Regression gates](regression-gates.html) for the stratified eval this page keeps demanding.
+Related: [Reasoning models](reasoning-models.md) for whether to reason at all ·
+[KV cache optimization](kv-cache.md) for the memory a long chain occupies ·
+[Decoding](decoding.md) for sampling and speculative decoding ·
+[Distillation & pruning](distillation-and-pruning.md) for the licence caution ·
+[Regression gates](regression-gates.md) for the stratified eval this page keeps demanding.

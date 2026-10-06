@@ -52,7 +52,7 @@ what happens when it calls the wrong one, twelve times, in a row.
 
 Getting those bounds right — and adding the one guard that stops a loop for a
 reason rather than on exhaustion — is the subject of
-[harness & loop engineering](harness-and-loops.html).
+[harness & loop engineering](harness-and-loops.md).
 
 ---
 
@@ -317,7 +317,7 @@ Three optimisations follow directly, and they are cheap:
 1. **Keep the transcript prefix stable.** Tool results appended at the end are a
    prefix-cache hit; a system prompt that interpolates a timestamp or reorders
    tool definitions per call is a miss every step. This is the single most
-   common self-inflicted agent latency bug — see [KV reuse](kv-reuse.html).
+   common self-inflicted agent latency bug — see [KV reuse](kv-reuse.md).
 2. **Issue independent calls in parallel.** Agents serialise tool calls by
    default because the loop is written as a loop. Calls with no data dependency
    between them should be dispatched together; on a research or retrieval agent

@@ -102,14 +102,15 @@ for (const { file, meta, body, slug } of pages) {
   }
 
   // -- links ----------------------------------------------------------------
-  // Internal links are written as `foo.html` because that is what they resolve
-  // to in docs/. The target must therefore be a real page slug.
-  for (const [, target] of body.matchAll(/\]\(([a-z0-9][a-z0-9-]*)\.html(#[^)]*)?\)/g)) {
-    if (!slugs.has(target)) err(file, `link to "${target}.html" — no page with that slug`);
+  // Internal links are authored as `foo.md` so they resolve when the content is
+  // read on GitHub; build.mjs rewrites them to .html for the site. The target
+  // must be a real page slug either way.
+  for (const [, target] of body.matchAll(/\]\(([a-z0-9][a-z0-9-]*)\.md(#[^)]*)?\)/g)) {
+    if (!slugs.has(target)) err(file, `link to "${target}.md" — no page with that slug`);
   }
-  // A relative .md link works on GitHub and 404s on the built site. Pick one.
-  for (const [, target] of body.matchAll(/\]\(([a-z0-9][a-z0-9-]*)\.md\)/g)) {
-    err(file, `link to "${target}.md" — use "${target}.html", the built path`);
+  // .html is the built path. Authored here it 404s for anyone reading on GitHub.
+  for (const [, target] of body.matchAll(/\]\(([a-z0-9][a-z0-9-]*)\.html(#[^)]*)?\)/g)) {
+    err(file, `link to "${target}.html" — author it as "${target}.md"`);
   }
 
   // -- structure ------------------------------------------------------------
@@ -133,11 +134,11 @@ for (const { file, meta, body, slug } of pages) {
 // sidebar. Worth knowing about; not worth failing a build over.
 const linkedTo = new Set();
 for (const { body } of pages) {
-  for (const [, t] of body.matchAll(/\]\(([a-z0-9][a-z0-9-]*)\.html(?:#[^)]*)?\)/g)) linkedTo.add(t);
+  for (const [, t] of body.matchAll(/\]\(([a-z0-9][a-z0-9-]*)\.md(?:#[^)]*)?\)/g)) linkedTo.add(t);
 }
 for (const { file, slug, meta } of pages) {
   if (meta.module !== "start" && meta.module !== "reference" && !linkedTo.has(slug)) {
-    warn(file, `no other page links to "${slug}.html"`);
+    warn(file, `no other page links to "${slug}.md"`);
   }
 }
 

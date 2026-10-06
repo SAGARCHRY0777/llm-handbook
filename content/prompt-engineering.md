@@ -278,7 +278,7 @@ instructions accreted over months without anyone testing removal.
 
 The document itself — how long it should be, what order to put things in, and
 why roughly three quarters of a deployed one turns out to be tool definitions —
-is [system prompts](system-prompts.html).
+is [system prompts](system-prompts.md).
 
 **When prompting is the wrong tool.** If you are on your fifteenth prompt
 revision and still failing, the problem is usually not the prompt. It is

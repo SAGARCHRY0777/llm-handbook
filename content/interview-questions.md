@@ -45,18 +45,18 @@ mockround
 
 | Question | Page |
 |---|---|
-| Explain attention. | [Transformers](transformers.html) |
-| ⭐ Why is decode memory-bound but prefill compute-bound? | [Transformers](transformers.html) |
-| What is the KV cache and why does it matter? | [Transformers](transformers.html) |
-| Why decoder-only for generation? | [Transformers](transformers.html) |
-| What does FlashAttention change? | [Transformers](transformers.html) |
-| ⭐ Why can't the model count the letters in a word? | [Tokenization](tokenization.html) |
-| Why is non-English text more expensive? | [Tokenization](tokenization.html) |
-| Temperature 0 versus 0.7 — when each? | [Decoding](decoding.html) |
-| ⭐ Is temperature 0 deterministic? | [Decoding](decoding.html) |
-| top_k or top_p, and why? | [Decoding](decoding.html) |
-| Why don't chat models use beam search? | [Decoding](decoding.html) |
-| What is speculative decoding? | [Decoding](decoding.html) |
+| Explain attention. | [Transformers](transformers.md) |
+| ⭐ Why is decode memory-bound but prefill compute-bound? | [Transformers](transformers.md) |
+| What is the KV cache and why does it matter? | [Transformers](transformers.md) |
+| Why decoder-only for generation? | [Transformers](transformers.md) |
+| What does FlashAttention change? | [Transformers](transformers.md) |
+| ⭐ Why can't the model count the letters in a word? | [Tokenization](tokenization.md) |
+| Why is non-English text more expensive? | [Tokenization](tokenization.md) |
+| Temperature 0 versus 0.7 — when each? | [Decoding](decoding.md) |
+| ⭐ Is temperature 0 deterministic? | [Decoding](decoding.md) |
+| top_k or top_p, and why? | [Decoding](decoding.md) |
+| Why don't chat models use beam search? | [Decoding](decoding.md) |
+| What is speculative decoding? | [Decoding](decoding.md) |
 
 ---
 
@@ -66,25 +66,25 @@ mockround
 
 | Question | Page |
 |---|---|
-| How would you chunk a technical manual? | [Chunking](chunking.html) |
-| ⭐ RAG quality is poor. Where do you look first? | [Chunking](chunking.html) |
-| What is small-to-big retrieval? | [Chunking](chunking.html) |
-| ⭐ How do you handle permissions in RAG? | [Chunking](chunking.html) |
-| You are changing embedding model. What is involved? | [Chunking](chunking.html) |
-| How does HNSW work? | [Embeddings & vector DBs](embeddings-and-vector-databases.html) |
-| ⭐ What recall does your ANN index actually get? | [Embeddings & vector DBs](embeddings-and-vector-databases.html) |
-| Is 0.82 cosine similarity good? | [Embeddings & vector DBs](embeddings-and-vector-databases.html) |
-| Which vector database, and why? | [Embeddings & vector DBs](embeddings-and-vector-databases.html) |
-| ⭐ Why two retrieval stages instead of one? | [Reranking](reranking.html) |
-| How deep should the shortlist be? | [Reranking](reranking.html) |
-| When does a reranker *not* help? | [Reranking](reranking.html) |
-| ⭐ What is HyDE and why does it work? | [Query transformation](query-transformation.html) |
-| HyDE hallucinates. Isn't that a problem? | [Query transformation](query-transformation.html) |
-| Multi-query or reranking — which fixes what? | [Query transformation](query-transformation.html) |
-| How do you fuse results from several queries? | [Query transformation](query-transformation.html) |
-| How do you stop RAG answering from irrelevant context? | [Corrective RAG](corrective-rag.html) |
-| CRAG versus self-RAG? | [Corrective RAG](corrective-rag.html) |
-| ⭐ Your relevance grader is sometimes wrong. Is that a problem? | [Corrective RAG](corrective-rag.html) |
+| How would you chunk a technical manual? | [Chunking](chunking.md) |
+| ⭐ RAG quality is poor. Where do you look first? | [Chunking](chunking.md) |
+| What is small-to-big retrieval? | [Chunking](chunking.md) |
+| ⭐ How do you handle permissions in RAG? | [Chunking](chunking.md) |
+| You are changing embedding model. What is involved? | [Chunking](chunking.md) |
+| How does HNSW work? | [Embeddings & vector DBs](embeddings-and-vector-databases.md) |
+| ⭐ What recall does your ANN index actually get? | [Embeddings & vector DBs](embeddings-and-vector-databases.md) |
+| Is 0.82 cosine similarity good? | [Embeddings & vector DBs](embeddings-and-vector-databases.md) |
+| Which vector database, and why? | [Embeddings & vector DBs](embeddings-and-vector-databases.md) |
+| ⭐ Why two retrieval stages instead of one? | [Reranking](reranking.md) |
+| How deep should the shortlist be? | [Reranking](reranking.md) |
+| When does a reranker *not* help? | [Reranking](reranking.md) |
+| ⭐ What is HyDE and why does it work? | [Query transformation](query-transformation.md) |
+| HyDE hallucinates. Isn't that a problem? | [Query transformation](query-transformation.md) |
+| Multi-query or reranking — which fixes what? | [Query transformation](query-transformation.md) |
+| How do you fuse results from several queries? | [Query transformation](query-transformation.md) |
+| How do you stop RAG answering from irrelevant context? | [Corrective RAG](corrective-rag.md) |
+| CRAG versus self-RAG? | [Corrective RAG](corrective-rag.md) |
+| ⭐ Your relevance grader is sometimes wrong. Is that a problem? | [Corrective RAG](corrective-rag.md) |
 
 ---
 
@@ -94,25 +94,25 @@ mockround
 
 | Question | Page |
 |---|---|
-| ⭐ How do you know your LLM judge is any good? | [LLM as a judge](llm-as-a-judge.html) |
-| Pointwise or pairwise judging? | [LLM as a judge](llm-as-a-judge.html) |
-| ⭐ The score went up 4 points on 50 items. Ship it? | [LLM as a judge](llm-as-a-judge.html) |
-| The vendor updated the judge model. What now? | [LLM as a judge](llm-as-a-judge.html) |
-| When would you *not* use an LLM judge? | [LLM as a judge](llm-as-a-judge.html) |
-| How do you stop LLM quality regressing? | [Regression gates](regression-gates.html) |
-| ⭐ Why gate per bucket as well as overall? | [Regression gates](regression-gates.html) |
-| Should a green run update the baseline? | [Regression gates](regression-gates.html) |
-| Someone edited the corpus. What should the gate do? | [Regression gates](regression-gates.html) |
-| How do you know your gate works? | [Regression gates](regression-gates.html) |
-| How would you detect drift in a live system? | [Drift detection](drift-detection.html) |
-| Covariate versus concept drift? | [Drift detection](drift-detection.html) |
-| ⭐ You have no labels. How do you monitor quality? | [Drift detection](drift-detection.html) |
-| ⭐ Drift detected. Do you retrain? | [Drift detection](drift-detection.html) |
-| In predictive maintenance, how do you know an alert was right? | [Drift detection](drift-detection.html) |
-| How would you check an LLM system for bias? | [Bias & explainability](bias-and-explainability.html) |
-| ⭐ Can you make it fair? | [Bias & explainability](bias-and-explainability.html) |
-| ⭐ Is chain-of-thought an explanation? | [Bias & explainability](bias-and-explainability.html) |
-| A segment has 40 samples and looks bad. | [Bias & explainability](bias-and-explainability.html) |
+| ⭐ How do you know your LLM judge is any good? | [LLM as a judge](llm-as-a-judge.md) |
+| Pointwise or pairwise judging? | [LLM as a judge](llm-as-a-judge.md) |
+| ⭐ The score went up 4 points on 50 items. Ship it? | [LLM as a judge](llm-as-a-judge.md) |
+| The vendor updated the judge model. What now? | [LLM as a judge](llm-as-a-judge.md) |
+| When would you *not* use an LLM judge? | [LLM as a judge](llm-as-a-judge.md) |
+| How do you stop LLM quality regressing? | [Regression gates](regression-gates.md) |
+| ⭐ Why gate per bucket as well as overall? | [Regression gates](regression-gates.md) |
+| Should a green run update the baseline? | [Regression gates](regression-gates.md) |
+| Someone edited the corpus. What should the gate do? | [Regression gates](regression-gates.md) |
+| How do you know your gate works? | [Regression gates](regression-gates.md) |
+| How would you detect drift in a live system? | [Drift detection](drift-detection.md) |
+| Covariate versus concept drift? | [Drift detection](drift-detection.md) |
+| ⭐ You have no labels. How do you monitor quality? | [Drift detection](drift-detection.md) |
+| ⭐ Drift detected. Do you retrain? | [Drift detection](drift-detection.md) |
+| In predictive maintenance, how do you know an alert was right? | [Drift detection](drift-detection.md) |
+| How would you check an LLM system for bias? | [Bias & explainability](bias-and-explainability.md) |
+| ⭐ Can you make it fair? | [Bias & explainability](bias-and-explainability.md) |
+| ⭐ Is chain-of-thought an explanation? | [Bias & explainability](bias-and-explainability.md) |
+| A segment has 40 samples and looks bad. | [Bias & explainability](bias-and-explainability.md) |
 
 ---
 
@@ -120,20 +120,20 @@ mockround
 
 | Question | Page |
 |---|---|
-| ⭐ Why does quantization make inference faster? | [Quantization](quantization.html) |
-| INT8 or INT4? | [Quantization](quantization.html) |
-| ⭐ What breaks first when you quantize? | [Quantization](quantization.html) |
-| Why do large models quantize worse than small ones? | [Quantization](quantization.html) |
-| You got 1.2× not 4×. Why? | [Quantization](quantization.html) |
-| Quantization, pruning or distillation — which first? | [Distillation & pruning](distillation-and-pruning.html) |
-| ⭐ You pruned to 90% sparsity and it is not faster. | [Distillation & pruning](distillation-and-pruning.html) |
-| Why do soft labels beat hard labels? | [Distillation & pruning](distillation-and-pruning.html) |
-| What is the risk in distilling from a commercial API? | [Distillation & pruning](distillation-and-pruning.html) |
-| What is continuous batching? | [Serving](serving-and-operations.html) |
-| ⭐ Your p95 latency doubled. Debug it. | [Serving](serving-and-operations.html) |
-| ⭐ How do you handle overload? | [Serving](serving-and-operations.html) |
-| How would you cut the bill in half? | [Serving](serving-and-operations.html) |
-| Why is `max_tokens` a capacity control? | [Serving](serving-and-operations.html) |
+| ⭐ Why does quantization make inference faster? | [Quantization](quantization.md) |
+| INT8 or INT4? | [Quantization](quantization.md) |
+| ⭐ What breaks first when you quantize? | [Quantization](quantization.md) |
+| Why do large models quantize worse than small ones? | [Quantization](quantization.md) |
+| You got 1.2× not 4×. Why? | [Quantization](quantization.md) |
+| Quantization, pruning or distillation — which first? | [Distillation & pruning](distillation-and-pruning.md) |
+| ⭐ You pruned to 90% sparsity and it is not faster. | [Distillation & pruning](distillation-and-pruning.md) |
+| Why do soft labels beat hard labels? | [Distillation & pruning](distillation-and-pruning.md) |
+| What is the risk in distilling from a commercial API? | [Distillation & pruning](distillation-and-pruning.md) |
+| What is continuous batching? | [Serving](serving-and-operations.md) |
+| ⭐ Your p95 latency doubled. Debug it. | [Serving](serving-and-operations.md) |
+| ⭐ How do you handle overload? | [Serving](serving-and-operations.md) |
+| How would you cut the bill in half? | [Serving](serving-and-operations.md) |
+| Why is `max_tokens` a capacity control? | [Serving](serving-and-operations.md) |
 
 ---
 
@@ -141,23 +141,23 @@ mockround
 
 | Question | Page |
 |---|---|
-| What is an agent? | [Agents](agents.html) |
-| ⭐ Why do long agent chains fail? | [Agents](agents.html) |
-| How do you stop an agent running forever? | [Agents](agents.html) |
-| ⭐ How do you design tools? | [Agents](agents.html) |
-| When is multi-agent worth it? | [Agents](agents.html) |
-| How would you evaluate an agent? | [Agents](agents.html) |
-| ⭐ How do you prevent prompt injection? | [Guardrails](guardrails-and-security.html) |
-| Direct versus indirect injection? | [Guardrails](guardrails-and-security.html) |
-| Where do you enforce permissions? | [Guardrails](guardrails-and-security.html) |
-| What is the dual-LLM pattern? | [Guardrails](guardrails-and-security.html) |
-| ⭐ RAG or fine-tuning? | [Fine-tuning](fine-tuning.html) |
-| What is LoRA, mechanically? | [Fine-tuning](fine-tuning.html) |
-| How much training data? | [Fine-tuning](fine-tuning.html) |
-| ⭐ When would you *not* fine-tune? | [Fine-tuning](fine-tuning.html) |
-| What actually improves a prompt? | [Prompt engineering](prompt-engineering.html) |
-| How do you get reliable JSON? | [Prompt engineering](prompt-engineering.html) |
-| You have changed the prompt 15 times and it still fails. | [Prompt engineering](prompt-engineering.html) |
+| What is an agent? | [Agents](agents.md) |
+| ⭐ Why do long agent chains fail? | [Agents](agents.md) |
+| How do you stop an agent running forever? | [Agents](agents.md) |
+| ⭐ How do you design tools? | [Agents](agents.md) |
+| When is multi-agent worth it? | [Agents](agents.md) |
+| How would you evaluate an agent? | [Agents](agents.md) |
+| ⭐ How do you prevent prompt injection? | [Guardrails](guardrails-and-security.md) |
+| Direct versus indirect injection? | [Guardrails](guardrails-and-security.md) |
+| Where do you enforce permissions? | [Guardrails](guardrails-and-security.md) |
+| What is the dual-LLM pattern? | [Guardrails](guardrails-and-security.md) |
+| ⭐ RAG or fine-tuning? | [Fine-tuning](fine-tuning.md) |
+| What is LoRA, mechanically? | [Fine-tuning](fine-tuning.md) |
+| How much training data? | [Fine-tuning](fine-tuning.md) |
+| ⭐ When would you *not* fine-tune? | [Fine-tuning](fine-tuning.md) |
+| What actually improves a prompt? | [Prompt engineering](prompt-engineering.md) |
+| How do you get reliable JSON? | [Prompt engineering](prompt-engineering.md) |
+| You have changed the prompt 15 times and it still fails. | [Prompt engineering](prompt-engineering.md) |
 
 ---
 
@@ -167,18 +167,18 @@ mockround
 
 | Question | Page |
 |---|---|
-| ⭐ How would you choose a model? | [Model selection](model-selection.html) |
-| Hosted or self-hosted? | [Model selection](model-selection.html) |
-| What licence questions matter? | [Model selection](model-selection.html) |
-| Your context window is 200k. Use it? | [Model selection](model-selection.html) |
-| LangChain or LlamaIndex? | [Orchestration](orchestration-frameworks.html) |
-| What is DSPy actually doing? | [Orchestration](orchestration-frameworks.html) |
-| ⭐ Would you use a framework at all? | [Orchestration](orchestration-frameworks.html) |
-| ⭐ Should we build or buy? | [Market & business](market-and-business.html) |
-| How would you price this? | [Market & business](market-and-business.html) |
-| ⭐ What is our moat? | [Market & business](market-and-business.html) |
-| The demo works. Why isn't it shipped? | [Market & business](market-and-business.html) |
-| ⭐ When should we *not* use an LLM? | [Market & business](market-and-business.html) |
+| ⭐ How would you choose a model? | [Model selection](model-selection.md) |
+| Hosted or self-hosted? | [Model selection](model-selection.md) |
+| What licence questions matter? | [Model selection](model-selection.md) |
+| Your context window is 200k. Use it? | [Model selection](model-selection.md) |
+| LangChain or LlamaIndex? | [Orchestration](orchestration-frameworks.md) |
+| What is DSPy actually doing? | [Orchestration](orchestration-frameworks.md) |
+| ⭐ Would you use a framework at all? | [Orchestration](orchestration-frameworks.md) |
+| ⭐ Should we build or buy? | [Market & business](market-and-business.md) |
+| How would you price this? | [Market & business](market-and-business.md) |
+| ⭐ What is our moat? | [Market & business](market-and-business.md) |
+| The demo works. Why isn't it shipped? | [Market & business](market-and-business.md) |
+| ⭐ When should we *not* use an LLM? | [Market & business](market-and-business.md) |
 
 ---
 

@@ -15,7 +15,7 @@ summary: The model is the part you cannot change. The harness and the loop are t
 > as the model does — so they deserve the same engineering attention, and almost
 > never get it.
 
-[Agents](agents.html) covers what an agent is and when to build one. This page
+[Agents](agents.md) covers what an agent is and when to build one. This page
 is about the software *around* the model: the tools it is given, the context it
 is handed, the loop that drives it, and the guards that stop it. Anthropic names
 this layer directly — Claude Code is described as "the agentic harness around
@@ -310,12 +310,12 @@ Four things follow:
 - **Measure routing accuracy separately from end-to-end accuracy.** They are
   different numbers with different fixes, and a single end-to-end score cannot
   tell you which half is broken. This is the same disaggregation argument as
-  [bias and explainability](bias-and-explainability.html), applied to a pipeline
+  [bias and explainability](bias-and-explainability.md), applied to a pipeline
   stage instead of a population.
 - **A router is not a cost optimiser.** Routing by *capability* to a specialist
   and routing by *price* to a cheaper model are different systems that happen to
-  share a name — see [ensembles and routing](ensembles-and-routing.html) for the
-  second, and [agents](agents.html) for the router as a control-flow pattern.
+  share a name — see [ensembles and routing](ensembles-and-routing.md) for the
+  second, and [agents](agents.md) for the router as a control-flow pattern.
 
 ### The full interruption taxonomy
 
@@ -454,7 +454,7 @@ inference — and there is a small, practical literature on each.
 |---|---|---|
 | **Multi-tool parallel execution** | Independent calls in one turn run concurrently instead of serially | Only sound when the calls do not depend on each other; the model must be able to *emit* several at once, which not every tool-calling format allows |
 | **Tool execution pipelining** | Runs a tool while the next step's prefill proceeds | Needs the tool result not to change what gets prefilled — true for appends, false for anything that rewrites history |
-| **Speculative tool execution** | Starts the likely call before the model finishes emitting it | Same bet as [speculative decoding](decoding.html), and the same failure mode: a wrong guess wastes the work. **Only safe for reads.** Speculatively executing a write is an unrecoverable side effect |
+| **Speculative tool execution** | Starts the likely call before the model finishes emitting it | Same bet as [speculative decoding](decoding.md), and the same failure mode: a wrong guess wastes the work. **Only safe for reads.** Speculatively executing a write is an unrecoverable side effect |
 | **Disaggregated tool execution** | Moves tool work onto separate infrastructure from the GPU | The same phase-splitting argument as disaggregated prefill: do not hold an accelerator while waiting on a database |
 | **Tool token reduction / concise tool output** | Shrinks the result before it enters context | The cheapest and most reliable of the five |
 
@@ -642,9 +642,9 @@ You are done with this page when you can:
 - **Multi-agent, both sides** — [Tran & Kiela](https://arxiv.org/abs/2604.02460) for the matched-budget result, Cognition's *Don't Build Multi-Agents* **and** its April 2026 revision, and [Kim et al.](https://arxiv.org/abs/2512.08296) for +80.8% to −70.0%.
 - **Eval** — [τ-bench](https://arxiv.org/abs/2406.12045) for pass^k, and the Agentic Benchmark Checklist for how construction flaws move scores by up to 100% relative.
 
-Related: [Agents](agents.html) for whether to build one ·
-[Guardrails & security](guardrails-and-security.html) for the adversarial side of
-the same loop · [Regression gates](regression-gates.html) for turning these evals
-into merge decisions · [Reasoning inference optimization](reasoning-inference-optimization.html)
-for the token budget the loop spends · [Orchestration frameworks](orchestration-frameworks.html)
+Related: [Agents](agents.md) for whether to build one ·
+[Guardrails & security](guardrails-and-security.md) for the adversarial side of
+the same loop · [Regression gates](regression-gates.md) for turning these evals
+into merge decisions · [Reasoning inference optimization](reasoning-inference-optimization.md)
+for the token budget the loop spends · [Orchestration frameworks](orchestration-frameworks.md)
 for the libraries whose defaults this page keeps correcting.

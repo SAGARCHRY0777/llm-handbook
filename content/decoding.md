@@ -132,7 +132,7 @@ them.
 ### Not samplers — they change how the same tokens are computed
 
 - **Flash decoding** is a *kernel*, despite the name's symmetry with
-  [FlashAttention](kernel-and-attention-optimization.html). At decode time
+  [FlashAttention](kernel-and-attention-optimization.md). At decode time
   there is exactly one query and a very long KV cache, so the usual
   parallelisation over query positions has nothing to work with and the GPU
   sits mostly idle. Flash decoding splits the *key/value* dimension across

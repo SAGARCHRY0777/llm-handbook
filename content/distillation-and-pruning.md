@@ -196,7 +196,7 @@ sidesteps the KV problem entirely, because verification runs every layer anyway.
   with it, so the matrices are truly smaller.
 - **FFN pruning / channel pruning / filter pruning** all cut the intermediate
   dimension `d_ff`. Since the MLP is ~80% of a layer's parameters, this is where
-  the mass is — see [transformers](transformers.html) for the arithmetic.
+  the mass is — see [transformers](transformers.md) for the arithmetic.
 - **Slimmable networks** train one model to run correctly at several widths, so
   deployment picks a width per device instead of shipping several checkpoints.
 
@@ -226,7 +226,7 @@ than removing an equivalent fraction of weights. The family:
 The risk is blunt: the token you pruned may have been the answer. Length pruning
 needs eval on retrieval-style tasks specifically, because average quality can
 hold while needle-in-a-haystack recall collapses — see
-[long context](long-context.html).
+[long context](long-context.md).
 
 ### Model dimension, components, and combinations
 
@@ -238,7 +238,7 @@ hold while needle-in-a-haystack recall collapses — see
 - **Component pruning** removes structure rather than weights: **normalization
   pruning**, **positional-encoding pruning** (NoPE — removing position
   encoding entirely, which is viable for some architectures and is the limit
-  case of [partial RoPE](model-shape.html)), **softmax pruning**, and
+  case of [partial RoPE](model-shape.md)), **softmax pruning**, and
   **skip-connection pruning**. These are architectural research more than
   deployment options; residual removal in particular tends to break trainability.
 - **Multi-dimensional pruning** — **dual**, **triple**, **quadruple** — cuts

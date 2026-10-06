@@ -128,6 +128,12 @@ function escapeHtml(text) {
 
 /* ------------------------------------------------------------------ build */
 
+/** Author links as `page.md` so they resolve on GitHub; the site serves .html.
+ *  Sibling-page links only — anything with a slash or scheme is left alone. */
+function siteLinks(md) {
+  return md.replace(/\]\(([a-z0-9-]+)\.md(#[^)]*)?\)/gi, (_, p, hash) => `](${p}.html${hash || ""})`);
+}
+
 function loadPages() {
   const pages = [];
   for (const file of readdirSync(CONTENT).filter((f) => f.endsWith(".md"))) {
@@ -135,7 +141,7 @@ function loadPages() {
     const { meta, body } = parseFrontmatter(raw);
     const slug = meta.slug || basename(file, ".md");
     const headings = [];
-    const html = marked.parse(body, { renderer: makeRenderer(headings), gfm: true });
+    const html = marked.parse(siteLinks(body), { renderer: makeRenderer(headings), gfm: true });
     pages.push({
       slug,
       file,

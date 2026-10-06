@@ -27,7 +27,7 @@ You have limited time and a specific goal. Read for gaps, not for completeness.
 
 ### Days 1–2 · Find out what you cannot answer
 
-Open the [question bank](interview-questions.html) and answer the ⭐ questions
+Open the [question bank](interview-questions.md) and answer the ⭐ questions
 out loud, cold, without reading the pages first. Mark every one you cannot
 finish in ninety seconds. **That list is your curriculum** — not the table of
 contents.
@@ -39,23 +39,23 @@ cluster in:
 
 | Likely gap | Page |
 |---|---|
-| "How did you evaluate it?" | [LLM as a judge](llm-as-a-judge.html), [Regression gates](regression-gates.html) |
-| Why quantization is faster | [Quantization](quantization.html) |
-| Why agents fail | [Agents](agents.html) |
-| Prompt injection | [Guardrails](guardrails-and-security.html) |
-| RAG vs fine-tuning | [Fine-tuning](fine-tuning.html) |
+| "How did you evaluate it?" | [LLM as a judge](llm-as-a-judge.md), [Regression gates](regression-gates.md) |
+| Why quantization is faster | [Quantization](quantization.md) |
+| Why agents fail | [Agents](agents.md) |
+| Prompt injection | [Guardrails](guardrails-and-security.md) |
+| RAG vs fine-tuning | [Fine-tuning](fine-tuning.md) |
 
 ### Days 8–10 · Rehearse the system design round
 
-Work the five [system design walkthroughs](system-design-walkthroughs.html) —
+Work the five [system design walkthroughs](system-design-walkthroughs.md) —
 out loud, with a whiteboard, doing the arithmetic. Then do
-[numbers to know](numbers-to-know.html) until the five key calculations are
+[numbers to know](numbers-to-know.md) until the five key calculations are
 automatic.
 
 ### Days 11–14 · Consolidate
 
 - Re-do the ⭐ questions. They should now take sixty seconds each.
-- Read [anti-patterns](anti-patterns.html) once — it is a fast way to catch
+- Read [anti-patterns](anti-patterns.md) once — it is a fast way to catch
   yourself about to give a confidently wrong answer.
 - Prepare **one story** per area from work you actually did. A real story beats
   any amount of theory, and interviewers can tell the difference immediately.
@@ -94,18 +94,18 @@ graph TD
 
 **Evaluation genuinely comes first**, before you have a system to evaluate. Fifty
 questions with known answers takes an afternoon — [synthetic
-data](synthetic-data.html) shows how to bootstrap them — and without it every
+data](synthetic-data.md) shows how to bootstrap them — and without it every
 subsequent decision is a guess.
 
 **The build task:** a working pipeline with a golden set, a committed baseline,
 and a gate that fails your build. Not a notebook — a repository with CI. That
 artefact answers more interview questions than any amount of reading.
 
-**Reading order:** [Chunking](chunking.html) → [Embeddings](embeddings-and-vector-databases.html)
-→ [Reranking](reranking.html) → [LLM as a judge](llm-as-a-judge.html) →
-[Regression gates](regression-gates.html) → [Query transformation](query-transformation.html)
-→ [Corrective RAG](corrective-rag.html) → [Caching](caching.html) →
-[Serving](serving-and-operations.html).
+**Reading order:** [Chunking](chunking.md) → [Embeddings](embeddings-and-vector-databases.md)
+→ [Reranking](reranking.md) → [LLM as a judge](llm-as-a-judge.md) →
+[Regression gates](regression-gates.md) → [Query transformation](query-transformation.md)
+→ [Corrective RAG](corrective-rag.md) → [Caching](caching.md) →
+[Serving](serving-and-operations.md).
 
 ---
 
@@ -119,31 +119,31 @@ better than the field's own conventional wisdom.
 |---|---|
 | Train/val/test splits | Golden sets and holdouts — same discipline, fewer labels |
 | Precision/recall trade-offs | Retrieval recall vs reranking precision |
-| Model drift | [Drift detection](drift-detection.html) — same taxonomy, worse labels |
-| Quantization and pruning | [Quantization](quantization.html) — same ideas, the outlier problem is new |
-| Distillation | [Distillation](distillation-and-pruning.html) — familiar, plus a licence problem |
+| Model drift | [Drift detection](drift-detection.md) — same taxonomy, worse labels |
+| Quantization and pruning | [Quantization](quantization.md) — same ideas, the outlier problem is new |
+| Distillation | [Distillation](distillation-and-pruning.md) — familiar, plus a licence problem |
 | Feature engineering | Prompting and retrieval, which is where the leverage moved |
 
 **What is genuinely new:**
 
 1. **Non-determinism as a first-class problem** — you cannot assert equality,
-   so you score. [Regression gates](regression-gates.html).
+   so you score. [Regression gates](regression-gates.md).
 2. **Token economics** — inference cost scales with usage in a way classical ML
-   deployment does not. [Numbers to know](numbers-to-know.html).
+   deployment does not. [Numbers to know](numbers-to-know.md).
 3. **Prompt injection** — a security class with no equivalent in a classifier.
-   [Guardrails](guardrails-and-security.html).
+   [Guardrails](guardrails-and-security.md).
 4. **Retrieval as the main quality lever** — most quality work is data
-   plumbing, not modelling. [Chunking](chunking.html).
+   plumbing, not modelling. [Chunking](chunking.md).
 
 **Your advantage, and it is real:** you are already comfortable saying "that
 improvement is inside the confidence interval." Much of this field is not, and
 saying it in an interview separates you immediately.
 
-**Reading order:** [Transformers](transformers.html) →
-[Tokenization](tokenization.html) → [Chunking](chunking.html) →
-[Embeddings](embeddings-and-vector-databases.html) →
-[LLM as a judge](llm-as-a-judge.html) → [Guardrails](guardrails-and-security.html)
-→ [Serving](serving-and-operations.html). Skip quantization and distillation
+**Reading order:** [Transformers](transformers.md) →
+[Tokenization](tokenization.md) → [Chunking](chunking.md) →
+[Embeddings](embeddings-and-vector-databases.md) →
+[LLM as a judge](llm-as-a-judge.md) → [Guardrails](guardrails-and-security.md)
+→ [Serving](serving-and-operations.md). Skip quantization and distillation
 theory; read only their LLM-specific sections.
 
 ---
@@ -155,8 +155,8 @@ of the sidebar.
 
 ### Block 1 · What is actually happening (3 hours)
 
-[Tokenization](tokenization.html) → [Transformers](transformers.html) →
-[Decoding](decoding.html)
+[Tokenization](tokenization.md) → [Transformers](transformers.md) →
+[Decoding](decoding.md)
 
 Start with tokenization, not transformers. It is concrete, it immediately
 explains famous failures like counting letters, and it earns attention before
@@ -167,9 +167,9 @@ The multilingual cost difference makes the abstraction real in five minutes.
 
 ### Block 2 · Making it useful (4 hours)
 
-[Prompt engineering](prompt-engineering.html) →
-[Model selection](model-selection.html) → [Chunking](chunking.html) →
-[Embeddings](embeddings-and-vector-databases.html)
+[Prompt engineering](prompt-engineering.md) →
+[Model selection](model-selection.md) → [Chunking](chunking.md) →
+[Embeddings](embeddings-and-vector-databases.md)
 
 **Exercise:** build a RAG pipeline over ten documents in plain code — no
 framework. Roughly 100 lines. Every abstraction they meet later will make sense
@@ -177,8 +177,8 @@ because they have seen what it wraps.
 
 ### Block 3 · Knowing whether it works (4 hours)
 
-[LLM as a judge](llm-as-a-judge.html) → [Regression gates](regression-gates.html)
-→ [Numbers to know](numbers-to-know.html)
+[LLM as a judge](llm-as-a-judge.md) → [Regression gates](regression-gates.md)
+→ [Numbers to know](numbers-to-know.md)
 
 **Exercise:** write twenty golden questions for their pipeline and measure it.
 Then change the chunk size and measure again. The moment they see a change move
@@ -187,9 +187,9 @@ being abstract.
 
 ### Block 4 · Making it real (4 hours)
 
-[Serving](serving-and-operations.html) → [Caching](caching.html) →
-[Guardrails](guardrails-and-security.html) →
-[Market & business](market-and-business.html)
+[Serving](serving-and-operations.md) → [Caching](caching.md) →
+[Guardrails](guardrails-and-security.md) →
+[Market & business](market-and-business.md)
 
 **Exercise:** cost their pipeline at a million requests a month. Then halve it.
 
@@ -228,7 +228,7 @@ Not "I have read everything". The honest tests:
 - You can do the five whiteboard calculations without notes.
 - You have **built** at least tasks 1 and 3, and can talk through the numbers
   they produced.
-- When someone proposes something from [anti-patterns](anti-patterns.html), you
+- When someone proposes something from [anti-patterns](anti-patterns.md), you
   notice.
 - You can say "I do not know, here is how I would find out" without discomfort —
   which is, in the end, the most senior thing on this page.

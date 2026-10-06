@@ -15,8 +15,8 @@ summary: The layer below the serving stack — sparse attention that skips work,
 > almost none of it is yours to implement, which is exactly why you need to
 > know what your server already does for you.
 
-[KV cache optimization](kv-cache.html) is about bytes. [Reasoning inference
-optimization](reasoning-inference-optimization.html) is about tokens. This page
+[KV cache optimization](kv-cache.md) is about bytes. [Reasoning inference
+optimization](reasoning-inference-optimization.md) is about tokens. This page
 is about the two layers underneath both: **which attention scores get computed
 at all**, and **what instructions compute them**.
 
@@ -367,7 +367,7 @@ expressive scaling; the counter-argument is a checkpoint you cannot move. That
 is a procurement decision wearing a numerics costume, and it should be made by
 whoever owns the hardware commitment rather than by whoever runs the quantizer.
 
-Note how this connects upward: **[outlier handling](quantization.html) —
+Note how this connects upward: **[outlier handling](quantization.md) —
 LLM.int8(), AWQ, SmoothQuant — is what you do when the format cannot express
 outliers.** Block scaling attacks the same problem in the number system instead
 of in the algorithm, which is why 4-bit became practical when the formats
@@ -392,7 +392,7 @@ visitor trees**, which is the vocabulary to know if you ever read one.
 
 The prologue is the mirror image and gets less attention: transforming inputs on
 the way *in* — layout swizzles, unpacking 4-bit weights, applying rotations of
-the kind [OSCAR](kv-cache.html) needs — rather than materialising a converted
+the kind [OSCAR](kv-cache.md) needs — rather than materialising a converted
 copy first.
 
 **The engineering point is the same one this page keeps making.** Fusion does
@@ -466,7 +466,7 @@ factorisation is fast on a GPU, where an unstructured sparse matrix of the same
 density is not.** They remain more a training-time architectural choice than a
 serving knob — you cannot factorise a dense checkpoint into one for free — but
 they are the structured end of the same spectrum as
-[low-rank factorisation](distillation-and-pruning.html), and the reason to know
+[low-rank factorisation](distillation-and-pruning.md), and the reason to know
 them is that "sparse" and "fast" are not synonyms on this hardware.
 
 ### The exotica, and an honest verdict on it
@@ -571,13 +571,13 @@ disappears.
 - **Partial RoPE** applies the rotation to only the first *r* dimensions of
   each head and leaves the rest unrotated. Work falls proportionally, and the
   unrotated dimensions behave like NoPE — which is a length-extrapolation
-  choice as much as a speed one. See [model shape](model-shape.html) for what it
+  choice as much as a speed one. See [model shape](model-shape.md) for what it
   does to the model rather than to the kernel.
 
 **Store post-rotation.** Decode reads the cache far more often than prefill
 writes it, so engines cache K *after* rotation and never re-apply it. That
 choice is what makes position-shifted reuse hard, and
-[KV reuse](kv-reuse.html) is the page about the consequences.
+[KV reuse](kv-reuse.md) is the page about the consequences.
 
 ### What you actually set
 
@@ -660,7 +660,7 @@ square root once (`rsqrt`) and multiply, rather than dividing per element.
 
 - **Integer dot product** is real silicon, not a trick — `DP4A` and the integer
   tensor-core paths are what make INT8 inference fast. This is the hardware that
-  [quantization](quantization.html) is cashing in.
+  [quantization](quantization.md) is cashing in.
 - **Approximate multiplication** leads somewhere specific: replace a multiply
   with an add in the log domain, and you arrive at logarithmic number systems
   and adder networks. See the number-systems material below.
@@ -678,8 +678,8 @@ square root once (`rsqrt`) and multiply, rather than dividing per element.
 | **Approximate matrix multiplication** | Sample or sketch the product | Rarely survives the accuracy bar at inference |
 
 **Low-rank factorisation** is the one that ships: replace `W (d×d)` with `A (d×r)`
-and `B (r×d)`. It is the mechanism behind [LoRA](fine-tuning.html), behind
-[MLA's](model-shape.html) compressed KV, and behind embedding compression.
+and `B (r×d)`. It is the mechanism behind [LoRA](fine-tuning.md), behind
+[MLA's](model-shape.md) compressed KV, and behind embedding compression.
 **Tensor and Tucker decompositions** generalise it to more than two dimensions
 and are common in CNN compression, uncommon in transformers.
 
@@ -687,7 +687,7 @@ and are common in CNN compression, uncommon in transformers.
 
 | Structure | Where it shows up |
 |---|---|
-| **Radix tree** (compressed trie) | **RadixAttention** — prefix KV cache sharing across requests, the structure that makes [prefix caching](kv-reuse.html) work for branching conversations |
+| **Radix tree** (compressed trie) | **RadixAttention** — prefix KV cache sharing across requests, the structure that makes [prefix caching](kv-reuse.md) work for branching conversations |
 | **Trie** | Tokenizer vocabulary lookup, and grammar masks for constrained decoding |
 | **Hash table / perfect hashing** | Block tables in paged attention; exact prefix-cache keys |
 | **Locality-sensitive hashing** | Approximate nearest neighbour, and the routing step in some sparse-attention schemes |
@@ -702,7 +702,7 @@ and are common in CNN compression, uncommon in transformers.
 techniques, and a decoder-only transformer contains no convolution at all. They
 reach LLM work through two doors: the **vision encoder** of a multimodal model,
 and the **short 1-D causal convolution** inside Mamba-style
-[state space model](transformers.html) blocks. If your stack has neither, this
+[state space model](transformers.md) blocks. If your stack has neither, this
 row of the taxonomy does not apply to you — which is a more useful thing to know
 than a description of the technique.
 
@@ -754,7 +754,7 @@ is whether the data gets read twice.
   consequence rather than an inference one: pre-norm keeps the residual stream
   clean and is what makes 32+ layers trainable without warmup tricks. Every
   current LLM is pre-norm, and it is why the residual add in
-  [transformers](transformers.html) is never normalised directly.
+  [transformers](transformers.md) is never normalised directly.
 - **Approximate and integer-only normalization** exist for the same
   edge/integer reasons as above.
 
@@ -790,7 +790,7 @@ more than anywhere else.
   values are zero, the down-projection can skip those columns. This is what
   makes the ReLU revival worth its quality cost.
 - **FFN pruning and approximation** are the width-axis techniques from
-  [distillation and pruning](distillation-and-pruning.html).
+  [distillation and pruning](distillation-and-pruning.md).
 
 ### Parameter and weight sharing
 
@@ -809,7 +809,7 @@ just fewer of them.
 ### Quantization granularity
 
 How wide a region shares one scale factor is the central accuracy/size trade in
-[quantization](quantization.html):
+[quantization](quantization.md):
 
 **Per-tensor** → **layerwise** → **per-channel** → **blockwise** (a block of 32
 or 128 weights, which is what `K-quant` formats and MXFP4/NVFP4 use) →
@@ -823,7 +823,7 @@ coarse enough that the scales stay small.
 - **Hardware–software co-design** is the honest description of the whole modern
   stack: NVFP4 exists because the hardware added a datapath for it, and
   2:4 sparsity exists because sparse tensor cores do.
-- **Multi-GPU** execution is covered properly in [parallelism](parallelism.html)
+- **Multi-GPU** execution is covered properly in [parallelism](parallelism.md)
    — the four ways to split a model and what each costs in communication.
 - **SIMD — AVX / AVX-512 on x86, NEON on ARM** — is where CPU inference lives.
   `llama.cpp`'s performance is largely a story about hand-written SIMD kernels
@@ -870,7 +870,7 @@ These appear on taxonomies as separate entries and are one idea with four
 scopes:
 
 - **Computation reuse** — if you computed it and the inputs have not changed,
-  read it back. The KV cache is this idea, and [prefix caching](kv-reuse.html)
+  read it back. The KV cache is this idea, and [prefix caching](kv-reuse.md)
   is this idea applied across requests.
 - **Precomputation** — anything that depends only on values known in advance.
   RoPE's cos/sin tables are the canonical case: position and dimension are known
@@ -885,7 +885,7 @@ scopes:
   the same lesson as the sparsity table.
 
 **Approximate caching** relaxes the first one: serve a *near* match rather than
-an exact one. That is [semantic caching](caching.html) at the request level, and
+an exact one. That is [semantic caching](caching.md) at the request level, and
 it is the only entry here that can return a wrong answer — everything else is
 exact by construction.
 
@@ -1031,7 +1031,7 @@ guesses wrong the model does not produce noise — it produces a fluent answer
 computed without the one block that contained the answer. Average-case metrics
 are unaffected because the average case did not need that block. This is the
 same failure shape as KV eviction, and it needs the same gate: a needle probe at
-your real context length, in CI. See [regression gates](regression-gates.html).
+your real context length, in CI. See [regression gates](regression-gates.md).
 
 **Distinguish "no retraining" from "no evaluation".** DHSA's headline property
 is that the backbone stays frozen, which removes the training cost. It does not
@@ -1069,7 +1069,7 @@ it appears in production and not in testing.
 | Sparsity gave 1.3× not 10× | "The paper said 10×" | Short prompts — prefill was never the dominant term |
 | New GPU, same throughput | Generational upgrade did nothing | Old attention kernel, tuned for symmetric hardware |
 | Accuracy cliff on rare inputs | Fine in eval, wrong in production | BF16x6 applied outside its valid exponent range |
-| 2-bit KV collapsed the model | Near-zero accuracy at INT2 | Rotation not aligned to attention — see [OSCAR](kv-cache.html) |
+| 2-bit KV collapsed the model | Near-zero accuracy at INT2 | Rotation not aligned to attention — see [OSCAR](kv-cache.md) |
 | Long-context latency fine, cost unchanged | Faster, not cheaper | Sparsity cut prefill compute; the KV cache is still full size |
 
 ---
@@ -1170,10 +1170,10 @@ You are done with this page when you can:
 - **BF16xN emulation** — [*Exceeding the Numerical and Performance Characteristics of IEEE-754 SGEMM with BFloat16 Tensor Cores*](https://arxiv.org/abs/2605.16617) (2026), and the [PyTorch BF16x9 precision mode](https://github.com/pytorch/pytorch/pull/195301).
 - **Ozaki scheme** — [*DGEMM without FP64 Arithmetic*](https://arxiv.org/abs/2508.00441) — the same splitting idea one precision further down.
 
-Related: [KV cache optimization](kv-cache.html) for the bytes, including OSCAR ·
-[KV reuse beyond the exact prefix](kv-reuse.html) for the work you can skip entirely ·
-[Quantization](quantization.html) for the weight side and for what "lossless"
-means · [Transformers](transformers.html) for why attention is quadratic in the
-first place · [Long context](long-context.html) for what breaks at length ·
-[Regression gates](regression-gates.html) for the needle probe this page keeps
+Related: [KV cache optimization](kv-cache.md) for the bytes, including OSCAR ·
+[KV reuse beyond the exact prefix](kv-reuse.md) for the work you can skip entirely ·
+[Quantization](quantization.md) for the weight side and for what "lossless"
+means · [Transformers](transformers.md) for why attention is quadratic in the
+first place · [Long context](long-context.md) for what breaks at length ·
+[Regression gates](regression-gates.md) for the needle probe this page keeps
 demanding.

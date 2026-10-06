@@ -14,7 +14,7 @@ summary: Prefix caching only fires on an exact prefix, and most real traffic is 
 > the history it was computed at — so every technique here is a different
 > answer to "can we use it anyway?", and RoPE is what makes the answer hard.
 
-[KV cache optimization](kv-cache.html) covers prefix reuse as row 8: hash the
+[KV cache optimization](kv-cache.md) covers prefix reuse as row 8: hash the
 blocks, match the chain, share the physical pages. That works perfectly and
 fires less often than you would like, because it requires an **exact** prefix.
 Change one token near the front and every block after it is a miss.
@@ -192,14 +192,14 @@ vendor conversation.
 It is also becoming a first-class feature rather than a hack: vLLM has an open
 design for a pluggable block-eviction policy with protected positions, using
 **attention-sink protection** as the reference implementation — the same sinks
-the [KV cache page](kv-cache.html) warns you never to evict.
+the [KV cache page](kv-cache.md) warns you never to evict.
 
 **Pin the system prompt. It is one line of policy and it is close to free.**
 
 ### KV layer propagation
 
 The last axis. Adjacent layers produce similar KV states, so some of them can be
-derived rather than computed. [CLA](kv-cache.html) shares one cache between
+derived rather than computed. [CLA](kv-cache.md) shares one cache between
 adjacent layers; cross-layer *fusion* goes further and reconstructs upper-layer
 KV from lower ones — one published design reuses top-half keys from a middle
 layer and values from a bottom layer, cutting I/O by about a third, with
@@ -307,7 +307,7 @@ sophisticated eviction policy, implement pinning and make the policy beat it.
 recomputing it changes matmul shapes, and floating-point addition is not
 associative, so a cache hit and a cache miss can produce outputs that differ in
 the last decimal place even when the reuse is "exact". That is the same caveat
-the [KV cache page](kv-cache.html) raises for prefix caching, and it bites
+the [KV cache page](kv-cache.md) raises for prefix caching, and it bites
 harder here because there are more paths to the same answer.
 
 | Failure | Looks like | Actual cause |
@@ -397,10 +397,10 @@ You are done with this page when you can:
 - **Pinning** — [*Protection Is (Nearly) All You Need: Structural Protection Dominates Scoring in Globally Capped KV Eviction*](https://arxiv.org/abs/2605.18053) (2026) — the random-plus-pinning baseline.
 - **KV shifting** — [*KV Shifting Attention Enhances Language Modeling*](https://arxiv.org/abs/2411.19574) (2024) for the architectural sense of the term; segment-sharing systems for the RoPE-alignment sense.
 - **KV correction** — [*KVLinC: KV Cache Quantization with Hadamard Rotation and Linear Correction*](https://arxiv.org/abs/2510.05373), and [*FreeKV*](https://arxiv.org/abs/2505.13109) for query-based identification and head-wise recall.
-- **Cross-layer reuse** — [*Reconstructing KV Caches with Cross-Layer Fusion*](https://arxiv.org/abs/2512.03870), and [CLA](kv-cache.html) for the simpler sharing version.
+- **Cross-layer reuse** — [*Reconstructing KV Caches with Cross-Layer Fusion*](https://arxiv.org/abs/2512.03870), and [CLA](kv-cache.md) for the simpler sharing version.
 - **FP divergence** — [*The Illusion of Equivalence: Systematic FP16 Divergence in KV-Cached Autoregressive Inference*](https://arxiv.org/abs/2604.15409) (2026) — why "exact" reuse still moves the last decimal.
 
-Related: [KV cache optimization](kv-cache.html) for capacity, paging and the
-sinks this page keeps pinning · [Kernel & attention optimization](kernel-and-attention-optimization.html)
-for the layer below · [Transformers](transformers.html) for RoPE itself ·
-[Caching](caching.html) for the application-level cache above all of this.
+Related: [KV cache optimization](kv-cache.md) for capacity, paging and the
+sinks this page keeps pinning · [Kernel & attention optimization](kernel-and-attention-optimization.md)
+for the layer below · [Transformers](transformers.md) for RoPE itself ·
+[Caching](caching.md) for the application-level cache above all of this.

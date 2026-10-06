@@ -14,7 +14,7 @@ summary: The thirteen ways to shrink the KV cache, organised by which term of th
 > weights, is what runs you out of memory — and every technique for shrinking it
 > is a multiplier on exactly one term of a formula you can write from memory.
 
-[Transformers](transformers.html) explains *what* the KV cache is and why it
+[Transformers](transformers.md) explains *what* the KV cache is and why it
 exists. This page is about what to do when it becomes the thing standing between
 you and a bigger batch size.
 
@@ -250,7 +250,7 @@ reproducibility across runs need to know this exists.
 information, and the failure mode is not a crash — it is a model that answers
 confidently having silently lost the token it needed. Whatever eviction policy
 you pick, it must be evaluated against a **long-context recall probe**, not
-average perplexity. See [regression gates](regression-gates.html).
+average perplexity. See [regression gates](regression-gates.md).
 
 **And whatever you evict, do not evict the first few tokens.** StreamingLLM's
 finding is that the earliest positions act as *attention sinks*: heads dump
@@ -289,7 +289,7 @@ from a model that was not trained with fewer. GQA and MQA are architectural —
 the model learned to share. Head pruning takes a trained checkpoint and removes
 heads by measured importance, which is cheaper than retraining and worse than
 having trained that way. It is the same trade as
-[width pruning](distillation-and-pruning.html) generally: real memory savings,
+[width pruning](distillation-and-pruning.md) generally: real memory savings,
 quality recovery usually requires fine-tuning.
 
 **TurboQuant** sits beside OSCAR in Group C at **3-bit** KV quantization. The
@@ -324,7 +324,7 @@ quantization scheme converges on, for the attention-sink reason above.
 **KV quantization is not weight quantization** and the intuition does not
 transfer. INT8 KV is generally safe. **INT4 KV degrades long-context recall
 specifically** — the model still scores well on short prompts and falls apart on
-the thing you bought the long context window for. [Quantization](quantization.html)
+the thing you bought the long context window for. [Quantization](quantization.md)
 covers the weight side; the rule here is: quantize KV one step less aggressively
 than you quantize weights, and always probe recall afterwards.
 
@@ -653,7 +653,7 @@ metrics.** A model with an over-aggressive eviction policy has normal perplexity
 normal latency, normal throughput, and occasionally cannot recall a fact that was
 in its context. Average-case evals will not find it. You need a needle-style probe
 at your real context length, and it belongs in CI — see
-[regression gates](regression-gates.html).
+[regression gates](regression-gates.md).
 
 **KIVI is where the K/V asymmetry became actionable.** The distributions are
 not alike: key-cache outliers cluster along **channels**, value-cache outliers
@@ -835,16 +835,16 @@ You are done with this page when you can:
 - **H2O** — [Zhang et al., *Heavy-Hitter Oracle*](https://arxiv.org/abs/2306.14048) (2023) — the eviction line of work.
 - **Survey** — [*A Survey on Large Language Model Acceleration based on KV Cache Management*](https://arxiv.org/abs/2412.19442) (2024) — the map of the whole field.
 
-Related: [Transformers](transformers.html) for what the cache is ·
-[Quantization](quantization.html) for the weight side ·
-[Long context](long-context.html) for what breaks at length ·
-[Serving & operations](serving-and-operations.html) for the latency budget it sits in ·
-[Reasoning inference optimization](reasoning-inference-optimization.html) for the
+Related: [Transformers](transformers.md) for what the cache is ·
+[Quantization](quantization.md) for the weight side ·
+[Long context](long-context.md) for what breaks at length ·
+[Serving & operations](serving-and-operations.md) for the latency budget it sits in ·
+[Reasoning inference optimization](reasoning-inference-optimization.md) for the
 workload that fills this cache fastest — a 32k reasoning chain is 32k of KV ·
-[Kernel & attention optimization](kernel-and-attention-optimization.html) for the
+[Kernel & attention optimization](kernel-and-attention-optimization.md) for the
 layer under rows 9 and 10: the sparse-attention schemes that decide which scores
 get computed at all ·
-[KV reuse beyond the exact prefix](kv-reuse.html) for what to do when row 8 does
+[KV reuse beyond the exact prefix](kv-reuse.md) for what to do when row 8 does
 not fire — shifting, correction, infill, and pinning ·
-[Reading a model config](model-shape.html) for the architectures that break the
+[Reading a model config](model-shape.md) for the architectures that break the
 formula above: cross-layer KV sharing, K=V, and variable width.

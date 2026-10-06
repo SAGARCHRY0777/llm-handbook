@@ -248,7 +248,7 @@ def route(query: str, budget_ms: int) -> str:
 problem.** Which axis you split on — tensor, pipeline, expert or sequence —
 decides how much traffic crosses which link, and the wrong choice for your
 interconnect cannot be fixed anywhere above it. See
-[Parallelism & distributed inference](parallelism.html); the short version is
+[Parallelism & distributed inference](parallelism.md); the short version is
 tensor parallel inside a node, pipeline parallel between them, and never the
 other way round.
 

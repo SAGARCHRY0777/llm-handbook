@@ -19,8 +19,8 @@ split — and *how* you split it is not a performance detail, it is the decision
 that determines whether your interconnect is adequate. The same model, split two
 different ways, can be fast on NVLink and unusable on Ethernet.
 
-This page is about that choice. [Serving & operations](serving-and-operations.html)
-covers the layer above; [KV cache optimization](kv-cache.html) covers what you
+This page is about that choice. [Serving & operations](serving-and-operations.md)
+covers the layer above; [KV cache optimization](kv-cache.md) covers what you
 do when the *cache* rather than the weights is what will not fit.
 
 ---
@@ -127,7 +127,7 @@ One constraint that bites: **attention heads must divide by the TP degree.** Wit
 GQA the binding number is `num_key_value_heads`, not `num_attention_heads` — at
 8 KV heads and TP=16, ranks start duplicating KV instead of splitting it, and
 the memory saving stops while the communication cost does not. See
-[Reading a model config](model-shape.html).
+[Reading a model config](model-shape.md).
 
 ### Pipeline parallelism — split the layers
 
@@ -406,7 +406,7 @@ parallelism modes it supports.
 the binding constraint scales with sequence length, not parameters. Teams
 increase TP, see no improvement, and conclude parallelism does not work — when
 the axis they needed was sequence parallelism, or the fix was on the
-[KV cache page](kv-cache.html) entirely.
+[KV cache page](kv-cache.md) entirely.
 
 | Failure | Looks like | Actual cause |
 |---|---|---|
@@ -490,7 +490,7 @@ You are done when you can:
 - **Sequence parallelism** — [*Ring Attention*](https://arxiv.org/abs/2310.01889) — attention as a communication pattern.
 - **Query parallelism** — [*Skeleton-of-Thought*](https://arxiv.org/abs/2307.15337) — the application-level version you control.
 
-Related: [Serving & operations](serving-and-operations.html) for the layer above ·
-[KV cache optimization](kv-cache.html) for when the cache is what will not fit ·
-[Reading a model config](model-shape.html) for the KV head count that caps TP ·
-[Transformers](transformers.html) for why attention splits by head.
+Related: [Serving & operations](serving-and-operations.md) for the layer above ·
+[KV cache optimization](kv-cache.md) for when the cache is what will not fit ·
+[Reading a model config](model-shape.md) for the KV head count that caps TP ·
+[Transformers](transformers.md) for why attention splits by head.

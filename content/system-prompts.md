@@ -15,7 +15,7 @@ summary: What is actually in the context before your first token — measured fr
 > because almost all of the former is product scaffolding and tool definitions
 > that a raw API call does not include.
 
-[Prompt engineering](prompt-engineering.html) covers the techniques that survive
+[Prompt engineering](prompt-engineering.md) covers the techniques that survive
 measurement. This page is about the artifact itself: what goes in it, in what
 order, how long it should be, and how to read the published and extracted ones
 without drawing the wrong conclusion.
@@ -99,7 +99,7 @@ tools:
 
 Two independent models, the same answer. **Roughly three quarters of a deployed
 system prompt is tool schemas**, which is the measured version of the claim in
-[harness & loops](harness-and-loops.html) that a tool definition *is* a prompt.
+[harness & loops](harness-and-loops.md) that a tool definition *is* a prompt.
 Every tool you add is permanent context, paid on every request, before the user
 says anything.
 
@@ -166,8 +166,8 @@ Two things follow for your own prompt:
   against monotonic growth, because each individual addition always looks cheap.
 
 The cost is real and compounding — see
-[prompt engineering §6](prompt-engineering.html) on what a long prompt costs per
-request, and [KV reuse](kv-reuse.html) on why a *stable* prefix is worth far
+[prompt engineering §6](prompt-engineering.md) on what a long prompt costs per
+request, and [KV reuse](kv-reuse.md) on why a *stable* prefix is worth far
 more than a short one. A 20,000-token system prompt that never changes is
 cheaper than a 2,000-token one that varies per user, because the first is a
 cache hit and the second is not.
@@ -272,10 +272,10 @@ You are done with this page when you can:
 
 - **Anthropic's published system prompts** — dated and versioned in the release notes. Where a vendor publishes its own, that is the citable source.
 - **[asgeirtj/system_prompts_leaks](https://github.com/asgeirtj/system_prompts_leaks)** — the corpus every measurement on this page comes from. CC0. Useful as evidence of *shape* across ~50 systems; its extracted entries are undated reconstructions and should be read as observations, not specifications. Note that it separates a versioned `official/` folder, which is the half to trust.
-- **[Prompt engineering](prompt-engineering.html)** for the techniques that go inside the document, and **[KV reuse](kv-reuse.html)** for why a stable prefix is worth more than a short one.
+- **[Prompt engineering](prompt-engineering.md)** for the techniques that go inside the document, and **[KV reuse](kv-reuse.md)** for why a stable prefix is worth more than a short one.
 
-Related: [Harness & loops](harness-and-loops.html) — the system prompt is one
+Related: [Harness & loops](harness-and-loops.md) — the system prompt is one
 component of a harness, and tool schemas are another ·
-[Guardrails & security](guardrails-and-security.html) for why instructions in a
-prompt are not a security boundary · [Caching](caching.html) for what a stable
+[Guardrails & security](guardrails-and-security.md) for why instructions in a
+prompt are not a security boundary · [Caching](caching.md) for what a stable
 prefix is worth in money.
