@@ -294,6 +294,75 @@ const FACTS = {
     ],
   },
 
+  // --- kv-reuse: a chained prefix hash hits up to the first differing block
+  prefix: {
+    page: null,
+    facts: [
+      {
+        // Computed from token equality, not from the lab's hash. Identical
+        // prefixes hash identically under ANY chained hash, so the number of
+        // leading hits depends only on where the prompts first differ and the
+        // block size -- which makes this independent of their mix() function.
+        name: "hit rate = leading identical blocks ÷ total blocks",
+        want: () => {
+          const { hit, blocks } = prefixHit(4);
+          return ((100 * hit) / blocks).toFixed(1) + "%";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "one changed word breaks exactly the block it falls in, not the ones before",
+        want: () => {
+          const { hit, firstDiff, blocks } = prefixHit(4);
+          if (hit !== Math.floor(firstDiff / 4)) {
+            throw new Error(`hits should run up to the differing block: hit=${hit}, diff at ${firstDiff}`);
+          }
+          if (hit === 0 || hit === blocks) throw new Error("expected a partial hit at the defaults");
+          return ((100 * hit) / blocks).toFixed(1) + "%";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "a smaller block size recovers more of the prefix",
+        want: () => {
+          const four = prefixHit(4), one = prefixHit(1);
+          if (!(one.hit / one.blocks > four.hit / four.blocks)) {
+            throw new Error("block size 1 should hit a larger share than block size 4");
+          }
+          return ((100 * four.hit) / four.blocks).toFixed(1) + "%";
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
+  // --- prompt-engineering: the validator catches all three planted defects
+  schema: {
+    page: null,
+    facts: [
+      {
+        name: "three violations in the default response",
+        want: () => "3 violations",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: '"Positive" is rejected against the lowercase enum',
+        want: () => "not in positive|neutral|negative",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "confidence 1.4 is caught above the maximum",
+        want: () => "1.4 above maximum 1",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "the extra field is caught as not in the schema",
+        want: () => "not in the schema",
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
   // --- serving-and-operations: M/M/1 at the knee
   queue: {
     page: null,
@@ -957,6 +1026,33 @@ const FACTS = {
     ],
   },
 };
+
+/**
+ * How much of prompt B a chained prefix cache can serve. Derived from token
+ * equality alone: identical prefixes hash identically under any chained hash,
+ * so the leading hit count depends only on where the two prompts first differ
+ * and the block size. That makes this independent of the lab's hash function
+ * rather than a transcription of it.
+ */
+const PREFIX_A = "You are a support agent for Acme Cloud. Always cite the policy section. " +
+  "Never invent prices. --- Question: how do I rotate an API key for tenant 42?";
+const PREFIX_B = "You are a support agent for Acme Cloud. Always cite the policy section. " +
+  "Never invent prices. --- Question: how do I revoke an API key for tenant 42?";
+
+function prefixHit(blockSize) {
+  const a = PREFIX_A.match(/\S+/g), b = PREFIX_B.match(/\S+/g);
+  let firstDiff = 0;
+  while (firstDiff < a.length && firstDiff < b.length && a[firstDiff] === b[firstDiff]) firstDiff++;
+  const blocks = Math.ceil(a.length / blockSize);
+  // A block counts only when both sides have a full one, as the lab requires.
+  let hit = 0;
+  while (
+    (hit + 1) * blockSize <= firstDiff &&
+    (hit + 1) * blockSize <= a.length &&
+    (hit + 1) * blockSize <= b.length
+  ) hit++;
+  return { hit, blocks, firstDiff };
+}
 
 /**
  * LoRA shapes, from the Llama-2 architecture the lab models: an untied
