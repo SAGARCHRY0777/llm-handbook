@@ -294,6 +294,127 @@ const FACTS = {
     ],
   },
 
+  // --- llm-as-a-judge: Cohen's kappa over the default 20 rated pairs
+  kappa: {
+    page: "llm-as-a-judge.html",
+    facts: [
+      {
+        name: "κ = (p₀ − pₑ) / (1 − pₑ) over the 20 default pairs",
+        want: () => {
+          const pairs = [
+            "pass pass","pass pass","pass pass","pass pass","pass pass",
+            "pass pass","pass pass","pass fail","fail pass","fail fail",
+            "pass pass","pass pass","pass pass","pass pass","pass fail",
+            "fail pass","pass pass","pass pass","fail fail","pass pass",
+          ].map((s) => s.split(" "));
+          const n = pairs.length;
+          const row = {}, col = {}, labels = new Set();
+          let agree = 0;
+          for (const [a, b] of pairs) {
+            labels.add(a); labels.add(b);
+            row[a] = (row[a] || 0) + 1;
+            col[b] = (col[b] || 0) + 1;
+            if (a === b) agree++;
+          }
+          const p0 = agree / n;
+          let pe = 0;
+          for (const L of labels) pe += ((row[L] || 0) / n) * ((col[L] || 0) / n);
+          return "κ = " + ((p0 - pe) / (1 - pe)).toFixed(3);
+        },
+        has: (t, w) => t.includes(w),
+      },
+      { name: "raw agreement 80.0%", want: () => "80.0%", has: (t, w) => t.includes(w) },
+      {
+        name: "chance agreement is high enough to fire the lopsided-labels note",
+        want: () => "Chance agreement is 68%",
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
+  // --- anti-patterns: Wilson interval and the sample size the page's example needs
+  evalsig: {
+    page: "anti-patterns.html",
+    facts: [
+      {
+        name: "A = 82% on 50 items, Wilson 95% interval",
+        want: () => {
+          const [lo, hi] = wilson(41, 50);
+          return `[${(lo * 100).toFixed(1)}, ${(hi * 100).toFixed(1)}]`;
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "the two intervals overlap, so the page's example is undecidable",
+        want: () => {
+          const a = wilson(41, 50), b = wilson(43, 50);
+          if (!(a[1] >= b[0] && b[1] >= a[0])) {
+            throw new Error("expected overlapping intervals at n=50 — the page's whole example");
+          }
+          return "cannot tell them apart";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "items needed per arm for 0.82 vs 0.86 at 80% power",
+        want: () => {
+          const p1 = 0.82, p2 = 0.86, Z = 1.959964, ZB = 0.8416212;
+          const pbar = (p1 + p2) / 2;
+          const a = Z * Math.sqrt(2 * pbar * (1 - pbar));
+          const b = ZB * Math.sqrt(p1 * (1 - p1) + p2 * (1 - p2));
+          return n(Math.ceil((a + b) ** 2 / (p2 - p1) ** 2));
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
+  // --- multimodal: the two published image formulas at 1536x1024
+  imgtok: {
+    page: "multimodal.html",
+    facts: [
+      {
+        name: "Anthropic w×h/750 at 1536×1024",
+        want: () => n(Math.round((1536 * 1024) / 750)),
+        has: (t, w) => t.includes(w),
+      },
+      {
+        // The page text is read with runs of whitespace collapsed to one
+        // space, so the expectation is written that way too.
+        name: "OpenAI resize then tile count",
+        want: () => {
+          const { w, h, tiles } = openaiTiles(1536, 1024);
+          return `${w}×${h} → ${tiles} tiles`;
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "OpenAI 85 base + 170 per tile",
+        want: () => n(85 + 170 * openaiTiles(1536, 1024).tiles),
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
+  // --- distillation-and-pruning: the page's sharpest claim, pinned
+  sparsity: {
+    page: "distillation-and-pruning.html",
+    facts: [
+      {
+        name: "90% unstructured sparsity stored densely runs at 1.00×",
+        want: () => "1.00×",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "and the memory does not shrink either (7B × 2 bytes = 14.0 GB both ways)",
+        want: () => `${((7e9 * 2) / 1e9).toFixed(1)} GB`,
+        // dense and as-stored are both 14.0 GB, so it must appear twice
+        has: (t, w) => t.split(w).length - 1 >= 2,
+      },
+      { name: "speed gained is +0%", want: () => "+0%", has: (t, w) => t.includes(w) },
+    ],
+  },
+
   // --- system-design-walkthroughs: the back-of-envelope
   capacity: {
     page: "system-design-walkthroughs.html",
@@ -311,6 +432,38 @@ const FACTS = {
     ],
   },
 };
+
+/**
+ * OpenAI's image tiling: fit 2048 on the long side, then 768 on the short,
+ * then count 512px tiles. Reimplemented from the published rule so a changed
+ * threshold in the lab shows up as a disagreement.
+ */
+function openaiTiles(width, height) {
+  let w = width, h = height;
+  if (Math.max(w, h) > 2048) {
+    const s = 2048 / Math.max(w, h);
+    w = Math.round(w * s); h = Math.round(h * s);
+  }
+  if (Math.min(w, h) > 768) {
+    const s = 768 / Math.min(w, h);
+    w = Math.round(w * s); h = Math.round(h * s);
+  }
+  return { w, h, tiles: Math.ceil(w / 512) * Math.ceil(h / 512) };
+}
+
+/**
+ * Wilson score interval for a proportion, at two-sided 95%. Written from the
+ * formula rather than lifted from the lab, so a changed z or a slipped term
+ * makes the two disagree. The normal approximation is wrong at the sample
+ * sizes eval sets actually run at, which is the lab's point.
+ */
+function wilson(k, total) {
+  const p = k / total, z = 1.959964, z2 = z * z;
+  const d = 1 + z2 / total;
+  const centre = (p + z2 / (2 * total)) / d;
+  const half = (z / d) * Math.sqrt((p * (1 - p)) / total + z2 / (4 * total * total));
+  return [Math.max(0, centre - half), Math.min(1, centre + half)];
+}
 
 /** The critpath default pipeline, solved here so the lab has something to disagree with. */
 function solveDag() {
