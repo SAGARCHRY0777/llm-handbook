@@ -308,3 +308,5 @@ You are done when you can:
 | Self-RAG | *Self-RAG: Learning to Retrieve, Generate and Critique through Self-Reflection* (Asai et al., 2023) |
 | Adaptive RAG | *Adaptive-RAG* (Jeong et al., 2024) — query-complexity routing |
 | Implementation | LangGraph's CRAG and self-RAG example graphs; the state machine above maps onto them directly |
+
+Related: [GraphRAG](graphrag.md) — when the fix for bad retrieval is a different index rather than a retry loop.

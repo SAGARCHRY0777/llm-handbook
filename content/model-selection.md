@@ -310,3 +310,5 @@ You are done when you can:
 | Licensing | Read the Llama Community License and one commercial ToS end to end. It is an hour, and it is the hour most engineers skip |
 | Pricing mechanics | Provider docs on prompt caching and batch APIs — the two largest cost levers, and both are documented |
 | Contamination | Any recent survey on benchmark contamination; it explains why leaderboards over-promise |
+
+Related: [Multimodal](multimodal.md) — once images or audio are in scope the shortlist changes, and so does the cost model.

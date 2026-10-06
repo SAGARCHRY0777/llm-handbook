@@ -324,3 +324,5 @@ You are done when you can:
 | Step-back prompting | *Take a Step Back: Evoking Reasoning via Abstraction* (Zheng et al., 2023) |
 | Rank fusion | Cormack et al. on Reciprocal Rank Fusion — short, and the k=60 constant comes from here |
 | Implementations | LangChain `MultiQueryRetriever` and LlamaIndex query transforms — read one before writing your own |
+
+Related: [Text2SQL](text2sql.md) — the case where the query is rewritten into another language entirely, and retrieval becomes execution.

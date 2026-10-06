@@ -125,3 +125,5 @@ depends on your workload, it says so rather than picking a convenient figure.
 **It shows the failure.** Every technique here has a regime where it is the
 wrong choice, and that regime is stated as plainly as the benefits. A page that
 only tells you when something works has not taught you how to decide.
+
+Related: [Learning paths](learning-paths.md) — ordered routes through these pages for a given goal, if you would rather not pick the order yourself.

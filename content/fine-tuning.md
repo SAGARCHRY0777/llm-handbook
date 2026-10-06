@@ -336,3 +336,5 @@ You are done when you can:
 | Practical | The Hugging Face PEFT documentation — the defaults are sensible and explained |
 | Data quality | *LIMA: Less Is More for Alignment* (Zhou et al., 2023) — 1,000 curated examples, and the argument for curation |
 | Forgetting | Any continual-learning survey; the problem long predates LLMs |
+
+Related: [Training methods](training-methods.md) — SFT, RLHF and DPO, and which one the behaviour you want actually needs.
