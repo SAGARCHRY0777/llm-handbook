@@ -294,6 +294,44 @@ const FACTS = {
     ],
   },
 
+  // --- tokenization: a real BPE merge loop over the default corpus
+  tokenizer: {
+    page: null,
+    facts: [
+      {
+        name: "tokens for “the fat cat sat” after 18 merges",
+        want: () => n(runBpe(18).tokens),
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "more merges never produce more tokens",
+        want: () => {
+          let prev = Infinity;
+          for (const m of [0, 4, 8, 12, 18, 30]) {
+            const got = runBpe(m).tokens;
+            if (got > prev) throw new Error(`${m} merges gave ${got} tokens, up from ${prev}`);
+            prev = got;
+          }
+          return n(runBpe(18).tokens);
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "with no merges every character is its own token",
+        want: () => {
+          const chars = "the fat cat sat".replace(/\s+/g, "").length;
+          const words = 4;
+          const got = runBpe(0).tokens;
+          if (got !== chars + words) {
+            throw new Error(`0 merges should give ${chars} chars + ${words} end markers, got ${got}`);
+          }
+          return n(runBpe(18).tokens);
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
   // --- decoding: one step through temperature, top-k, top-p, min-p
   sampler: {
     page: null,
@@ -1173,6 +1211,58 @@ const FACTS = {
     ],
   },
 };
+
+/**
+ * Byte-pair encoding, trained on the lab's default corpus and used to encode
+ * its default test string. Written from the algorithm: start from characters
+ * plus an end-of-word marker, repeatedly merge the most frequent adjacent
+ * pair, stop when nothing occurs twice.
+ */
+const BPE_CORPUS = "the cat sat on the mat. the cat ate the rat. that cat is a fat cat.";
+const BPE_TEST = "the fat cat sat";
+
+function runBpe(maxMerges) {
+  let vocab = new Map();
+  for (const w of BPE_CORPUS.toLowerCase().match(/\S+/g)) {
+    const key = w.split("").join(" ") + " </w>";
+    vocab.set(key, (vocab.get(key) || 0) + 1);
+  }
+  const merges = [];
+  for (let step = 0; step < maxMerges; step++) {
+    const pairs = new Map();
+    for (const [word, count] of vocab) {
+      const sym = word.split(" ");
+      for (let i = 0; i < sym.length - 1; i++) {
+        const p = `${sym[i]} ${sym[i + 1]}`;
+        pairs.set(p, (pairs.get(p) || 0) + count);
+      }
+    }
+    let best = null, bestN = 0;
+    for (const [p, c] of pairs) if (c > bestN) { bestN = c; best = p; }
+    if (!best || bestN < 2) break;
+    merges.push(best);
+    const joined = best.replace(" ", "");
+    const next = new Map();
+    for (const [word, count] of vocab) {
+      const nw = ` ${word} `.split(` ${best} `).join(` ${joined} `).trim();
+      next.set(nw, (next.get(nw) || 0) + count);
+    }
+    vocab = next;
+  }
+
+  let tokens = 0;
+  for (const w of BPE_TEST.toLowerCase().match(/\S+/g)) {
+    const sym = w.split("").concat(["</w>"]);
+    for (const pair of merges) {
+      const [a, b] = pair.split(" ");
+      for (let i = 0; i < sym.length - 1; i++) {
+        if (sym[i] === a && sym[i + 1] === b) { sym.splice(i, 2, a + b); i--; }
+      }
+    }
+    tokens += sym.length;
+  }
+  return { tokens, merges: merges.length };
+}
 
 /**
  * One decoding step over the lab's fixed logits: softmax at temperature,
