@@ -294,6 +294,90 @@ const FACTS = {
     ],
   },
 
+  // --- model-shape: KV arithmetic straight off a config.json
+  config: {
+    page: null,
+    facts: [
+      {
+        name: "KV per token = 2 · layers · kv_heads · head_dim · dtype bytes",
+        want: () => {
+          const L = 32, kvh = 8, hd = 4096 / 32, bytes = 2;
+          return (2 * L * kvh * hd * bytes) / 1024 + " KiB";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "KV at 32k context × 64 concurrent requests",
+        want: () => {
+          const perTok = 2 * 32 * 8 * (4096 / 32) * 2;
+          return (((perTok * 32768 * 64) / 1073741824)).toFixed(2) + " GiB";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        // 8 KV heads against 32 attention heads is GQA, and it is the single
+        // biggest lever on this page: without it the same config would need
+        // four times the KV cache.
+        name: "GQA cuts the KV cache fourfold against full multi-head",
+        want: () => {
+          const gqa = 2 * 32 * 8 * 128 * 2;
+          const mha = 2 * 32 * 32 * 128 * 2;
+          if (mha / gqa !== 4) throw new Error(`expected a 4x ratio, got ${mha / gqa}`);
+          return gqa / 1024 + " KiB";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "the KV cache alone overflows an 80 GiB accelerator",
+        want: () => {
+          const total = (2 * 32 * 8 * 128 * 2 * 32768 * 64) / 1073741824;
+          if (!(total > 80)) throw new Error(`expected an overflow at 80 GiB, got ${total.toFixed(2)}`);
+          return total.toFixed(2) + " GiB";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "active parameters for this config",
+        want: () => "8.0 B",
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
+  // --- harness-and-loops: properties a loop must not violate
+  agentloop: {
+    page: null,
+    facts: [
+      {
+        // The loop's step-by-step behaviour would have to be transcribed to
+        // predict its exact ending, and a transcription proves nothing. What
+        // is worth guarding is that its stopping conditions actually stop it:
+        // a budget that can be overrun is not a budget.
+        name: "token spend never exceeds the budget",
+        want: () => "tokens spent ≤ budget",
+        has: (t) => {
+          const m = t.match(/tokens spent([\d,]+) of ([\d,]+)/);
+          if (!m) return false;
+          const spent = Number(m[1].replace(/,/g, "")), budget = Number(m[2].replace(/,/g, ""));
+          return spent <= budget;
+        },
+      },
+      {
+        name: "progress never exceeds 100%",
+        want: () => "progress ≤ 100%",
+        has: (t) => {
+          const m = t.match(/progress reached(\d+)%/);
+          return !!m && Number(m[1]) <= 100;
+        },
+      },
+      {
+        name: "the run reports a definite outcome",
+        want: () => "completed or stopped",
+        has: (t) => /completed|stopped:/.test(t),
+      },
+    ],
+  },
+
   // --- embeddings: the three metrics disagree on raw counts
   similarity: {
     page: null,
