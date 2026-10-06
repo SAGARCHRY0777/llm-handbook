@@ -294,6 +294,131 @@ const FACTS = {
     ],
   },
 
+  // --- ensembles-and-routing: a cascade pays below 1 − cheap/strong
+  cascade: {
+    page: null,
+    facts: [
+      {
+        name: "break-even escalation rate is 1 − cheap/strong, and nothing else",
+        want: () => ((1 - 10 / 200) * 100).toFixed(1) + "%",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "cascade cost = cheap always + strong on the escalated share",
+        want: () => (10 + 0.3 * 200).toFixed(1) + " ¢",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "saving against always using the strong model",
+        want: () => {
+          const cascade = 10 + 0.3 * 200;
+          return (((200 - cascade) / 200) * 100).toFixed(0) + "% cheaper";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "blended accuracy is the escalation-weighted mix",
+        want: () => ((0.7 * 0.92 + 0.3 * 0.97) * 100).toFixed(2) + "%",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "break-even is far above the default escalation rate",
+        want: () => {
+          const be = 1 - 10 / 200;
+          if (!(be > 0.9)) throw new Error(`expected break-even above 90%, got ${be}`);
+          return "95%";
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
+  // --- numbers-to-know: the whiteboard estimate and the ÷100,000 shortcut
+  envelope: {
+    page: null,
+    facts: [
+      {
+        name: "average QPS = daily requests ÷ 86,400",
+        want: () => n(Math.round((50e6 * 40) / 86400)) + " avg",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "peak QPS at 3× average",
+        want: () => n(Math.round(((50e6 * 40) / 86400) * 3)) + " peak",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "the ÷100,000 shortcut and its error",
+        want: () => {
+          const exact = (50e6 * 40) / 86400, short = (50e6 * 40) / 1e5;
+          return n(short) + " QPS · " + (((short - exact) / exact) * 100).toFixed(1) + "% low";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "the shortcut under-promises rather than over-promises",
+        want: () => {
+          const exact = (50e6 * 40) / 86400, short = (50e6 * 40) / 1e5;
+          if (short >= exact) throw new Error("the ÷100,000 shortcut must read low, not high");
+          return "right kind of wrong";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "servers at peak, with one spare",
+        want: () => n(Math.ceil(((50e6 * 40) / 86400) * 3 / 10000) + 1),
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "cost per request from the two token prices",
+        want: () => "$" + ((2000 * 3 + 400 * 15) / 1e6).toFixed(5),
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
+  // --- training-methods: 12 bytes per parameter, and what LoRA removes
+  ftmem: {
+    page: null,
+    facts: [
+      {
+        name: "full fine-tune = 12 bytes/param + overhead",
+        want: () => ((8e9 * 12) / 1e9 + 20).toFixed(1),
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "full does not fit in 80 GB but LoRA and QLoRA do",
+        want: () => {
+          const adapter = 32 * 4 * 2 * 16 * 4096;
+          const full = (8e9 * 12) / 1e9 + 20;
+          const lora = (8e9 * 2 + adapter * 12) / 1e9 + 20;
+          const qlora = (8e9 * 0.5 + adapter * 12) / 1e9 + 20;
+          if (!(full > 80 && lora <= 80 && qlora <= 80)) {
+            throw new Error(`expected full>80>=lora>=qlora, got ${full.toFixed(1)}/${lora.toFixed(1)}/${qlora.toFixed(1)}`);
+          }
+          return "does not fit";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "LoRA total, with the frozen base at 2 bytes",
+        want: () => {
+          const adapter = 32 * 4 * 2 * 16 * 4096;
+          return ((8e9 * 2 + adapter * 12) / 1e9 + 20).toFixed(1);
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "QLoRA total, with the frozen base at 0.5 bytes",
+        want: () => {
+          const adapter = 32 * 4 * 2 * 16 * 4096;
+          return ((8e9 * 0.5 + adapter * 12) / 1e9 + 20).toFixed(1);
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
   // --- fine-tuning: LoRA parameter and memory arithmetic
   lora: {
     page: null,
