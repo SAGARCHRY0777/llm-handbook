@@ -51,6 +51,12 @@ promptiter
 
 ---
 
+```lab
+schema
+```
+
+---
+
 ## 2 · Design
 
 **Basic — the anatomy that consistently works.** Order matters, and this order

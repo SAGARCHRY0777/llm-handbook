@@ -56,6 +56,12 @@ visiontok
 
 ---
 
+```lab
+imgtok
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate — the architecture that won.** Almost every current VLM follows

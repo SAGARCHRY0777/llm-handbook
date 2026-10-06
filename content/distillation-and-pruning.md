@@ -53,6 +53,12 @@ prunecycle
 
 ---
 
+```lab
+sparsity
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate — distillation.** A large **teacher** produces outputs; a smaller

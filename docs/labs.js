@@ -3491,6 +3491,245 @@
   }
 
   // ======================================================================
+  // ======================================================================
+  // LAB · imgtok  (multimodal.md)
+  // What an image costs, under the two published formulas. Anthropic bills
+  // roughly width*height/750 tokens; OpenAI resizes to fit 2048 on the long
+  // side then 768 on the short, and charges a base plus 170 per 512px tile.
+  // Both are implemented here so the shapes that are expensive become visible.
+  // ======================================================================
+  function imgtok_openai(w, h) {
+    var W = w, H = h;
+    if (Math.max(W, H) > 2048) { var s = 2048 / Math.max(W, H); W = Math.round(W * s); H = Math.round(H * s); }
+    if (Math.min(W, H) > 768) { var s2 = 768 / Math.min(W, H); W = Math.round(W * s2); H = Math.round(H * s2); }
+    var tiles = Math.ceil(W / 512) * Math.ceil(H / 512);
+    return { tokens: 85 + 170 * tiles, tiles: tiles, w: W, h: H };
+  }
+
+  function imgtok(host, h) {
+    h.panel({
+      title: "What does this image cost?",
+      note: "Two published formulas, side by side. <b>Anthropic</b> bills about " +
+        "<code>width × height / 750</code>. <b>OpenAI</b> resizes to fit 2048 on the long side " +
+        "and 768 on the short, then charges a base plus 170 per 512-pixel tile. The tiling is " +
+        "why some shapes cost far more than their pixel count suggests.",
+    });
+
+    var w = h.range({ label: "width", min: 64, max: 4096, step: 16, value: 1536, unit: " px" });
+    var ht = h.range({ label: "height", min: 64, max: 4096, step: 16, value: 1024, unit: " px" });
+    var n = h.range({ label: "images per request", min: 1, max: 20, value: 1 });
+    var price = h.range({ label: "input price per 1M tokens", min: 1, max: 100, value: 3, unit: " $" });
+    var rpd = h.range({ label: "requests per day", min: 1000, max: 1000000, step: 1000, value: 100000 });
+
+    h.on(function () {
+      var W = Math.round(Number(w.value)), H = Math.round(Number(ht.value));
+      var N = Math.round(Number(n.value));
+      var anth = Math.round((W * H) / 750);
+      var oa = imgtok_openai(W, H);
+      var perReqA = anth * N, perReqO = oa.tokens * N;
+      var dayA = perReqA * Number(rpd.value) * Number(price.value) / 1e6;
+      var dayO = perReqO * Number(rpd.value) * Number(price.value) / 1e6;
+      var mp = (W * H) / 1e6;
+      var words = Math.round(perReqA / 1.33);
+
+      h.render(
+        h.big(h.fmt(perReqA) + " / " + h.fmt(perReqO), "tokens per request — Anthropic / OpenAI",
+          perReqA > 4000 ? "bad" : perReqA > 1500 ? "warn" : "ok") +
+        h.row("megapixels", mp.toFixed(2) + " MP") +
+        h.row("Anthropic  w×h/750", h.fmt(anth) + " tokens") +
+        h.row("OpenAI  after resize", oa.w + "×" + oa.h + "  →  " + oa.tiles +
+          " tile" + (oa.tiles === 1 ? "" : "s") + "  →  " + h.fmt(oa.tokens) + " tokens") +
+        h.row("that is worth about", h.fmt(words) + " words of text",
+          words > 2000 ? "warn" : undefined) +
+        h.row("cost per day — Anthropic", "$" + h.fmt(Math.round(dayA)), dayA > 500 ? "bad" : "warn") +
+        h.row("cost per day — OpenAI", "$" + h.fmt(Math.round(dayO)), dayO > 500 ? "bad" : "warn") +
+        h.bars([
+          { label: "Anthropic", value: perReqA, max: Math.max(perReqA, perReqO),
+            text: h.fmt(perReqA), flag: perReqA > perReqO ? "bad" : "ok" },
+          { label: "OpenAI", value: perReqO, max: Math.max(perReqA, perReqO),
+            text: h.fmt(perReqO), flag: perReqO > perReqA ? "bad" : "ok" },
+        ]) +
+        h.note("Halve both dimensions and the token count falls by <b>four</b>, not two — area " +
+          "scales with the square. Most pipelines send the image the camera produced; resizing " +
+          "to the smallest size the task actually needs is usually the single largest saving " +
+          "available in a vision pipeline, and it costs nothing but a resize.")
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · schema  (prompt-engineering.md)
+  // Structured output, validated. The page's claim is that you cannot ask for
+  // JSON and hope -- you validate and repair. This runs a real validator
+  // (types, required, enum, range) over whatever the model "returned", so the
+  // repair loop has something concrete to act on.
+  // ======================================================================
+  function schema_validate(obj, spec) {
+    var errs = [], k;
+    for (k in spec) {
+      var s = spec[k], v = obj[k];
+      if (v === undefined || v === null) {
+        if (s.required) errs.push({ field: k, why: "missing, and required" });
+        continue;
+      }
+      var t = Array.isArray(v) ? "array" : typeof v;
+      if (s.type && t !== s.type) { errs.push({ field: k, why: "is " + t + ", expected " + s.type }); continue; }
+      if (s.enum && s.enum.indexOf(v) < 0) errs.push({ field: k, why: '"' + v + '" not in ' + s.enum.join("|") });
+      if (s.min !== undefined && v < s.min) errs.push({ field: k, why: v + " below minimum " + s.min });
+      if (s.max !== undefined && v > s.max) errs.push({ field: k, why: v + " above maximum " + s.max });
+    }
+    for (k in obj) if (!spec[k]) errs.push({ field: k, why: "not in the schema" });
+    return errs;
+  }
+
+  function schema(host, h) {
+    h.panel({
+      title: "Validate what the model actually returned",
+      note: "The schema is fixed: <code>sentiment</code> (positive|neutral|negative, required), " +
+        "<code>confidence</code> (number 0–1, required), <code>summary</code> (string, " +
+        "required). Edit the response below — break it however a model would — and watch what a " +
+        "real validator catches. <b>Every error here is a repair-loop prompt you could send back.</b>",
+    });
+
+    var SPEC = {
+      sentiment: { type: "string", required: true, enum: ["positive", "neutral", "negative"] },
+      confidence: { type: "number", required: true, min: 0, max: 1 },
+      summary: { type: "string", required: true },
+    };
+
+    var resp = h.textarea({
+      label: "what the model returned", rows: 6,
+      value: '{\n  "sentiment": "Positive",\n  "confidence": 1.4,\n  "summary": "Customer is happy",\n  "notes": "extra field"\n}',
+    });
+
+    h.on(function () {
+      var raw = String(resp.value).trim();
+      // the most common real failure: prose or a fence wrapped around the JSON
+      var fenced = raw.indexOf("```") >= 0;
+      var m = raw.match(/\{[\s\S]*\}/);
+      var parsed = null, parseErr = null;
+      if (m) { try { parsed = JSON.parse(m[0]); } catch (e) { parseErr = e.message; } }
+      else parseErr = "no JSON object found";
+
+      if (!parsed) {
+        h.render(
+          h.big("unparseable", "before validation even starts", "bad") +
+          h.row("problem", parseErr, "bad") +
+          h.note("This is failure one of two, and the cheaper one — it is detectable with a " +
+            "<code>try</code>. Extract the outermost braces before parsing, because a model " +
+            "wrapping JSON in prose or a code fence is the single most common structured-output " +
+            "failure, and it is not the model being wrong about the content.", "bad")
+        );
+        return;
+      }
+
+      var errs = schema_validate(parsed, SPEC);
+      var rows = errs.map(function (e) { return [e.field, e.why]; });
+      var ok = errs.length === 0;
+
+      h.render(
+        h.big(ok ? "valid" : errs.length + " violation" + (errs.length === 1 ? "" : "s"),
+          ok ? "safe to use" : "do not pass this downstream", ok ? "ok" : "bad") +
+        h.row("parsed", "yes" + (fenced ? "  (after stripping a code fence)" : ""), "ok") +
+        h.row("fields returned", Object.keys(parsed).join(", ")) +
+        (rows.length ? h.table(["field", "problem"], rows) : "") +
+        (ok
+          ? h.note("Valid against the schema. Note what that does <i>not</i> mean: the summary " +
+              "could be wrong, the sentiment could be the opposite of the text. Schema validation " +
+              "checks shape, never truth — which is why it is necessary and nowhere near enough.")
+          : h.note("<b>Each row is a repair prompt.</b> Send the errors back verbatim — " +
+              "“confidence 1.4 is above maximum 1” is something a model can act on, where " +
+              "“invalid output” is not. Cap the loop at two attempts: if it cannot produce the " +
+              "shape twice, the schema is probably asking for something the task does not " +
+              "support.", "bad"))
+      );
+    });
+  }
+
+  // ======================================================================
+  // LAB · sparsity  (distillation-and-pruning.md)
+  // The page's sharpest claim: a 90%-sparse model stored densely runs at
+  // exactly the original speed. This separates what you REMOVED from what you
+  // can actually EXPLOIT, which is the distinction the headline number hides.
+  // ======================================================================
+  function sparsity(host, h) {
+    h.panel({
+      title: "How much of that sparsity do you actually get to use?",
+      note: "Pruning reports a sparsity percentage. Hardware only exploits <i>structure</i> — a " +
+        "zero it cannot predict the position of still has to be loaded and multiplied. This " +
+        "separates the weights you removed from the speed you can collect, which is the " +
+        "distinction the headline figure hides.",
+    });
+
+    var pb = h.range({ label: "parameters", min: 1, max: 180, value: 7, unit: " B" });
+    var sp = h.range({ label: "sparsity achieved", min: 0, max: 95, value: 90, unit: "%" });
+    var kind = h.select({ label: "pruning structure", value: "unstructured",
+      options: [["unstructured", "unstructured — any weight, anywhere"],
+                ["24", "2:4 semi-structured — 2 of every 4"],
+                ["structured", "structured — whole heads or channels"]] });
+    var kernels = h.select({ label: "sparse kernel support", value: "no",
+      options: [["no", "no — weights stored dense"], ["yes", "yes — sparse format + kernels"]] });
+
+    h.on(function () {
+      var P = Number(pb.value) * 1e9, S = Number(sp.value) / 100;
+      var K = kind.value, haveKernels = kernels.value === "yes";
+
+      var denseGB = P * 2 / 1e9;
+      var memGB = denseGB, speed = 1.0, why = "";
+
+      if (K === "structured") {
+        memGB = denseGB * (1 - S); speed = 1 / (1 - S);
+        why = "The matrices are genuinely smaller, so every stack gets the win with no special " +
+              "kernel and no special hardware.";
+      } else if (K === "24") {
+        if (haveKernels) {
+          memGB = denseGB * 0.5 + denseGB * 0.0625;   // 2 values per 4, plus index bits
+          speed = 1.8;                                 // sparse tensor cores, in practice
+          why = "2:4 is the one unstructured-looking pattern silicon understands: sparse tensor " +
+                "cores decode it directly. Note sparsity is fixed at 50% by definition — the " +
+                "slider above cannot change it.";
+        } else {
+          why = "2:4 without the sparse format or kernels is a dense tensor containing zeros.";
+        }
+      } else {
+        if (haveKernels) {
+          memGB = denseGB * (1 - S) * 1.3;   // CSR-style indices cost roughly 30%
+          speed = S > 0.95 ? 1.4 : S > 0.9 ? 1.1 : 0.8;
+          why = "Sparse kernels carry indexing overhead, so below roughly 95% sparsity they are " +
+                "often <i>slower</i> than dense. The break-even is higher than it feels.";
+        } else {
+          why = "<b>This is the trap the page names.</b> The zeros are real and the tensor is " +
+                "still dense in memory, so every one of them is loaded and multiplied.";
+        }
+      }
+
+      var effective = K === "24" ? 0.5 : S;
+      var speedGain = (speed - 1) * 100;
+
+      h.render(
+        h.big(speed.toFixed(2) + "×", "actual speedup",
+          speed < 1.05 ? "bad" : speed < 1.5 ? "warn" : "ok") +
+        h.row("weights removed", (effective * 100).toFixed(0) + "%", "ok") +
+        h.row("speed gained", (speedGain >= 0 ? "+" : "") + speedGain.toFixed(0) + "%",
+          speed < 1.05 ? "bad" : "ok") +
+        h.row("memory — dense", denseGB.toFixed(1) + " GB") +
+        h.row("memory — as stored", memGB.toFixed(1) + " GB",
+          memGB < denseGB * 0.9 ? "ok" : "bad") +
+        h.bars([
+          { label: "removed", value: effective * 100, max: 100,
+            text: (effective * 100).toFixed(0) + "%", flag: "ok" },
+          { label: "exploited", value: Math.min(100, Math.max(0, speedGain)), max: 100,
+            text: (speedGain >= 0 ? "+" : "") + speedGain.toFixed(0) + "%",
+            flag: speed < 1.05 ? "bad" : "warn" },
+        ]) +
+        h.note(why + (speed < 1.05
+          ? " You removed " + (effective * 100).toFixed(0) + "% of the weights and the model runs " +
+            "at <b>" + speed.toFixed(2) + "×</b>. The accuracy was spent; nothing was bought."
+          : ""), speed < 1.05 ? "bad" : undefined)
+      );
+    });
+  }
+
   var LABS = {
     "tokenizer": tokenizer,
     "attention": attention,
@@ -3517,7 +3756,10 @@
     "cascade": cascade,
     "envelope": envelope,
     "ftmem": ftmem,
-    "retrieve": retrieve
+    "retrieve": retrieve,
+    "imgtok": imgtok,
+    "schema": schema,
+    "sparsity": sparsity
   };
   window.__LABS = LABS;   // later labs register into this
 
