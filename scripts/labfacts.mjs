@@ -294,6 +294,106 @@ const FACTS = {
     ],
   },
 
+  // --- serving-and-operations: M/M/1 at the knee
+  queue: {
+    page: null,
+    facts: [
+      {
+        name: "ρ = λ/μ per replica = (6.8/4) / (800/400)",
+        want: () => (6.8 / 4 / (800 / 400)).toFixed(2),
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "time in system W = 1/(μ−λ), the panel's 3.3 s",
+        want: () => {
+          const mu = 800 / 400, lam = 6.8 / 4;
+          return (1 / (mu - lam)).toFixed(2);
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "p95 total latency = ln(20)/(μ−λ)",
+        want: () => {
+          const mu = 800 / 400, lam = 6.8 / 4;
+          return (Math.log(1 / 0.05) / (mu - lam)).toFixed(2);
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "adding a replica more than halves p95 — the panel says so",
+        want: () => {
+          const mu = 800 / 400;
+          const p95 = (c) => Math.log(20) / (mu - 6.8 / c);
+          if (!(p95(5) < p95(4) / 2)) {
+            throw new Error(`a 5th replica should more than halve p95: ${p95(4).toFixed(2)} -> ${p95(5).toFixed(2)}`);
+          }
+          return (Math.log(20) / (mu - 6.8 / 4)).toFixed(2);
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "no steady state once ρ ≥ 1",
+        want: () => {
+          const mu = 800 / 400;
+          if (6.8 / 1 / mu < 1) throw new Error("expected rho >= 1 at one replica");
+          return (1 / (1 - 0.85)).toFixed(1); // W is this multiple of service time at the default
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
+  // --- query-transformation: a vocabulary mismatch, not a ranking problem
+  retrieve: {
+    page: null,
+    facts: [
+      {
+        // Pinned structurally rather than by score: the page's claim is that
+        // the question as typed shares no term with the corpus, so no amount
+        // of reranking helps. That is a property of the words, not of BM25's
+        // parameters, so it holds whatever k1 and b the lab uses.
+        name: "the question as typed shares no term with any document",
+        want: () => {
+          const tok = (s) => (s.toLowerCase().match(/[0-9a-z]+/g) || []);
+          const corpus = [
+            "Requests are rejected with status 429 when the token bucket is empty.",
+            "The rate limiter uses a token bucket refilled at a steady rate per tenant.",
+            "Latency rose after the cache was disabled during the migration.",
+            "Backpressure is signalled upstream using Retry-After headers.",
+            "The deployment pipeline runs integration tests before promoting a build.",
+            "Connection pool exhaustion causes queueing and raises p99 latency.",
+          ].map((d) => new Set(tok(d)));
+          const asked = tok("why am I getting errors");
+          const hits = corpus.filter((d) => asked.some((w) => d.has(w))).length;
+          if (hits !== 0) throw new Error(`expected a total vocabulary miss, ${hits} doc(s) matched`);
+          return "0 of 6";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "so nothing is retrieved at all",
+        want: () => "no document shares a term",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "the rewrite does share vocabulary and retrieves",
+        want: () => {
+          const tok = (s) => (s.toLowerCase().match(/[0-9a-z]+/g) || []);
+          const corpus = [
+            "Requests are rejected with status 429 when the token bucket is empty.",
+            "The rate limiter uses a token bucket refilled at a steady rate per tenant.",
+          ].map((d) => new Set(tok(d)));
+          const rewrite = tok("rate limit token bucket 429 rejected");
+          if (!corpus.some((d) => rewrite.some((w) => d.has(w)))) {
+            throw new Error("the rewrite should share vocabulary with the corpus");
+          }
+          return "top doc scores";
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
   // --- ensembles-and-routing: a cascade pays below 1 − cheap/strong
   cascade: {
     page: null,
