@@ -21,13 +21,27 @@ import { join, basename } from "node:path";
 const ROOT = new URL("..", import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1");
 const CONTENT = join(ROOT, "content");
 
-// Kept in sync with build.mjs by hand. A module here that is missing there
-// renders a page into a nav section that does not exist, so a mismatch is
-// exactly what this check is for.
-const MODULES = new Set([
-  "start", "foundations", "rag", "evaluation", "optimization", "orchestration",
-  "agents", "training", "operations", "business", "practice", "reference",
-]);
+/**
+ * The single source of truth for module ids is build.mjs. This used to be a
+ * hand-synced copy, which is a check that can itself go stale: a module added
+ * to the build and not here would reject a page the build accepts.
+ */
+function modulesFromBuild() {
+  const src = readFileSync(join(ROOT, "scripts", "build.mjs"), "utf8");
+  const block = src.match(/const MODULES\s*=\s*\[([\s\S]*?)\]\s*;/);
+  if (!block) {
+    console.error("could not find `const MODULES = [...]` in scripts/build.mjs");
+    process.exit(1);
+  }
+  const ids = [...block[1].matchAll(/id:\s*["']([^"']+)["']/g)].map((m) => m[1]);
+  if (!ids.length) {
+    console.error("found MODULES in build.mjs but no `id:` entries in it");
+    process.exit(1);
+  }
+  return new Set(ids);
+}
+
+const MODULES = modulesFromBuild();
 
 const STATUSES = new Set(["live", "draft"]);
 
