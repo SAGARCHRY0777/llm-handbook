@@ -294,6 +294,52 @@ const FACTS = {
     ],
   },
 
+  // --- chunking: the fixed-window arithmetic and what overlap costs
+  chunker: {
+    page: null,
+    facts: [
+      {
+        // Only the fixed-window half is reimplemented. The sentence splitter
+        // is intricate (terminators, closing quotes, decimals like "3.5"), and
+        // a second copy of it would be a transcription rather than a check --
+        // so nothing here depends on it.
+        name: "fixed chunk count from size 120 and overlap 30",
+        want: () => n(chunkFixed(120, 30).count),
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "measured duplication over the default document",
+        want: () => chunkFixed(120, 30).dup.toFixed(3) + "×",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "C/(C−O) predicts a higher duplication than this short text shows",
+        want: () => {
+          const measured = chunkFixed(120, 30).dup;
+          const predicted = 120 / (120 - 30);
+          if (!(predicted > measured)) {
+            throw new Error(`the closed form should exceed the measurement on a short text: ${predicted.toFixed(3)} vs ${measured.toFixed(3)}`);
+          }
+          return predicted.toFixed(3) + "×";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "more overlap stores more copies of the same text",
+        want: () => {
+          let prev = 0;
+          for (const o of [0, 30, 60, 90]) {
+            const d = chunkFixed(120, o).dup;
+            if (d < prev) throw new Error(`overlap ${o} reduced duplication to ${d}`);
+            prev = d;
+          }
+          return chunkFixed(120, 30).dup.toFixed(3) + "×";
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
   // --- tokenization: a real BPE merge loop over the default corpus
   tokenizer: {
     page: null,
@@ -1211,6 +1257,30 @@ const FACTS = {
     ],
   },
 };
+
+/**
+ * Fixed-window chunking over the lab's default document: a window of C
+ * characters advancing by C−O, with the last window clipped to the end.
+ * Duplication is characters stored divided by characters of source.
+ */
+const CHUNK_DOC =
+  "The maximum operating temperature is 810 °C. Above this, the seal " +
+  "degrades within hours and the unit must be taken offline.\n\n" +
+  "Inspection is quarterly. Replace the seal if any discolouration is " +
+  "visible around the flange. The log stays with the unit for its whole " +
+  "service life.";
+
+function chunkFixed(C, O) {
+  const N = CHUNK_DOC.length;
+  const step = Math.max(10, C - O);
+  let stored = 0, count = 0;
+  for (let q = 0; q < N; q += step) {
+    stored += Math.min(N, q + C) - q;
+    count++;
+    if (q + C >= N) break;
+  }
+  return { count, dup: stored / N, chars: N };
+}
 
 /**
  * Byte-pair encoding, trained on the lab's default corpus and used to encode
