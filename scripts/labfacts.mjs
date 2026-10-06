@@ -294,6 +294,70 @@ const FACTS = {
     ],
   },
 
+  // --- embeddings: the three metrics disagree on raw counts
+  similarity: {
+    page: null,
+    facts: [
+      {
+        // The vectors are hashed character trigrams; copying that hash would
+        // be a transcription. What is pinned is the panel's structural claim,
+        // read back off the three headlines: on raw counts the three metrics
+        // rank different documents first. If they ever agree, the corpus has
+        // stopped demonstrating the point the page is making.
+        name: "cosine, dot product and Euclidean do not all agree",
+        want: () => "disagree",
+        has: (t) => {
+          const ranks = [...t.matchAll(/#(\d+)/g)].map((m) => m[1]).slice(0, 3);
+          return ranks.length === 3 && new Set(ranks).size > 1;
+        },
+      },
+      {
+        // Euclidean on raw counts rewards the smallest vector: a near-empty
+        // document sits at distance ~|query| from everything. "Pineapples."
+        // is the shortest line in the corpus by a wide margin.
+        name: "Euclidean ranks the shortest document first",
+        want: () => "#4",
+        has: (t) => {
+          const ranks = [...t.matchAll(/#(\d+)/g)].map((m) => m[1]);
+          return ranks[2] === "4";
+        },
+      },
+      {
+        name: "dot product does not pick the same document as cosine",
+        want: () => "cosine ≠ dot",
+        has: (t) => {
+          const ranks = [...t.matchAll(/#(\d+)/g)].map((m) => m[1]);
+          return ranks.length >= 2 && ranks[0] !== ranks[1];
+        },
+      },
+    ],
+  },
+
+  // --- transformers: scaled dot-product attention
+  attention: {
+    page: null,
+    facts: [
+      {
+        // The word vectors come from an LCG. Copying it here would be a
+        // transcription, not a check, so what is pinned is the property that
+        // must hold whatever the vectors are: softmax normalises each row.
+        name: "every softmax row sums to exactly 1",
+        want: () => (1).toFixed(6),
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "the softmax is over positions, not a vocabulary",
+        want: () => `over ${"the cat sat on the mat".split(" ").length} positions`,
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "the causal first row is a single 1.00 — a token can only see itself",
+        want: () => "1.00",
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
   // --- regression-gates: can a 200-item set see a 1-point drop?
   gate: {
     page: null,
