@@ -3096,9 +3096,13 @@
     var bits = h.select({ label: "weight precision", value: "16",
       options: [["16", "bf16 — 2 bytes"], ["8", "int8 — 1 byte"], ["4", "int4 — 0.5 bytes"]] });
     var batch = h.range({ label: "batch size (sequences decoding together)", min: 1, max: 512, value: 1 });
-    var bw = h.range({ label: "memory bandwidth", min: 200, max: 8000, step: 100, value: 3350,
+    // The steps have to divide the defaults. An <input type=range> snaps its
+    // value to min + k*step, so 3350 against step 100 silently became 3400 and
+    // 990 against step 50 became 1000 -- the panel said H100 SXM and the page
+    // computed for hardware that does not exist.
+    var bw = h.range({ label: "memory bandwidth", min: 200, max: 8000, step: 50, value: 3350,
                        unit: " GB/s" });
-    var flops = h.range({ label: "peak dense throughput", min: 50, max: 4000, step: 50, value: 990,
+    var flops = h.range({ label: "peak dense throughput", min: 50, max: 4000, step: 10, value: 990,
                           unit: " TFLOP/s" });
 
     h.on(function () {

@@ -61,6 +61,36 @@ if (missingPage) {
   process.exit(1);
 }
 
+// -- static pre-flight: slider defaults that the browser will silently move --
+// An <input type=range> snaps its value to min + k*step. A default that is
+// off-grid is quietly changed before any code runs, so the lab computes with a
+// number nobody wrote — and every downstream figure is for the wrong input.
+// This found `3350 GB/s` becoming 3400 in a lab whose panel said "H100 SXM".
+// Cheap and browser-free, so it runs before the launch.
+{
+  const src = readFileSync(join(ROOT, "site", "labs.js"), "utf8");
+  const offGrid = [];
+  for (const [, spec] of src.matchAll(/h\.range\(\{([^}]*)\}\)/g)) {
+    const flat = spec.replace(/\s+/g, " ");
+    const num = (k) => {
+      const m = flat.match(new RegExp(`${k}:\\s*(-?[0-9.]+)`));
+      return m ? Number(m[1]) : undefined;
+    };
+    const min = num("min"), value = num("value"), step = num("step") ?? 1;
+    if (min === undefined || value === undefined || !step) continue;
+    const k = (value - min) / step;
+    if (Math.abs(k - Math.round(k)) > 1e-9) {
+      const label = (flat.match(/label:\s*"([^"]*)"/) || [, "?"])[1];
+      offGrid.push(`"${label}": value ${value} with min ${min} step ${step} → browser uses ${min + Math.round(k) * step}`);
+    }
+  }
+  if (offGrid.length) {
+    for (const o of offGrid) console.error(`OFF-GRID DEFAULT  ${o}`);
+    console.error(`\nFAILED — ${offGrid.length} slider default(s) the browser will move`);
+    process.exit(1);
+  }
+}
+
 const browser = await launch();
 const page = await browser.newPage();
 

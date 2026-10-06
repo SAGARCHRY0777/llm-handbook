@@ -294,6 +294,84 @@ const FACTS = {
     ],
   },
 
+  // --- bias-and-explainability: the weighted mean that was once wrong
+  segments: {
+    page: null,
+    facts: [
+      {
+        // This headline was 0.91 at one point while the segment table it sits
+        // above summed to 0.9264. Pinning it is the whole reason this file
+        // exists, so it is computed from the segments rather than recorded.
+        name: "aggregate is the share-weighted mean of the segments",
+        want: () => {
+          const segs = [[0.78, 0.95], [0.15, 0.93], [0.05, 0.71], [0.02, 0.52]];
+          const shareSum = segs.reduce((a, [s]) => a + s, 0);
+          const agg = segs.reduce((a, [s, acc]) => a + s * acc, 0) / shareSum;
+          return (agg * 100).toFixed(1) + "%";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "the aggregate passes a 90% gate while two segments fail it",
+        want: () => {
+          const segs = [[0.78, 0.95], [0.15, 0.93], [0.05, 0.71], [0.02, 0.52]];
+          const agg = segs.reduce((a, [s, acc]) => a + s * acc, 0);
+          const failing = segs.filter(([, acc]) => acc < 0.9).length;
+          if (!(agg >= 0.9 && failing === 2)) {
+            throw new Error(`expected a passing aggregate hiding 2 failures, got ${agg.toFixed(4)} / ${failing}`);
+          }
+          return "aggregate passes the gate";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "eval items per segment at n=2000",
+        want: () => [0.78, 0.15, 0.05, 0.02].map((s) => String(Math.round(s * 2000))).join(" "),
+        has: (t, w) => w.split(" ").every((v) => t.includes(v)),
+      },
+    ],
+  },
+
+  // --- model-shape: the roofline, for an 8B bf16 model on an H100 at batch 1
+  roofline: {
+    page: null,
+    facts: [
+      {
+        name: "memory bound at batch 1",
+        want: () => {
+          const r = computeRoofline();
+          if (r.bound !== "memory") throw new Error(`batch-1 decode must be memory bound, got ${r.bound}`);
+          return "memory bound";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "arithmetic intensity = 2·B FLOP per byte of weights",
+        want: () => computeRoofline().intensity.toFixed(1) + " FLOP/byte",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "machine balance = peak FLOP/s ÷ bandwidth",
+        want: () => computeRoofline().balance.toFixed(1) + " FLOP/byte",
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "compute utilisation is in the single-digit percents",
+        want: () => {
+          const u = computeRoofline().util;
+          if (u > 5) throw new Error(`batch-1 decode should barely touch the ALUs, got ${u.toFixed(1)}%`);
+          return u.toFixed(1) + "%";
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "batch size that reaches the crossover",
+        want: () => n(computeRoofline().crossover),
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
   // --- embeddings-and-vector-databases: BM25, scored independently below
   bm25: {
     page: null, // resolved from the fences at run time
@@ -558,6 +636,28 @@ const FACTS = {
     ],
   },
 };
+
+/**
+ * The roofline for one decode step: read every weight once, do 2 FLOPs per
+ * parameter per sequence. Defaults are an 8B bf16 model on an H100 SXM
+ * (3350 GB/s, 990 TFLOP/s dense) at batch 1.
+ */
+function computeRoofline(params = 8e9, bytesPerWeight = 2, batch = 1, bwGBs = 3350, flopsTFs = 990) {
+  const bytes = params * bytesPerWeight;
+  const flop = 2 * params * batch;
+  const BW = bwGBs * 1e9, FL = flopsTFs * 1e12;
+  const memTime = bytes / BW, compTime = flop / FL;
+  const slowest = Math.max(memTime, compTime);
+  return {
+    bytes,
+    intensity: flop / bytes,
+    balance: FL / BW,
+    bound: memTime >= compTime ? "memory" : "compute",
+    util: (compTime / slowest) * 100,
+    tps: batch / slowest,
+    crossover: Math.max(1, Math.ceil(FL / BW / 2)),
+  };
+}
 
 /**
  * BM25 over the lab's default corpus, from the textbook formula:
