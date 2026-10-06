@@ -20,6 +20,13 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
+
+      # Catches what the build will happily render anyway: a link to a page
+      # nobody wrote, a duplicate slug, a page in a module the nav does not
+      # know about. Warnings do not fail the build; errors do.
+      - name: Content checks
+        run: npm run check
+
       - run: npm run build
       # docs/ is committed so GitHub Pages can serve it straight from the
       # branch with no Pages-source change. That only stays true if it is
@@ -31,3 +38,14 @@ jobs:
             git --no-pager diff --stat -- docs
             exit 1
           fi
+
+      # The build renders a ```lab fence whether or not the lab behind it
+      # exists, and the runtime swallows a throwing lab so the page still
+      # loads. Nothing else in this workflow executes a line of lab code, so
+      # a dead control or an unregistered lab ships silently without this.
+      # The runner has Chrome preinstalled, which is why puppeteer-core is
+      # enough and the browser-bundling `puppeteer` package is not a dep.
+      - name: Labs mount and compute
+        run: npm run check:labs
+        env:
+          PUPPETEER_EXECUTABLE_PATH: /usr/bin/google-chrome
