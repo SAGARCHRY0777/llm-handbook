@@ -10,7 +10,8 @@
     "serve": "node scripts/serve.mjs",
     "check": "node scripts/check.mjs",
     "check:labs": "node scripts/labcheck.mjs",
-    "check:facts": "node scripts/labfacts.mjs"
+    "check:facts": "node scripts/labfacts.mjs",
+    "check:sims": "node scripts/simcheck.mjs"
   },
   "devDependencies": {
     "marked": "^14.1.3",
