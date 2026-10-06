@@ -294,6 +294,56 @@ const FACTS = {
     ],
   },
 
+  // --- decoding: one step through temperature, top-k, top-p, min-p
+  sampler: {
+    page: null,
+    facts: [
+      {
+        name: "candidates surviving the default filter chain",
+        want: () => `${sampleStep().kept} / 12`,
+        has: (t, w) => t.includes(w),
+      },
+      {
+        // The panel tells the reader to drag temperature 0 -> 2 and watch
+        // pre-filter entropy go from 0 to 3.27 bits over identical logits.
+        name: "entropy before filtering is 0 bits at T=0 and 3.27 at T=2",
+        want: () => {
+          const cold = sampleStep("open", 0).entropyBefore;
+          const hot = sampleStep("open", 2).entropyBefore;
+          if (cold !== 0) throw new Error(`T=0 must be deterministic, got ${cold.toFixed(2)} bits`);
+          if (hot.toFixed(2) !== "3.27") throw new Error(`panel says 3.27 bits at T=2, got ${hot.toFixed(2)}`);
+          return sampleStep().entropyBefore.toFixed(2);
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        // And to switch to the confident step, where top-k keeps ten that
+        // top-p cuts to one. That contrast is the lab's point.
+        name: "on the confident step top-k keeps 10 where top-p keeps 1",
+        want: () => {
+          const kOnly = sampleStep("sure", 1, 10, 1, 0).kept;
+          const pOnly = sampleStep("sure", 1, 12, 0.95, 0).kept;
+          if (kOnly !== 10 || pOnly !== 1) {
+            throw new Error(`panel claims 10 vs 1, computed ${kOnly} vs ${pOnly}`);
+          }
+          return `${sampleStep().kept} / 12`;
+        },
+        has: (t, w) => t.includes(w),
+      },
+      {
+        name: "filtering never raises entropy",
+        want: () => {
+          const s = sampleStep();
+          if (s.entropyAfter > s.entropyBefore + 1e-9) {
+            throw new Error(`filtering raised entropy: ${s.entropyBefore} -> ${s.entropyAfter}`);
+          }
+          return s.entropyAfter.toFixed(2) + " bits";
+        },
+        has: (t, w) => t.includes(w),
+      },
+    ],
+  },
+
   // --- kv-cache: paged vs contiguous on the same pool and queue
   paged: {
     page: null,
@@ -1123,6 +1173,63 @@ const FACTS = {
     ],
   },
 };
+
+/**
+ * One decoding step over the lab's fixed logits: softmax at temperature,
+ * then top-k, then top-p (keeping the token that crosses p), then min-p as a
+ * fraction of the peak. Written from the definitions, in that order.
+ */
+const SAMPLER_LOGITS = {
+  open: [3.2, 2.85, 2.6, 1.9, 1.65, 1.3, 0.95, 0.6, 0.2, -0.3, -0.85, -2.4],
+  sure: [9.1, 3.2, 2.4, 2.1, 1.6, 1.4, 1.1, 0.8, 0.4, 0.1, -0.6, -2.1],
+};
+
+function sampleStep(step = "open", T = 1, K = 10, P = 0.95, M = 0.08) {
+  const L = SAMPLER_LOGITS[step];
+  const n = L.length;
+  const best = L.indexOf(Math.max(...L));
+  const entropy = (ps) => {
+    let hh = 0;
+    for (const p of ps) if (p > 0) hh -= p * Math.log2(p);
+    return hh;
+  };
+
+  let p0;
+  if (T <= 0) {
+    p0 = L.map((_, i) => (i === best ? 1 : 0));
+  } else {
+    const ex = L.map((v) => Math.exp((v - L[best]) / T));
+    const s = ex.reduce((a, v) => a + v, 0);
+    p0 = ex.map((v) => v / s);
+  }
+
+  const order = [...L.keys()].sort((a, b) => p0[b] - p0[a] || L[b] - L[a] || a - b);
+  const cut = new Array(n).fill(false);
+  if (T <= 0) for (let i = 1; i < n; i++) cut[order[i]] = true;
+  for (let i = K; i < n; i++) cut[order[i]] = true;
+
+  let kMass = 0;
+  for (let i = 0; i < n; i++) if (!cut[i]) kMass += p0[i];
+  if (P < 1 && kMass > 0) {
+    let cum = 0, full = false;
+    for (const id of order) {
+      if (cut[id]) continue;
+      if (full) { cut[id] = true; continue; }
+      cum += p0[id] / kMass;
+      if (cum >= P) full = true;            // keep the token that CROSSES p
+    }
+  }
+  const thr = M * p0[order[0]];
+  for (let i = 0; i < n; i++) if (!cut[i] && p0[i] < thr) cut[i] = true;
+
+  const survivors = p0.filter((_, i) => !cut[i]);
+  const mass = survivors.reduce((a, v) => a + v, 0);
+  return {
+    kept: survivors.length,
+    entropyBefore: entropy(p0),
+    entropyAfter: mass ? entropy(survivors.map((v) => v / mass)) : 0,
+  };
+}
 
 /**
  * Paged vs contiguous allocation over the lab's default queue. Paged takes
