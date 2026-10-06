@@ -58,6 +58,12 @@ graphhop
 
 ---
 
+```lab
+hops
+```
+
+---
+
 ## 2 · Design
 
 **The pipeline**, and note how much of it is offline work:

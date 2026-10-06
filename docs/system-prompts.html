@@ -90,6 +90,7 @@ and reproducible. Divide by roughly 4 for a token estimate.</p>
 
               tools are 72% of what the model actually reads</code></pre><hr>
 <div class="sim" data-sim="promptstack"><p class="sim__fallback">Interactive simulation — needs JavaScript.</p></div><hr>
+<div class="lab" data-lab="promptcost"><p class="lab__fallback">Interactive experiment — needs JavaScript.</p></div><hr>
 <h2 id="2-design-system-prompt-means-two-different-things"><a class="anchor" href="#2-design-system-prompt-means-two-different-things">#</a>2 · Design — "system prompt" means two different things</h2><p>This is the distinction that makes everything else make sense, and almost every
 online discussion of leaked prompts misses it.</p>
 <div class="table-scroll"><table><thead><tr><th></th><th><strong>Published prompt</strong></th><th><strong>Extracted prompt</strong></th></tr></thead><tbody><tr><td>Contains</td><td>Behavioural instructions</td><td>Instructions + tool schemas + product context</td></tr><tr><td>Source</td><td>The vendor, dated and versioned</td><td>Reconstructed by a user, undated</td></tr><tr><td>Verifiable</td><td>Yes</td><td>No</td></tr><tr><td>Claude Opus 4.6</td><td><strong>18,813 B</strong></td><td><strong>179,561 B</strong></td></tr></tbody></table></div><p><strong>They differ by 9.5×, and both are honestly labelled.</strong> The vendor publishes

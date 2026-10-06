@@ -60,6 +60,12 @@ thinkbudget
 
 ---
 
+```lab
+thinkbudget
+```
+
+---
+
 ## 2 · Design
 
 **Intermediate — what actually changed.** These models are trained (largely with

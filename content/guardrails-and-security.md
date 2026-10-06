@@ -53,6 +53,12 @@ injectchain
 
 ---
 
+```lab
+injection
+```
+
+---
+
 ## 2 · Design
 
 **Basic — the threat categories, and which are real.**

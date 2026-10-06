@@ -60,6 +60,12 @@ promptstack
 
 ---
 
+```lab
+promptcost
+```
+
+---
+
 ## 2 · Design — "system prompt" means two different things
 
 This is the distinction that makes everything else make sense, and almost every
