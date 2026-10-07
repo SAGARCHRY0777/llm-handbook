@@ -238,11 +238,14 @@ function seoBlock(page, siteName) {
 
 function writeSitemap(pages) {
   if (!SITE_URL) return 0;
-  const today = new Date().toISOString().slice(0, 10);
   const urls = ["index", ...pages.map((p) => p.slug).filter((s) => s !== "index")];
   const body = urls
     .map((slug) =>
-      `  <url>\n    <loc>${absUrl(slug)}</loc>\n    <lastmod>${today}</lastmod>\n` +
+      // No <lastmod>: it is optional, and a build-date stamp would change
+      // docs/sitemap.xml every calendar day, breaking the staleness gate on
+      // every PR. Add a per-page `updated:` frontmatter field if a real
+      // modification date is ever wanted here.
+      `  <url>\n    <loc>${absUrl(slug)}</loc>\n` +
       `    <changefreq>monthly</changefreq>\n    <priority>${slug === "index" ? "1.0" : "0.8"}</priority>\n  </url>`
     )
     .join("\n");
